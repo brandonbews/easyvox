@@ -1,0 +1,658 @@
+//! easyvox-bench: developer CLI for easyvox-core. Load time, memory, speed and word error rate
+//! (WER) over the test clips, plus one-off probes for the microphone, paste and history.
+//!
+//! Run `easyvox-bench help` for the commands. Models come from `easyvox_core::paths::models_dir()`
+//! (override with `--models DIR` or `EASYVOX_MODELS_DIR`); clips come from the workspace's
+//! `testdata/` (see `testdata/generate.sh`). Only release builds give meaningful numbers:
+//!
+//!   cargo run --release -p easyvox-bench -- bench --model parakeet-unified-en-0.6b-q5_k_m-gguf
+//!
+//! Timings drift when something else is busy on the machine, so the output records the
+//! 1-minute load average next to them.
+
+mod wer;
+
+use anyhow::{Context, bail};
+use easyvox_core::metrics::proc_stats;
+use easyvox_core::*;
+use serde_json::{Value, json};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::time::{Duration, Instant};
+
+const USAGE: &str = "\
+easyvox-bench <command> [options]
+
+  info                                         catalog, model presence, permissions
+  transcribe --model ID --wav F [--words]      one-shot decode of a WAV file
+  bench --model ID [--cold] [--fast|--reps N]  load times, memory, speed and WER over testdata (3 reps)
+  session --model ID --wav F [--quiet]         WAV replay session with live partials
+  sessions --model ID                          sessions on 3/10/30 s clips, partials on and off
+  stream-wer --model ID                        WER of a streaming model's streamed text
+  mic [--request] [--secs N] [--model ID]      open the microphone once (--request asks for permission first)
+  paste [--text T]                             write the clipboard, then simulate Cmd+V
+  history [--db F]                             SQLite history demo
+
+Engine options: --models DIR, --threads N, --interval MS, --window SECS, --vad, --final-redecode
+Output: JSON on stdout (or --out F), progress on stderr.";
+
+/// The workspace's test clips.
+fn testdata() -> PathBuf {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata");
+    dir.canonicalize().unwrap_or(dir)
+}
+
+/// Clips `sessions` runs: short, medium and long.
+const SESSION_CLIPS: [&str; 3] = ["cmd_samantha", "punct_samantha", "long_daniel"];
+
+struct Clip {
+    id: String,
+    category: String,
+    text: String,
+    path: PathBuf,
+}
+
+/// `testdata/manifest.tsv`: id, voice, category, reference text (tab-separated).
+fn clips() -> anyhow::Result<Vec<Clip>> {
+    let manifest = std::fs::read_to_string(testdata().join("manifest.tsv")).context("read testdata/manifest.tsv")?;
+    manifest
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty())
+        .map(|(i, l)| {
+            let f: Vec<&str> = l.splitn(4, '\t').collect();
+            if f.len() < 3 {
+                bail!("manifest.tsv line {}: expected id, voice, category, text", i + 1);
+            }
+            Ok(Clip {
+                id: f[0].into(),
+                category: f[2].into(),
+                text: f.get(3).copied().unwrap_or("").into(),
+                path: testdata().join(format!("{}.wav", f[0])),
+            })
+        })
+        .collect()
+}
+
+fn mb(b: u64) -> f64 {
+    (b as f64 / 1e6 * 10.0).round() / 10.0
+}
+
+/// 1-minute load average, for context next to timings.
+fn loadavg() -> f64 {
+    unsafe extern "C" {
+        fn getloadavg(loadavg: *mut f64, nelem: i32) -> i32;
+    }
+    let mut l = [0f64; 3];
+    // SAFETY: the buffer holds the 3 values asked for.
+    if unsafe { getloadavg(l.as_mut_ptr(), 3) } < 1 {
+        return f64::NAN;
+    }
+    (l[0] * 100.0).round() / 100.0
+}
+
+fn mem_json() -> Value {
+    let s = proc_stats();
+    json!({
+        "rss_mb": mb(s.rss_bytes), "footprint_mb": mb(s.footprint_bytes),
+        "peak_footprint_mb": mb(s.peak_footprint_bytes), "peak_rss_mb": mb(s.peak_rss_bytes),
+        "cpu_secs": s.cpu_secs,
+    })
+}
+
+struct Args(Vec<String>);
+
+impl Args {
+    fn get(&self, k: &str) -> Option<String> {
+        self.0.iter().position(|a| a == k).and_then(|i| self.0.get(i + 1).cloned())
+    }
+    fn has(&self, k: &str) -> bool {
+        self.0.iter().any(|a| a == k)
+    }
+    fn num<T: FromStr>(&self, k: &str) -> anyhow::Result<Option<T>> {
+        self.get(k).map(|v| v.parse().map_err(|_| anyhow::anyhow!("{k}: can't parse {v:?}"))).transpose()
+    }
+    fn model(&self) -> anyhow::Result<String> {
+        self.get("--model").context("--model <id> required (see `easyvox-bench info`)")
+    }
+    fn wav(&self) -> anyhow::Result<PathBuf> {
+        self.get("--wav").map(PathBuf::from).context("--wav <file> required")
+    }
+    fn models_dir(&self) -> PathBuf {
+        self.get("--models").map(PathBuf::from).unwrap_or_else(paths::models_dir)
+    }
+}
+
+fn config(args: &Args, model: &str) -> anyhow::Result<EngineConfig> {
+    let mut c = EngineConfig::new(model, args.models_dir());
+    if let Some(t) = args.num("--threads")? {
+        c.threads = t;
+    }
+    if let Some(i) = args.num("--interval")? {
+        c.partial_interval_ms = i;
+    }
+    if let Some(w) = args.num("--window")? {
+        c.partial_window_secs = w;
+    }
+    c.vad_trim = args.has("--vad");
+    c.final_redecode = args.has("--final-redecode");
+    Ok(c)
+}
+
+fn write_out(args: &Args, v: &Value) -> anyhow::Result<()> {
+    let s = serde_json::to_string_pretty(v)?;
+    if let Some(p) = args.get("--out") {
+        std::fs::write(&p, &s)?;
+        eprintln!("wrote {p}");
+    } else {
+        println!("{s}");
+    }
+    Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    let cmd = argv.first().cloned().unwrap_or_else(|| "help".into());
+    let args = Args(argv);
+    match cmd.as_str() {
+        "info" => info(&args),
+        "transcribe" => transcribe(&args),
+        "bench" => bench(&args),
+        "session" => session_cmd(&args),
+        "sessions" => sessions(&args),
+        "stream-wer" => stream_wer(&args),
+        "mic" => mic(&args),
+        "paste" => paste(&args),
+        "history" => history_demo(&args),
+        "help" | "-h" | "--help" => {
+            println!("{USAGE}");
+            Ok(())
+        }
+        other => {
+            eprintln!("{USAGE}");
+            bail!("unknown command {other:?}")
+        }
+    }
+}
+
+fn info(args: &Args) -> anyhow::Result<()> {
+    let md = args.models_dir();
+    let cat: Vec<Value> = catalog()
+        .iter()
+        .map(|m| {
+            json!({
+                "id": m.id, "name": m.name, "runtime": format!("{:?}", m.runtime),
+                "offering": format!("{:?}", m.offering), "license": m.license.name,
+                "compiled_in": m.runtime.is_compiled(), "present": m.resolve(&md).exists(),
+                "download_mb": mb(m.download_bytes), "disk_mb": mb(m.disk_bytes), "streaming": m.streaming,
+            })
+        })
+        .collect();
+    let v = json!({
+        "models_dir": md, "testdata": testdata(), "recommended_model": RECOMMENDED_MODEL, "catalog": cat,
+        "mic_permission": format!("{:?}", mic_permission_status()),
+        "accessibility_trusted": accessibility_trusted(),
+        "loadavg": loadavg(),
+    });
+    write_out(args, &v)
+}
+
+fn transcribe(args: &Args) -> anyhow::Result<()> {
+    let model = args.model()?;
+    let wav = args.wav()?;
+    let t = Instant::now();
+    let engine = Engine::load(config(args, &model)?)?;
+    let load_ms = t.elapsed().as_millis();
+    let pcm = audio::load_wav_16k_mono(&wav)?;
+    let t = Instant::now();
+    let h = engine.transcribe_pcm(&pcm)?;
+    let ms = t.elapsed().as_secs_f64() * 1e3;
+    let secs = pcm.len() as f64 / SAMPLE_RATE as f64;
+    if args.has("--words") {
+        for w in &h.words {
+            eprintln!("{:7.2} {:7.2}  {}", w.start, w.end, w.text);
+        }
+    }
+    let v = json!({
+        "model": model, "text": h.text, "words": h.words.len(), "load_ms": load_ms,
+        "decode_ms": ms, "audio_secs": secs, "rtf": ms / 1e3 / secs, "loadavg": loadavg(),
+    });
+    write_out(args, &v)
+}
+
+/// APFS clone of the model into a temp dir: same bytes, fresh vnode, so not in the page cache.
+fn cold_clone(models_dir: &Path, model: &str) -> anyhow::Result<PathBuf> {
+    let info = models::find(model)?;
+    let src = info.resolve(models_dir);
+    let root = std::env::temp_dir().join(format!("easyvox-cold-{}", std::process::id()));
+    let dst = root.join(info.path);
+    std::fs::create_dir_all(dst.parent().context("model path has no parent")?)?;
+    let st = std::process::Command::new("cp").arg("-cR").arg(&src).arg(&dst).status()?;
+    if !st.success() {
+        bail!("cp -c {} failed", src.display());
+    }
+    // Silero VAD too (tiny), for --vad.
+    let vad = models_dir.join(models::SILERO_VAD_PATH);
+    if vad.exists() {
+        std::fs::create_dir_all(root.join("vad"))?;
+        std::fs::copy(vad, root.join(models::SILERO_VAD_PATH))?;
+    }
+    Ok(root)
+}
+
+fn bench(args: &Args) -> anyhow::Result<()> {
+    let model = args.model()?;
+    let loadavg_start = loadavg();
+    let mem_start = mem_json();
+    let mut cfg = config(args, &model)?;
+    let mut cold_root = None;
+    if args.has("--cold") {
+        let root = cold_clone(&cfg.models_dir, &model)?;
+        cfg.models_dir = root.clone();
+        cold_root = Some(root);
+    }
+    let t = Instant::now();
+    let engine = Engine::load(cfg.clone())?;
+    let load1 = t.elapsed().as_secs_f64() * 1e3;
+    let mem_loaded = mem_json();
+
+    let reps = if args.has("--fast") { 1 } else { args.num("--reps")?.unwrap_or(3).max(1) };
+    let mut first_decode_ms = None;
+    let mut rows = Vec::new();
+    let (mut err_sum, mut ref_sum) = (0, 0);
+    let (mut speech_secs, mut speech_ms) = (0.0, 0.0);
+    // Dictation's worst failure is "I spoke and nothing came out", so every rep counts:
+    // an empty or failed decode on a speech clip, or reps that disagree, is reported.
+    let (mut empty_decodes, mut failed_decodes, mut unstable_clips) = (0, 0, Vec::new());
+    for c in &clips()? {
+        let pcm = audio::load_wav_16k_mono(&c.path)?;
+        let secs = pcm.len() as f64 / SAMPLE_RATE as f64;
+        let speech = c.category != "silence";
+        let load_before = loadavg();
+        let mut times = Vec::new();
+        let mut texts: Vec<String> = Vec::new();
+        let mut failures = Vec::new();
+        let (mut e, mut n) = (0, 0);
+        for _ in 0..reps {
+            let t = Instant::now();
+            let text = match engine.transcribe_pcm(&pcm) {
+                Ok(h) => h.text,
+                Err(err) => {
+                    failures.push(format!("{err:#}"));
+                    String::new()
+                }
+            };
+            let ms = t.elapsed().as_secs_f64() * 1e3;
+            first_decode_ms.get_or_insert(ms);
+            times.push(ms);
+            let (re, rn) = wer::wer_counts(&c.text, &text);
+            e += re;
+            n += rn;
+            if speech && text.trim().is_empty() {
+                empty_decodes += 1;
+            }
+            texts.push(text);
+        }
+        times.sort_by(f64::total_cmp);
+        let med = times[times.len() / 2];
+        if speech {
+            failed_decodes += failures.len();
+            err_sum += e;
+            ref_sum += n;
+            speech_secs += secs;
+            speech_ms += med;
+        }
+        let mut distinct = texts.clone();
+        distinct.dedup();
+        if distinct.len() > 1 {
+            unstable_clips.push(c.id.clone());
+        }
+        let text = texts.last().cloned().unwrap_or_default();
+        let flag = if !failures.is_empty() {
+            "  FAILED"
+        } else if speech && texts.iter().any(|t| t.trim().is_empty()) {
+            "  EMPTY"
+        } else if distinct.len() > 1 {
+            "  UNSTABLE"
+        } else {
+            ""
+        };
+        eprintln!("{:16} {:5.1}s {:7.1}ms  wer {:>2}/{:<2}{flag}  {}", c.id, secs, med, e / reps, n / reps, text);
+        rows.push(json!({
+            "id": c.id, "category": c.category, "audio_secs": secs,
+            "decode_ms_median": med, "decode_ms_all": times, "rtf": med / 1e3 / secs,
+            "loadavg_before": load_before, "loadavg_after": loadavg(),
+            "errors": e, "ref_words": n, "wer": if n > 0 { e as f64 / n as f64 } else { 0.0 },
+            "reference": c.text, "hypothesis": text, "hypotheses_distinct": distinct, "failures": failures,
+        }));
+    }
+    let mem_after_decodes = mem_json();
+    std::thread::sleep(Duration::from_secs(2));
+    let mem_idle = mem_json();
+
+    // Warm reload in the same process (files in the page cache, runtime initialized).
+    drop(engine);
+    std::thread::sleep(Duration::from_millis(500));
+    let mem_unloaded = mem_json();
+    let t = Instant::now();
+    let engine2 = Engine::load(cfg.clone())?;
+    let load2 = t.elapsed().as_secs_f64() * 1e3;
+    drop(engine2);
+    if let Some(r) = cold_root {
+        let _ = std::fs::remove_dir_all(r);
+    }
+
+    let v = json!({
+        "model": model, "threads": cfg.threads, "vad_trim": cfg.vad_trim, "cold_clone": args.has("--cold"),
+        "reps": reps, "loadavg_start": loadavg_start,
+        "load_ms_first_in_process": load1, "load_ms_warm_reload": load2,
+        "first_decode_ms": first_decode_ms,
+        "wer_total": err_sum as f64 / ref_sum.max(1) as f64, "errors": err_sum, "ref_words": ref_sum,
+        "empty_speech_decodes": empty_decodes, "failed_speech_decodes": failed_decodes,
+        "unstable_clips": unstable_clips,
+        "rtf_speech_clips": speech_ms / 1e3 / speech_secs,
+        "mem": {
+            "start": mem_start, "after_load": mem_loaded, "after_decodes": mem_after_decodes,
+            "idle_2s": mem_idle, "after_unload": mem_unloaded,
+        },
+        "clips": rows,
+    });
+    write_out(args, &v)
+}
+
+/// Runs one WAV replay session to its `Final` and reports latency, partial behavior and CPU.
+fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value> {
+    let cpu0 = proc_stats().cpu_secs;
+    let t0 = Instant::now();
+    let (session, rx) = engine.start(AudioSource::WavReplay(wav.to_path_buf()))?;
+    let mut events = Vec::new();
+    let mut final_ev = None;
+    let mut errors = Vec::new();
+    for ev in rx.iter() {
+        let ms = t0.elapsed().as_secs_f64() * 1e3;
+        match ev {
+            TranscriptEvent::Partial { confirmed, provisional } => {
+                if !quiet {
+                    eprintln!("{ms:8.0}ms  {confirmed} \x1b[2m{provisional}\x1b[0m");
+                }
+                events.push((ms, confirmed, provisional));
+            }
+            TranscriptEvent::Final { text, audio_secs, finalize_ms } => {
+                if !quiet {
+                    eprintln!("{ms:8.0}ms  FINAL ({finalize_ms} ms after end of audio): {text}");
+                }
+                final_ev = Some((ms, text, audio_secs, finalize_ms));
+                break;
+            }
+            TranscriptEvent::Error(e) => {
+                eprintln!("{ms:8.0}ms  ERROR {e}");
+                errors.push(e);
+            }
+        }
+    }
+    session.join();
+    let wall = t0.elapsed().as_secs_f64();
+    let cpu = proc_stats().cpu_secs - cpu0;
+    let stats = session.stats();
+    let (fms, final_text, audio_secs, finalize_ms) = final_ev.context("no Final event")?;
+
+    // Partial metrics.
+    let n = events.len();
+    let gaps: Vec<f64> = events.windows(2).map(|w| w[1].0 - w[0].0).collect();
+    let mean_gap = if gaps.is_empty() { 0.0 } else { gaps.iter().sum::<f64>() / gaps.len() as f64 };
+    let mut sorted = gaps.clone();
+    sorted.sort_by(f64::total_cmp);
+    let med_gap = sorted.get(sorted.len() / 2).copied().unwrap_or(0.0);
+    let mut revisions = 0;
+    let mut words_revised = 0;
+    let mut confirmed_violations = 0;
+    for w in events.windows(2) {
+        let d1 = wer::normalize(&format!("{} {}", w[0].1, w[0].2));
+        let d2 = wer::normalize(&format!("{} {}", w[1].1, w[1].2));
+        let common = d1.iter().zip(&d2).take_while(|(a, b)| a == b).count();
+        if common < d1.len() {
+            revisions += 1;
+            words_revised += d1.len() - common;
+        }
+        if !w[1].1.starts_with(w[0].1.as_str()) {
+            confirmed_violations += 1;
+        }
+    }
+    let final_words = wer::normalize(&final_text);
+    let conf_words = wer::normalize(&stats.confirmed_at_stop);
+    let k = conf_words.len().min(final_words.len());
+    let conf_vs_final_err = wer::edit_distance(&conf_words, &final_words[..k]);
+    let first_partial_ms = events.iter().find(|e| !(e.1.is_empty() && e.2.is_empty())).map(|e| e.0);
+    let speech_secs = audio_secs as f64;
+    let confirmed_coverage =
+        if final_words.is_empty() { 0.0 } else { conf_words.len() as f64 / final_words.len() as f64 };
+    let pass_ms_mean =
+        if stats.partial_passes > 0 { stats.partial_decode_ms_total / stats.partial_passes as f64 } else { 0.0 };
+    Ok(json!({
+        "wav": wav.file_name().map(|f| f.to_string_lossy()),
+        "audio_secs": audio_secs, "finalize_ms": finalize_ms, "final_at_ms": fms,
+        "final_wait_ms": stats.final_wait_ms, "final_decode_ms": stats.final_decode_ms,
+        "final_text": final_text,
+        "partials": {
+            "events": n, "first_partial_ms": first_partial_ms,
+            "mean_gap_ms": mean_gap, "median_gap_ms": med_gap,
+            "updates_per_sec": n as f64 / speech_secs,
+            "revisions": revisions, "revision_rate": if n > 1 { revisions as f64 / (n - 1) as f64 } else { 0.0 },
+            "words_revised": words_revised, "confirmed_violations": confirmed_violations,
+            "passes": stats.partial_passes, "pass_ms_mean": pass_ms_mean, "pass_ms_max": stats.partial_decode_ms_max,
+            "stream_decode_ms_total": stats.stream_decode_ms_total,
+            "confirmed_words_at_stop": conf_words.len(), "final_words": final_words.len(),
+            "confirmed_coverage": confirmed_coverage,
+            "confirmed_vs_final_errors": conf_vs_final_err,
+        },
+        "cpu": {"cpu_secs": cpu, "wall_secs": wall, "cpu_pct_of_one_core": 100.0 * cpu / wall},
+        "errors": errors,
+    }))
+}
+
+fn session_cmd(args: &Args) -> anyhow::Result<()> {
+    let model = args.model()?;
+    let wav = args.wav()?;
+    let engine = Engine::load(config(args, &model)?)?;
+    // Warm up (the first decode allocates and compiles kernels).
+    engine.transcribe_pcm(&vec![0.0; SAMPLE_RATE as usize])?;
+    let loadavg_before = loadavg();
+    let mut v = run_session(&engine, &wav, args.has("--quiet"))?;
+    v["model"] = json!(model);
+    v["final_redecode"] = json!(engine.config().final_redecode);
+    v["loadavg_before"] = json!(loadavg_before);
+    v["loadavg_after"] = json!(loadavg());
+    write_out(args, &v)
+}
+
+fn sessions(args: &Args) -> anyhow::Result<()> {
+    let model = args.model()?;
+    let base = config(args, &model)?;
+    let engine = Engine::load(base.clone())?;
+    engine.transcribe_pcm(&audio::load_wav_16k_mono(&testdata().join("cmd_samantha.wav"))?)?; // warm-up
+    let interval = base.partial_interval_ms;
+    let mut out = Vec::new();
+    for (label, iv) in [("partials_on", interval), ("partials_off", 0)] {
+        // The interval is part of the engine config, so "off" needs its own engine.
+        let e = if iv == interval {
+            engine.clone()
+        } else {
+            let mut c = base.clone();
+            c.partial_interval_ms = iv;
+            Engine::load(c)?
+        };
+        for w in SESSION_CLIPS {
+            let loadavg_before = loadavg();
+            let r = run_session(&e, &testdata().join(format!("{w}.wav")), true)?;
+            eprintln!(
+                "{label:12} {w:16} audio {:5.1}s  first words {:>5.0} ms  finalize {:>5} ms  partials {:>3}  cpu {:5.1}%",
+                r["audio_secs"].as_f64().unwrap_or(0.0),
+                r["partials"]["first_partial_ms"].as_f64().unwrap_or(f64::NAN),
+                r["finalize_ms"],
+                r["partials"]["events"],
+                r["cpu"]["cpu_pct_of_one_core"].as_f64().unwrap_or(0.0)
+            );
+            out.push(json!({
+                "mode": label, "interval_ms": iv, "clip": w,
+                "loadavg_before": loadavg_before, "loadavg_after": loadavg(), "result": r,
+            }));
+        }
+        if engine.model_info().streaming {
+            break; // Natively streaming model: partials are inherent, there is no "off".
+        }
+    }
+    let v = json!({
+        "model": model, "threads": base.threads, "vad_trim": base.vad_trim, "final_redecode": base.final_redecode,
+        "runs": out, "mem_end": mem_json(),
+    });
+    write_out(args, &v)
+}
+
+/// WER of a natively streaming model's *streamed* final text (fed in 100 ms chunks as fast
+/// as possible; the output doesn't depend on wall-clock pacing).
+fn stream_wer(args: &Args) -> anyhow::Result<()> {
+    let model = args.model()?;
+    let engine = Engine::load(config(args, &model)?)?;
+    let (mut e_sum, mut n_sum) = (0, 0);
+    let mut rows = Vec::new();
+    for c in clips()? {
+        let pcm = audio::load_wav_16k_mono(&c.path)?;
+        let mut s = engine.stream_decoder().context("model does not stream")?;
+        let t = Instant::now();
+        for chunk in pcm.chunks(SAMPLE_RATE as usize / 10) {
+            s.accept(chunk);
+        }
+        let text = s.finish();
+        let ms = t.elapsed().as_secs_f64() * 1e3;
+        let (e, n) = wer::wer_counts(&c.text, &text);
+        if c.category != "silence" {
+            e_sum += e;
+            n_sum += n;
+        }
+        eprintln!("{:16} wer {e:>2}/{n:<3} {ms:6.0} ms  {text}", c.id);
+        rows.push(
+            json!({"id": c.id, "errors": e, "ref_words": n, "hypothesis": text, "reference": c.text, "decode_ms": ms}),
+        );
+    }
+    let env = |k: &str| std::env::var(k).ok();
+    let v = json!({
+        "model": model, "mode": "streamed", "wer_total": e_sum as f64 / n_sum.max(1) as f64,
+        "errors": e_sum, "ref_words": n_sum, "loadavg": loadavg(),
+        "env": {"EASYVOX_PK_CHUNK_MS": env("EASYVOX_PK_CHUNK_MS"), "EASYVOX_PK_RIGHT_MS": env("EASYVOX_PK_RIGHT_MS")},
+        "clips": rows,
+    });
+    write_out(args, &v)
+}
+
+fn mic(args: &Args) -> anyhow::Result<()> {
+    let secs: f64 = args.num("--secs")?.unwrap_or(3.0);
+    let before = mic_permission_status();
+    eprintln!("mic permission before: {before:?}");
+    let requested = if args.has("--request") {
+        // Shows the system prompt (attributed to the terminal app); waits up to 60 s for an answer.
+        let st = request_mic_permission(Duration::from_secs(60));
+        eprintln!("mic permission after request: {st:?}");
+        Some(format!("{st:?}"))
+    } else {
+        None
+    };
+    // The session API needs an engine, so this loads one even though only the mic matters.
+    let model = args.get("--model").unwrap_or_else(|| RECOMMENDED_MODEL.into());
+    let engine = Engine::load(config(args, &model)?)?;
+    let t0 = Instant::now();
+    let v = match engine.start(AudioSource::Microphone) {
+        Err(e) => json!({"opened": false, "error": format!("{e:#}"), "open_ms": t0.elapsed().as_millis() as u64}),
+        Ok((session, rx)) => {
+            let open_ms = t0.elapsed().as_millis() as u64;
+            let mut events = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs_f64(secs);
+            while Instant::now() < deadline {
+                if let Ok(ev) = rx.recv_timeout(Duration::from_millis(50)) {
+                    events.push(format!("{ev:?}"));
+                }
+            }
+            session.stop();
+            for ev in rx.iter() {
+                let fin = matches!(ev, TranscriptEvent::Final { .. });
+                events.push(format!("{ev:?}"));
+                if fin {
+                    break;
+                }
+            }
+            session.join();
+            let s = session.stats();
+            let m = s.mic.as_ref();
+            json!({
+                "opened": true, "open_ms": open_ms, "device": m.map(|m| &m.device),
+                "device_rate": m.map(|m| m.sample_rate), "device_channels": m.map(|m| m.channels),
+                "sample_format": m.map(|m| &m.sample_format),
+                "audio_secs": s.audio_secs, "input_peak": s.input_peak, "events": events,
+            })
+        }
+    };
+    let after = mic_permission_status();
+    let v = json!({
+        "permission_before": format!("{before:?}"), "requested": requested,
+        "permission_after": format!("{after:?}"), "result": v,
+    });
+    write_out(args, &v)
+}
+
+/// Writes the clipboard, then simulates Cmd+V into whatever app has focus. It never reads the
+/// clipboard back: on macOS 15.4+ that can trigger a paste-privacy prompt.
+fn paste(args: &Args) -> anyhow::Result<()> {
+    let text = args.get("--text").unwrap_or_else(|| format!("easyvox clipboard probe {}", std::process::id()));
+    let ax = accessibility_trusted();
+    let write = match copy_to_clipboard(&text) {
+        Ok(w) => json!({
+            "ok": true, "change_count_before": w.change_count_before, "change_count_after": w.change_count_after,
+            "has_string_type": w.has_string_type, "access_behavior": w.access_behavior,
+        }),
+        Err(e) => json!({"ok": false, "error": format!("{e:#}")}),
+    };
+    let pasted = match paste_text(&text) {
+        Ok(()) => json!({"ok": true}),
+        Err(e) => json!({"ok": false, "error": format!("{e:#}")}),
+    };
+    let v = json!({"text": text, "accessibility_trusted": ax, "clipboard_write": write, "paste_text": pasted});
+    write_out(args, &v)
+}
+
+fn history_demo(args: &Args) -> anyhow::Result<()> {
+    let p = args
+        .get("--db")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("easyvox-history-demo.sqlite3"));
+    let h = History::open(&p)?;
+    h.add("Hello from the history demo.", 2.5, RECOMMENDED_MODEL)?;
+    for e in &h.recent(5)? {
+        println!("{} {} {:.1}s {} {}", e.id, e.created_at_ms, e.duration_secs, e.model_id, e.text);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_lists_clips_that_exist() {
+        let clips = clips().unwrap();
+        assert!(clips.len() >= SESSION_CLIPS.len());
+        for c in &clips {
+            assert!(c.path.exists(), "{} is missing", c.path.display());
+            assert!(c.category == "silence" || !c.text.is_empty(), "{} has no reference text", c.id);
+        }
+        for id in SESSION_CLIPS {
+            assert!(clips.iter().any(|c| c.id == id), "{id} not in manifest.tsv");
+        }
+    }
+
+    #[test]
+    fn numeric_options_parse_or_fail_clearly() {
+        let args = Args(["bench", "--threads", "8", "--window", "x"].map(String::from).to_vec());
+        assert_eq!(args.num::<usize>("--threads").unwrap(), Some(8));
+        assert_eq!(args.num::<usize>("--interval").unwrap(), None);
+        assert!(args.num::<f32>("--window").is_err());
+    }
+}

@@ -1,0 +1,22 @@
+[package]
+name = "easyvox-bench"
+description = "Developer CLI for easyvox-core: speed, memory and word error rate on the test clips."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["transcribe-cpp", "mic"]
+transcribe-cpp = ["easyvox-core/transcribe-cpp"]
+sherpa = ["easyvox-core/sherpa"]
+mic = ["easyvox-core/mic"]
+
+[dependencies]
+easyvox-core.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
