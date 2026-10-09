@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 13 ready · 5 blocked · 15 on hold · 8 inbox · 1 done · 0 cancelled
+0 in progress · 13 ready · 5 blocked · 14 on hold · 8 inbox · 2 done · 0 cancelled
 
 ## In progress
 
@@ -50,7 +50,6 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-h9ja`](tasks/tuh-01M4H2EG3AT1WSW8YRH9DXH9JA.md) | Hands-on: the debug "Test dictation" menu item | 1 | `human` `hands-on` |
 | [`tuh-838p`](tasks/tuh-01M4H2EG449Q4HK90B08MQ838P.md) | Hands-on: compare Parakeet Unified, TDT v2 and Unified at 160 ms chunks, and pick the default | 1 | `human` `hands-on` `decision` `models` |
 | [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) | Hands-on: record a few real-voice clips for benching | 1 | `human` `hands-on` `bench` |
-| [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) | Push the 7 local commits on main (and let tuhdoo publish its data branch) | 1 | `human` `decision` |
 | [`tuh-2645`](tasks/tuh-01M4H2EGM7TG4S96QNRQHV2645.md) | Create a Developer ID Application certificate and a notarization key | 3 | `human` `release` |
 | [`tuh-tz3a`](tasks/tuh-01M4H2EGN1Y7XVCGM2JVNSTZ3A.md) | Decide: which auto-updater | 3 | `human` `decision` `release` |
 | [`tuh-xm3z`](tasks/tuh-01M4H2EGQHWYDW7WSWNPARXM3Z.md) | Upgrade transcribe-cpp to 0.4 for Parakeet Ultra (French) | 4 | `models` `engine` |
@@ -72,6 +71,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 ## Done
 
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
+- [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
 
 ## Cancelled
 
