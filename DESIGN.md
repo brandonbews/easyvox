@@ -5,7 +5,7 @@ Working notes, not final decisions. Anything marked **Open** still needs a decis
 ## Requirements
 
 - All processing happens on the Mac. No audio or text leaves the machine. The only network use is downloading models.
-- English only for now.
+- English only for now. French is a stretch goal (see below).
 - Lightweight and fast: low memory use when idle, and text pasted quickly after you release the key.
 - Push-to-talk on a shortcut the user picks: hold to record, release to transcribe.
 - Show text as it's recognized, in chunks, so you don't wait until the end.
@@ -136,7 +136,11 @@ The UI is small: a menu bar icon, the live-text overlay, settings and history. T
 - Apple silicon only. Intel Macs are too slow for the bigger models, and macOS 26 is the last release that supports them.
 - **Open:** minimum macOS version. It only matters if we use the macOS 26 frameworks. Without them, macOS 14 or 15 is fine.
 - Permissions: Microphone, Accessibility (paste), possibly Input Monitoring (modifier-only shortcuts).
-- Distribute as a direct download (DMG) and a Homebrew cask, with auto-updates. The App Store sandbox gets in the way of simulated paste and global key monitoring, so most apps like this skip the App Store.
+- Three ways to install:
+  - a DMG on GitHub Releases, with auto-updates;
+  - a Homebrew cask pointing at that same DMG;
+  - build-from-source steps in the README.
+- No App Store. Its sandbox gets in the way of simulated paste and global key monitoring, so most apps like this skip it.
 
 ### Signing and notarization (macOS)
 
@@ -154,9 +158,18 @@ The UI is small: a menu bar icon, the live-text overlay, settings and history. T
 - **VoiceInk** (`Beingpax/VoiceInk`): GPL-3.0-based, Swift, macOS. Local Whisper with optional AI cleanup. Because of the GPL, copying its code would make EasyVox GPL too.
 - **Superwhisper, Wispr Flow, MacWhisper**: commercial. Useful for UX ideas.
 
+## Stretch goals
+
+To address after the rest of the app is done.
+
+- **French.** Two versions:
+  - **French dictation:** needs a multilingual model (Parakeet TDT v3 or Whisper). The current English Parakeet models can't do it.
+  - **Speak French, get English:** Whisper has a built-in translate-to-English mode, or the optional cleanup LLM could translate. A live English preview while speaking French is the hard part, because translation needs more context than transcription, so the preview would lag or change more.
+
 ## Open questions
 
-1. UI layer: GPUI Kit or Tauri. A small test of the menu bar icon, overlay and shortcut in GPUI Kit would settle it.
+1. UI layer: GPUI Kit or Tauri. The spike results are in `docs/ui-stack-spike.md`; hands-on checks are pending.
 2. Minimum macOS version.
 3. Keep audio in history?
 4. License: MIT (permissive) or GPL-3.0 (copyleft).
+5. Should agents be able to set it up? That means a plain settings file (format and location to decide, e.g. `~/.config/easyvox/settings.toml`) that the app reads at launch and reloads when it changes, with the Settings window writing the same file. Agents still can't grant Microphone or Accessibility; a person has to click those.
