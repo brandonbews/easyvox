@@ -5,7 +5,7 @@
 - **Status:** open — blocked on dependencies
 - **Priority:** 4
 - **Labels:** `release`
-- **Depends on:** [`tuh-btdp`](tuh-01M4H2EGNVZ00YA6604MXABTDP.md) (open), [`tuh-vcqs`](tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) (on hold)
+- **Depends on:** [`tuh-btdp`](tuh-01M4H2EGNVZ00YA6604MXABTDP.md) (open), [`tuh-vcqs`](tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) (done)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description
@@ -18,6 +18,10 @@ Acceptance: `brew install --cask easyvox` installs and launches the app; `brew a
 
 Pointers: the release workflow from the shipping-build task; DESIGN.md "Signing and notarization (macOS)".
 
+Note: the repo is private for now (decision tuh-01M4H2EG5RQG3TVM45KP1CVCQS). The cask needs a publicly downloadable DMG, so make the repo public (or host releases publicly) before this ships.
+
 ## History
 
-_No activity yet._
+### 2026-10-09 19:41 UTC — edit by `brandon`
+
+description edited

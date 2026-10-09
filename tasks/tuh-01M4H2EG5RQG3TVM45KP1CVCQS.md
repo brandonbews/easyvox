@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG5RQG3TVM45KP1CVCQS`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `human` `decision` `ci`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -20,6 +20,10 @@ Options:
 
 Pushing the local commits, and Dependabot PRs if adopted, start macOS CI runs.
 
+Decision (2026-10-09, Brandon): stay private for now. Brandon has GitHub Pro (3,000 Actions minutes a month, about 300 macOS minutes at 10x), which covers CI at 4-6 min per cached run. Revisit before the first public release: a Homebrew cask needs a publicly downloadable DMG.
+
 ## History
 
-_No activity yet._
+### 2026-10-09 19:41 UTC — edit by `brandon`
+
+description edited · status held→done

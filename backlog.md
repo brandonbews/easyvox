@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 13 ready · 5 blocked · 16 on hold · 8 inbox · 0 done · 0 cancelled
+0 in progress · 13 ready · 5 blocked · 15 on hold · 8 inbox · 1 done · 0 cancelled
 
 ## In progress
 
@@ -32,7 +32,7 @@ _None._
 | [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) | Settings: click-to-download the alternative models | 2 | depends on [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) |
 | [`tuh-bdnm`](tasks/tuh-01M4H2EGDR663G3XGTBA14BDNM.md) | Bench the model list on the real-voice clips | 2 | depends on [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) |
 | [`tuh-btdp`](tasks/tuh-01M4H2EGNVZ00YA6604MXABTDP.md) | Shipping build: cargo-packager for Developer ID signing, notarization and the DMG | 3 | depends on [`tuh-2645`](tasks/tuh-01M4H2EGM7TG4S96QNRQHV2645.md) |
-| [`tuh-dtts`](tasks/tuh-01M4H2EGPP2HDY5Y1WD6ENDTTS.md) | Homebrew cask for the notarized DMG | 4 | depends on [`tuh-btdp`](tasks/tuh-01M4H2EGNVZ00YA6604MXABTDP.md); depends on [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) |
+| [`tuh-dtts`](tasks/tuh-01M4H2EGPP2HDY5Y1WD6ENDTTS.md) | Homebrew cask for the notarized DMG | 4 | depends on [`tuh-btdp`](tasks/tuh-01M4H2EGNVZ00YA6604MXABTDP.md) |
 
 ## On hold
 
@@ -50,7 +50,6 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-h9ja`](tasks/tuh-01M4H2EG3AT1WSW8YRH9DXH9JA.md) | Hands-on: the debug "Test dictation" menu item | 1 | `human` `hands-on` |
 | [`tuh-838p`](tasks/tuh-01M4H2EG449Q4HK90B08MQ838P.md) | Hands-on: compare Parakeet Unified, TDT v2 and Unified at 160 ms chunks, and pick the default | 1 | `human` `hands-on` `decision` `models` |
 | [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) | Hands-on: record a few real-voice clips for benching | 1 | `human` `hands-on` `bench` |
-| [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) | Decide: make the GitHub repo public, or set an Actions spending limit | 1 | `human` `decision` `ci` |
 | [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) | Push the 7 local commits on main (and let tuhdoo publish its data branch) | 1 | `human` `decision` |
 | [`tuh-2645`](tasks/tuh-01M4H2EGM7TG4S96QNRQHV2645.md) | Create a Developer ID Application certificate and a notarization key | 3 | `human` `release` |
 | [`tuh-tz3a`](tasks/tuh-01M4H2EGN1Y7XVCGM2JVNSTZ3A.md) | Decide: which auto-updater | 3 | `human` `decision` `release` |
@@ -72,7 +71,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 
 ## Done
 
-_None._
+- [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
 
 ## Cancelled
 
