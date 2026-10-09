@@ -13,7 +13,7 @@ pub enum Runtime {
     TranscribeCpp,
     /// sherpa-onnx offline recognizer (ONNX Runtime, CPU). Feature `sherpa`.
     SherpaOffline,
-    /// sherpa-onnx online (natively streaming) recognizer. Feature `sherpa`.
+    /// sherpa-onnx online (natively streaming) recognizer, fed each buffer whole. Feature `sherpa`.
     SherpaOnline,
 }
 
@@ -90,8 +90,6 @@ pub struct ModelInfo {
     pub download_bytes: u64,
     /// Bytes on disk after extraction (model files only).
     pub disk_bytes: u64,
-    /// Native streaming (true) vs. offline model with re-decode partials (false).
-    pub streaming: bool,
     /// Outputs punctuation and capitalization.
     pub punctuation: bool,
     pub license: License,
@@ -123,7 +121,6 @@ pub static CATALOG: &[ModelInfo] = &[
         sha256: Some("f9def6f9b4e83ab7d006df3e1b676dfa1f973a3b6da232a9c99fcaa66bcd2836"),
         download_bytes: 540_795_264,
         disk_bytes: 540_795_264,
-        streaming: true,
         punctuation: true,
         license: NVIDIA_OPEN_MODEL_LICENSE,
         attribution: NVIDIA_OPEN_MODEL_NOTICE,
@@ -139,7 +136,6 @@ pub static CATALOG: &[ModelInfo] = &[
         sha256: Some("dfa904520b95451599683613fea47766c378c5fdf5d8cddf48151226b6eaec85"),
         download_bytes: 539_012_608,
         disk_bytes: 539_012_608,
-        streaming: false,
         punctuation: true,
         license: CC_BY_4_0,
         attribution: "Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0",
@@ -155,7 +151,6 @@ pub static CATALOG: &[ModelInfo] = &[
         sha256: Some("3b46ca40bccbf7609c68d88a36d96077a04ca7c87f2060ede06f129fac3e7652"),
         download_bytes: 84_886_208,
         disk_bytes: 84_886_208,
-        streaming: false,
         punctuation: true,
         license: APACHE_2_0,
         attribution: "Whisper base.en by OpenAI, licensed under Apache 2.0",
@@ -174,7 +169,6 @@ pub static CATALOG: &[ModelInfo] = &[
         sha256: Some("73c4861a43fe848cc7a64c179c08da04e985efac03f3e4684a3f5e94a1bb33fe"),
         download_bytes: 158_704_416,
         disk_bytes: 158_704_416,
-        streaming: false,
         punctuation: true,
         license: CC_BY_4_0,
         attribution: "Canary 180M Flash by NVIDIA, licensed under CC BY 4.0",
@@ -190,7 +184,6 @@ pub static CATALOG: &[ModelInfo] = &[
         sha256: None,
         download_bytes: 482_468_385,
         disk_bytes: 661_190_513,
-        streaming: false,
         punctuation: true,
         license: CC_BY_4_0,
         attribution: "Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0",
@@ -206,7 +199,6 @@ pub static CATALOG: &[ModelInfo] = &[
         sha256: None,
         download_bytes: 463_945_051,
         disk_bytes: 661_919_416,
-        streaming: true,
         punctuation: true,
         license: NVIDIA_OPEN_MODEL_LICENSE,
         attribution: NVIDIA_OPEN_MODEL_NOTICE,

@@ -3,7 +3,8 @@
 //! as in Macháček et al. 2023, whisper_streaming).
 //!
 //! Words are aligned across passes by time: a word belongs to the not-yet-confirmed tail if
-//! its midpoint lies after the end of the last confirmed word. Confirmed text only grows.
+//! its midpoint lies after the end of the last confirmed word. Confirmed text only grows, until
+//! the session polishes a chunk and hands it over with [`LocalAgreement::skip_to`].
 
 use crate::Word;
 
@@ -14,7 +15,7 @@ pub fn norm_word(w: &str) -> String {
 
 #[derive(Debug, Default)]
 pub struct LocalAgreement {
-    confirmed: Vec<String>,
+    confirmed: Vec<Word>,
     /// End time (seconds, absolute) of the last confirmed word.
     confirmed_until: f32,
     prev_tail: Vec<Word>,
@@ -33,7 +34,22 @@ impl LocalAgreement {
     }
 
     pub fn confirmed_text(&self) -> String {
-        self.confirmed.join(" ")
+        self.confirmed.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ")
+    }
+
+    /// Confirmed words, with absolute times.
+    pub fn confirmed_words(&self) -> &[Word] {
+        &self.confirmed
+    }
+
+    /// The audio before `t` (absolute seconds) has been polished: forget the words there and
+    /// only take words after it from now on.
+    pub fn skip_to(&mut self, t: f32) {
+        let after = |w: &Word| (w.start + w.end) / 2.0 >= t;
+        self.confirmed.retain(after);
+        self.prev_tail.retain(after);
+        self.confirmed_until = self.confirmed_until.max(t);
+        self.provisional = self.prev_tail.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
     }
 
     pub fn provisional_text(&self) -> &str {
@@ -52,7 +68,7 @@ impl LocalAgreement {
             let max_n = 5.min(self.confirmed.len()).min(tail.len());
             for n in (1..=max_n).rev() {
                 let conf = &self.confirmed[self.confirmed.len() - n..];
-                if conf.iter().zip(&tail[..n]).all(|(c, t)| norm_word(c) == norm_word(&t.text)) {
+                if conf.iter().zip(&tail[..n]).all(|(c, t)| norm_word(&c.text) == norm_word(&t.text)) {
                     tail.drain(..n);
                     break;
                 }
@@ -66,7 +82,7 @@ impl LocalAgreement {
             n += 1;
         }
         for w in &tail[..n] {
-            self.confirmed.push(w.text.clone());
+            self.confirmed.push(w.clone());
             self.confirmed_until = self.confirmed_until.max(w.end);
         }
         self.prev_tail = tail[n..].to_vec();
@@ -112,6 +128,30 @@ mod tests {
             ("no", 1.2, 1.3),
         ]));
         assert_eq!((c.as_str(), p.as_str()), ("ship on Friday, and", "no"));
+    }
+
+    #[test]
+    fn skip_to_hands_the_audio_before_a_cut_over() {
+        let mut la = LocalAgreement::new();
+        la.update(&ws(&[("one", 0.0, 0.3), ("two", 0.5, 0.8), ("three", 1.2, 1.5), ("four", 1.6, 1.9)]));
+        la.update(&ws(&[
+            ("one", 0.0, 0.3),
+            ("two", 0.5, 0.8),
+            ("three", 1.2, 1.5),
+            ("four", 1.6, 1.9),
+            ("x", 2.0, 2.1),
+        ]));
+        assert_eq!(la.confirmed_text(), "one two three four");
+        // Polished up to 1.0 s (a pause): "one two" leave, the later words stay confirmed.
+        la.skip_to(1.0);
+        assert_eq!(la.confirmed_text(), "three four");
+        assert_eq!(la.provisional_text(), "x");
+        // A later skip past everything confirmed: words before it are never confirmed again.
+        la.skip_to(3.0);
+        assert_eq!(la.confirmed_text(), "");
+        let (c, p) = la.update(&ws(&[("x", 2.0, 2.1), ("five", 3.2, 3.5), ("six", 3.6, 3.9)]));
+        assert_eq!((c.as_str(), p.as_str()), ("", "five six"));
+        assert!((la.confirmed_until() - 3.0).abs() < 1e-6);
     }
 
     #[test]

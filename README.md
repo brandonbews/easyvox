@@ -62,7 +62,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy
 
 ```sh
 cargo run -p easyvox-bench --release -- help
-cargo run -p easyvox-bench --release -- session --model parakeet-unified-en-0.6b-q5_k_m-gguf --wav testdata/punct_samantha.wav --final-redecode
+cargo run -p easyvox-bench --release -- session --model parakeet-unified-en-0.6b-q5_k_m-gguf --wav testdata/punct_samantha.wav
 ```
 
 ## License

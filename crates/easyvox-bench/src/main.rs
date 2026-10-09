@@ -26,14 +26,15 @@ easyvox-bench <command> [options]
   info                                         catalog, model presence, permissions
   transcribe --model ID --wav F [--words]      one-shot decode of a WAV file
   bench --model ID [--cold] [--fast|--reps N]  load times, memory, speed and WER over testdata (3 reps)
-  session --model ID --wav F [--quiet]         WAV replay session with live partials
+  session --model ID --wav F [--ref T] [--quiet]
+                                               WAV replay session with live partials (--ref: WER
+                                               against the transcript in file T)
   sessions --model ID                          sessions on 3/10/30 s clips, partials on and off
-  stream-wer --model ID                        WER of a streaming model's streamed text
   mic [--request] [--secs N] [--model ID]      open the microphone once (--request asks for permission first)
   paste [--text T]                             write the clipboard, then simulate Cmd+V
   history [--db F]                             SQLite history demo
 
-Engine options: --models DIR, --threads N, --interval MS, --window SECS, --vad, --final-redecode
+Engine options: --models DIR, --threads N, --interval MS, --window SECS, --chunk SECS, --vad
 Output: JSON on stdout (or --out F), progress on stderr.";
 
 /// The workspace's test clips.
@@ -134,8 +135,10 @@ fn config(args: &Args, model: &str) -> anyhow::Result<EngineConfig> {
     if let Some(w) = args.num("--window")? {
         c.partial_window_secs = w;
     }
+    if let Some(k) = args.num("--chunk")? {
+        c.chunk_secs = k;
+    }
     c.vad_trim = args.has("--vad");
-    c.final_redecode = args.has("--final-redecode");
     Ok(c)
 }
 
@@ -160,7 +163,6 @@ fn main() -> anyhow::Result<()> {
         "bench" => bench(&args),
         "session" => session_cmd(&args),
         "sessions" => sessions(&args),
-        "stream-wer" => stream_wer(&args),
         "mic" => mic(&args),
         "paste" => paste(&args),
         "history" => history_demo(&args),
@@ -184,7 +186,7 @@ fn info(args: &Args) -> anyhow::Result<()> {
                 "id": m.id, "name": m.name, "runtime": format!("{:?}", m.runtime),
                 "offering": format!("{:?}", m.offering), "license": m.license.name,
                 "compiled_in": m.runtime.is_compiled(), "present": m.resolve(&md).exists(),
-                "download_mb": mb(m.download_bytes), "disk_mb": mb(m.disk_bytes), "streaming": m.streaming,
+                "download_mb": mb(m.download_bytes), "disk_mb": mb(m.disk_bytes),
             })
         })
         .collect();
@@ -405,7 +407,9 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
     let med_gap = sorted.get(sorted.len() / 2).copied().unwrap_or(0.0);
     let mut revisions = 0;
     let mut words_revised = 0;
-    let mut confirmed_violations = 0;
+    // Confirmed text only grows, except when a polished chunk replaces its preview text, so
+    // this stays at or under `chunks`.
+    let mut confirmed_rewrites = 0;
     for w in events.windows(2) {
         let d1 = wer::normalize(&format!("{} {}", w[0].1, w[0].2));
         let d2 = wer::normalize(&format!("{} {}", w[1].1, w[1].2));
@@ -415,7 +419,7 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
             words_revised += d1.len() - common;
         }
         if !w[1].1.starts_with(w[0].1.as_str()) {
-            confirmed_violations += 1;
+            confirmed_rewrites += 1;
         }
     }
     let final_words = wer::normalize(&final_text);
@@ -438,12 +442,15 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
             "mean_gap_ms": mean_gap, "median_gap_ms": med_gap,
             "updates_per_sec": n as f64 / speech_secs,
             "revisions": revisions, "revision_rate": if n > 1 { revisions as f64 / (n - 1) as f64 } else { 0.0 },
-            "words_revised": words_revised, "confirmed_violations": confirmed_violations,
+            "words_revised": words_revised, "confirmed_rewrites": confirmed_rewrites,
             "passes": stats.partial_passes, "pass_ms_mean": pass_ms_mean, "pass_ms_max": stats.partial_decode_ms_max,
-            "stream_decode_ms_total": stats.stream_decode_ms_total,
             "confirmed_words_at_stop": conf_words.len(), "final_words": final_words.len(),
             "confirmed_coverage": confirmed_coverage,
             "confirmed_vs_final_errors": conf_vs_final_err,
+        },
+        "chunks": {
+            "polished": stats.chunks, "decode_ms_total": stats.chunk_decode_ms_total,
+            "decode_ms_max": stats.chunk_decode_ms_max,
         },
         "cpu": {"cpu_secs": cpu, "wall_secs": wall, "cpu_pct_of_one_core": 100.0 * cpu / wall},
         "errors": errors,
@@ -458,10 +465,16 @@ fn session_cmd(args: &Args) -> anyhow::Result<()> {
     engine.transcribe_pcm(&vec![0.0; SAMPLE_RATE as usize])?;
     let loadavg_before = loadavg();
     let mut v = run_session(&engine, &wav, args.has("--quiet"))?;
+    if let Some(path) = args.get("--ref") {
+        let reference = std::fs::read_to_string(&path).with_context(|| format!("read {path}"))?;
+        let (errors, words) = wer::wer_counts(&reference, v["final_text"].as_str().unwrap_or_default());
+        v["wer"] = json!({"errors": errors, "ref_words": words, "wer": errors as f64 / words.max(1) as f64});
+    }
     v["model"] = json!(model);
-    v["final_redecode"] = json!(engine.config().final_redecode);
+    v["chunk_secs"] = json!(engine.config().chunk_secs);
     v["loadavg_before"] = json!(loadavg_before);
     v["loadavg_after"] = json!(loadavg());
+    v["mem_end"] = mem_json();
     write_out(args, &v)
 }
 
@@ -497,49 +510,10 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
                 "loadavg_before": loadavg_before, "loadavg_after": loadavg(), "result": r,
             }));
         }
-        if engine.model_info().streaming {
-            break; // Natively streaming model: partials are inherent, there is no "off".
-        }
     }
     let v = json!({
-        "model": model, "threads": base.threads, "vad_trim": base.vad_trim, "final_redecode": base.final_redecode,
+        "model": model, "threads": base.threads, "vad_trim": base.vad_trim, "chunk_secs": base.chunk_secs,
         "runs": out, "mem_end": mem_json(),
-    });
-    write_out(args, &v)
-}
-
-/// WER of a natively streaming model's *streamed* final text (fed in 100 ms chunks as fast
-/// as possible; the output doesn't depend on wall-clock pacing).
-fn stream_wer(args: &Args) -> anyhow::Result<()> {
-    let model = args.model()?;
-    let engine = Engine::load(config(args, &model)?)?;
-    let (mut e_sum, mut n_sum) = (0, 0);
-    let mut rows = Vec::new();
-    for c in clips()? {
-        let pcm = audio::load_wav_16k_mono(&c.path)?;
-        let mut s = engine.stream_decoder().context("model does not stream")?;
-        let t = Instant::now();
-        for chunk in pcm.chunks(SAMPLE_RATE as usize / 10) {
-            s.accept(chunk);
-        }
-        let text = s.finish();
-        let ms = t.elapsed().as_secs_f64() * 1e3;
-        let (e, n) = wer::wer_counts(&c.text, &text);
-        if c.category != "silence" {
-            e_sum += e;
-            n_sum += n;
-        }
-        eprintln!("{:16} wer {e:>2}/{n:<3} {ms:6.0} ms  {text}", c.id);
-        rows.push(
-            json!({"id": c.id, "errors": e, "ref_words": n, "hypothesis": text, "reference": c.text, "decode_ms": ms}),
-        );
-    }
-    let env = |k: &str| std::env::var(k).ok();
-    let v = json!({
-        "model": model, "mode": "streamed", "wer_total": e_sum as f64 / n_sum.max(1) as f64,
-        "errors": e_sum, "ref_words": n_sum, "loadavg": loadavg(),
-        "env": {"EASYVOX_PK_CHUNK_MS": env("EASYVOX_PK_CHUNK_MS"), "EASYVOX_PK_RIGHT_MS": env("EASYVOX_PK_RIGHT_MS")},
-        "clips": rows,
     });
     write_out(args, &v)
 }

@@ -46,10 +46,11 @@ Working notes. Decisions are recorded as they're made; what's still open is list
 
 ### Live text while speaking
 
-- Most speech models aren't built for streaming. EasyVox handles both kinds:
-  - **Models that stream natively** (the default, Parakeet Unified) send a partial per decoded chunk. With 560 ms chunks the first words appear about 1.35 s after you start speaking. Smaller chunks show them sooner, at more CPU and GPU cost.
-  - **Other models** re-run on the recent audio every 400 ms or so. Text shows in two states: confirmed (stable) and provisional (may still change). Text is confirmed once two passes in a row agree.
-- Either way, on release one offline pass over the whole recording produces the final text, which replaces the preview.
+- **One pipeline for every model.** Every 400 ms EasyVox re-decodes the recent audio (up to 20 s) and shows the text in two states: confirmed (stable) and provisional (may still change). A word is confirmed once two passes in a row agree on it. No model streams natively, Parakeet Unified included (see "Engine").
+- **Long dictations are polished as you talk.** Once about 30 s of audio is waiting, the oldest stretch is cut at a pause and decoded again in final (offline) mode in the background. On release only the rest is decoded, so the final text takes about as long after 9 minutes as after 30 s: about 0.4 s, where one pass over the whole recording took 21.6 s. Every word of the final text comes from a final-mode decode.
+  - **Cuts** go in the middle of the longest pause in the newer half of the waiting audio. Pauses are found by loudness for now; a voice activity detector (Silero) could replace that later. With no pause for a full minute, the cut goes at the quietest moment.
+  - **Joins.** When the model times each word (Parakeet), a chunk is decoded with 1 s of the neighbouring audio on each side, so punctuation across a cut comes out as in one pass, and words are assigned to a chunk by their timing. Whisper only times segments, so its chunks are decoded without context and simply joined.
+  - **In the preview**, a polished chunk's text replaces its preview text. That's the only time confirmed text changes, and it only touches a finished chunk, seconds behind the newest words.
 - Live text goes in EasyVox's own floating window, not the target app. Typing provisional text into another app and then correcting it is fragile. The final text is pasted once, on release.
 
 ### Overlay animation
@@ -99,7 +100,7 @@ The list is tight on purpose: one opinionated default and two alternatives, each
 | | Model (GGUF) | Download | Pick this if… | License |
 |---|---|---|---|---|
 | **Default** | Parakeet Unified EN 0.6B, Q5_K_M | 541 MB | You want the best all-round model. | NVIDIA Open Model License |
-| Alternative | Parakeet TDT 0.6B v2, Q5_K_M | 539 MB | You want words to appear sooner while you talk (about 0.5 s instead of 1.35 s), and don't mind more GPU and CPU use while speaking. | CC-BY-4.0 |
+| Alternative | Parakeet TDT 0.6B v2, Q5_K_M | 539 MB | Same speed and cost as the default now; fewer errors on long dictations in our bench, and it always ends with a full stop. Being weighed as the default (see below). | CC-BY-4.0 |
 | Alternative | Whisper base.en, Q8_0 | 85 MB | You want the smallest model (an 8 GB Mac, or memory matters more than the last bit of accuracy). | Apache-2.0 |
 
 Choices as of 9 October 2026, settled by a local bench the same day ([`docs/model-bench.md`](docs/model-bench.md)). This area moves fast, so re-check before changing the list. Accuracy numbers are average word error rates (WER, lower is better) and only compare within one source.
@@ -113,13 +114,13 @@ In the code, each catalog entry in `crates/easyvox-core/src/models.rs` has an `o
 Why it's the default:
 
 - **Accuracy.** In [transcribe.cpp's own runs](https://github.com/handy-computer/transcribe.cpp/tree/main/docs/models) of each GGUF, it has the lowest FLEURS English error of any model under 1B parameters (3.99 %). NVIDIA's same-pipeline comparison on its [model card](https://huggingface.co/nvidia/parakeet-unified-en-0.6b) puts it ahead of TDT v2 (5.91 vs 6.04). It isn't on the Open ASR Leaderboard itself, which is the main gap in the evidence.
-- **One model, both jobs.** It's the only model that gives both the live preview (buffered streaming) and the full-accuracy final pass from one set of weights.
-- **Speed and size.** In the October bench: final text 0.09–0.46 s after release for 3–30 s of speech, 7–9 % of one core while you talk, about 690 MB of memory. If 1.35 s to first words feels slow, try a smaller streaming chunk first (0.85 s, at about twice the compute) before switching models.
+- **Speed and size.** In the October bench, on the one pipeline: first words after about 0.5 s, final text 0.11–0.48 s after release for 3–30 s of speech and about 0.4 s after 3 or 9 minutes, 14–58 % of one core while you talk, about 690 MB of memory (840 MB at the peak of a 9-minute dictation).
+- **Its edge over v2 is gone.** It was picked as the only model that could both stream the preview and do the full-accuracy final pass from one set of weights. With one pipeline, every model does both by re-decoding, and in the re-run v2 cost the same, showed first words as fast, made fewer errors on long dictations (0.40 % against 0.86 % over 9 minutes) and ended every clip with a full stop, where Unified left it out on 4 of 13. Unified still ranks a little better on public benchmarks, which our text-to-speech clips can't confirm. Whether v2 becomes the default is an open decision; numbers in [`docs/model-bench.md`](docs/model-bench.md).
 
 ### Alternatives
 
-- **Parakeet TDT 0.6B v2 (Q5_K_M): faster first words.** It's offline-only, so EasyVox re-decodes the recent audio for the preview. First words appear after about 0.46 s, but it uses 15–37 % of one core while you speak, against Unified's 7–9 %. It's one of the best models under 1B parameters on the [Open ASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) (6.43). **Quantization: Q5_K_M, not Q8_0.** In the bench, Q5_K_M wrote exactly the same text as Q8_0 on every clip, showed first words just as fast, and finished within 10–20 ms of it (its decodes are about 5 % slower). In exchange it's 191 MB smaller to download and uses about 190 MB less memory (690 vs 880 MB). The Q8_0 entry is gone from the catalog.
-- **Whisper base.en (Q8_0): smallest.** 85 MB, about 205 MB of memory. On our clips it made as few errors as Canary 180M Flash on ordinary sentences (1.5 %) and wrote numbers as digits. Its known flaw: it makes up words on silence (2 s of silence came out as "you"), and it once added a stray "Mhm." at the end of a long clip. The app should skip the final pass when the recording holds no speech (VAD or a level check), whichever model is active.
+- **Parakeet TDT 0.6B v2 (Q5_K_M).** It used to be the pick for faster first words, when Unified streamed natively. With one pipeline both re-decode, so they cost about the same (v2 15–51 % of one core while you speak, Unified 14–58 %) and show first words after about 0.45–0.5 s. It's one of the best models under 1B parameters on the [Open ASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) (6.43). **Quantization: Q5_K_M, not Q8_0.** In the bench, Q5_K_M wrote exactly the same text as Q8_0 on every clip, showed first words just as fast, and finished within 10–20 ms of it (its decodes are about 5 % slower). In exchange it's 191 MB smaller to download and uses about 190 MB less memory (690 vs 880 MB). The Q8_0 entry is gone from the catalog.
+- **Whisper base.en (Q8_0): smallest.** 85 MB, about 205 MB of memory. On our clips it made as few errors as Canary 180M Flash on ordinary sentences (1.5 %) and wrote numbers as digits. Its known flaw: it makes up words on silence (2 s of silence came out as "you"), and it once added a stray "Mhm." at the end of a long clip. The app should skip the final pass when the recording holds no speech (VAD or a level check), whichever model is active. It also used to lose text past 30 s (16 % word errors on a 3-minute dictation, whole paragraphs missing); its adapter now asks for timestamps on audio over 30 s, and chunking keeps most decodes under 30 s anyway (0.6 %). Its preview flickers more than Parakeet's, since it has no word timings to align passes by.
 - **Canary 180M Flash: benched, not offered.** It was the candidate for the small slot: more accurate than Whisper base.en on the leaderboard (7.48 vs 11.10 on the June 2026 version), and the empty-transcript issue ([transcribe.cpp #140](https://github.com/handy-computer/transcribe.cpp/issues/140)) never showed up (0 empty results in 84 decodes, nothing on silence). But on transcribe-cpp 0.3.1 it writes every number as words ("three hundred and forty two dollars", "five five five zero one four two"): the runtime has no number-formatting (ITN) switch for Canary. That puts it at 7.1 % WER on our clips against Whisper's 1.4 %, which fails the "no worse than Whisper base.en" bar, and digits matter for dictation. Worth re-checking if a later transcribe.cpp adds ITN for Canary.
 
 ### Licenses
@@ -176,7 +177,7 @@ People use this phrase for two different setups. EasyVox will do both, kept ligh
 
 **B. Fast preview + accurate final text.** Something fast streams text while you talk. On release, the whole recording gets one clean pass, and that result is what gets pasted.
 
-- Done: the default model, Parakeet Unified, streams the preview and then does one offline pass over the whole recording on release. You get the benefit of B without a second model in memory.
+- Done with one model: every model re-decodes the recent audio for the preview and polishes the recording chunk by chunk in final mode, the last chunk on release (see "Live text while speaking"). You get the benefit of B without a second model in memory.
 
 Combined flow: live preview → final transcript → optional cleanup.
 
@@ -200,7 +201,9 @@ A Cargo workspace:
 
 ### Engine
 
-- **Parakeet Unified on transcribe.cpp** (ggml, Metal on the GPU). One loaded model streams the live preview while you talk, then runs one offline pass over the whole recording on release (`EngineConfig::recommended`). See "Models" for the list.
+- **One pipeline for every model, on transcribe.cpp** (ggml, Metal on the GPU). A model's adapter only turns audio into words with timings. The session does everything else the same way for every model: the re-decoded preview, the chunks polished while you talk, and the last chunk on release (`crates/easyvox-core/src/{session,partials,chunks}.rs`). A runtime's quirks stay small flags in its adapter: Whisper, for one, needs segment timestamps on audio over 30 s, or it silently drops text. See "Models" for the list.
+- **No native streaming, on purpose.** Parakeet Unified can stream natively, and EasyVox used to. But transcribe.cpp allows one stream or run per model at a time, so polishing chunks meant closing and reopening the stream each time, and the preview hiccupped; it also meant a second, model-specific path. Native streaming was cheaper (7–9 % of one core while talking, against about 50 % re-decoding). If the preview ever costs too much CPU or battery, it could come back as an optimisation for the preview alone; git history has the adapter.
+- **Long dictations** (real-time replays of 3- and 9-minute recordings on an M4): the final text arrives 0.37–0.44 s after release, where one pass over the whole recording took 4.1–4.7 s at 3 minutes and 21.2–21.6 s at 9. Word errors held or dropped (Whisper's from 16 % to 0.6 %: it no longer loses text past 30 s), Parakeet's peak memory fell from 0.9–1.2 GB to about 0.8 GB, and the preview kept up for all 9 minutes (its newest words a median 0.6 s or less behind the speech). The cost is the preview: about half of one core and most of the GPU while you talk, silences included. Method and numbers: [`docs/model-bench.md`](docs/model-bench.md), "Long dictation".
 - **sherpa-onnx** is an optional fallback runtime (ONNX Runtime on the CPU, the core's `sherpa` feature). It isn't compiled into the app.
 - **One ggml and one ONNX Runtime per binary.** Libraries that vendor their own copy (`whisper-rs`, llama.cpp bindings, `ort`) can't sit next to ours. The linker quietly keeps one copy, so this fails at runtime, not at build time.
 

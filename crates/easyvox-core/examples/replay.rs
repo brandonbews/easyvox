@@ -14,9 +14,7 @@ fn main() -> anyhow::Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/punct_samantha.wav")));
 
-    let mut config = EngineConfig::new(model, paths::models_dir());
-    config.final_redecode = true; // streaming models: one offline pass over the whole recording on release
-    let engine = Engine::load(config)?; // blocking: off the UI thread in an app
+    let engine = Engine::load(EngineConfig::new(model, paths::models_dir()))?; // blocking: off the UI thread in an app
     eprintln!("loaded {} in {} ms", engine.model_info().id, engine.load_ms());
 
     let (_session, events) = engine.start(AudioSource::WavReplay(wav))?;

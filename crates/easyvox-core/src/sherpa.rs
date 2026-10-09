@@ -1,14 +1,16 @@
 //! sherpa-onnx adapters: Parakeet TDT (offline), Nemotron streaming (online), Silero VAD.
+//! The online model is decoded like the offline ones: each buffer is streamed through it.
 
 use crate::models::{ModelInfo, SILERO_VAD_PATH};
-use crate::{DecodeMode, EngineConfig, Hypothesis, SAMPLE_RATE, SpeechModel, StreamDecoder, Word};
+use crate::{DecodeMode, EngineConfig, Hypothesis, SAMPLE_RATE, SpeechModel, Word};
 use anyhow::{Context, bail};
 use sherpa_onnx::{
     OfflineRecognizer, OfflineRecognizerConfig, OnlineRecognizer, OnlineRecognizerConfig, OnlineStream, VadModelConfig,
     VoiceActivityDetector,
 };
+use std::ops::Range;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// ONNX Runtime execution provider: "cpu" (default) or e.g. "coreml" via EASYVOX_ORT_PROVIDER.
 fn provider() -> String {
@@ -82,11 +84,15 @@ impl SpeechModel for ParakeetModel {
         let words = tokens_to_words(&r.tokens, r.timestamps.as_deref(), r.durations.as_deref());
         Ok(Hypothesis { text: r.text.trim().to_string(), words })
     }
+
+    fn word_timings(&self) -> bool {
+        true
+    }
 }
 
 pub struct StreamingModel {
     info: &'static ModelInfo,
-    rec: Arc<OnlineRecognizer>,
+    rec: OnlineRecognizer,
 }
 
 impl StreamingModel {
@@ -103,43 +109,13 @@ impl StreamingModel {
         c.enable_endpoint = false;
         let rec = OnlineRecognizer::create(&c)
             .with_context(|| format!("sherpa-onnx could not create online recognizer from {}", dir.display()))?;
-        Ok(Self { info, rec: Arc::new(rec) })
+        Ok(Self { info, rec })
     }
-}
 
-struct SherpaStream {
-    rec: Arc<OnlineRecognizer>,
-    stream: OnlineStream,
-}
-
-impl SherpaStream {
-    fn drain(&self) {
-        while self.rec.is_ready(&self.stream) {
-            self.rec.decode(&self.stream);
+    fn drain(&self, stream: &OnlineStream) {
+        while self.rec.is_ready(stream) {
+            self.rec.decode(stream);
         }
-    }
-}
-
-impl SherpaStream {
-    fn text(&self) -> String {
-        self.rec.get_result(&self.stream).map(|r| r.text.trim().to_string()).unwrap_or_default()
-    }
-}
-
-impl StreamDecoder for SherpaStream {
-    fn accept(&mut self, pcm: &[f32]) {
-        self.stream.accept_waveform(SAMPLE_RATE as i32, pcm);
-        self.drain();
-    }
-    fn partial(&self) -> (String, String) {
-        crate::split_last_word(&self.text())
-    }
-    fn finish(&mut self) -> String {
-        // Tail padding so the last chunk gets decoded.
-        self.stream.accept_waveform(SAMPLE_RATE as i32, &vec![0.0; (SAMPLE_RATE as usize) * 6 / 10]);
-        self.stream.input_finished();
-        self.drain();
-        self.text()
     }
 }
 
@@ -148,19 +124,20 @@ impl SpeechModel for StreamingModel {
         self.info
     }
 
-    /// Offline use of a streaming model: just stream the whole buffer through.
+    /// Streams the whole buffer through. No word timings: the session spreads the words.
     fn transcribe(&self, pcm: &[f32], _mode: DecodeMode) -> anyhow::Result<Hypothesis> {
-        let mut s = self.new_stream().unwrap();
-        s.accept(pcm);
-        Ok(Hypothesis { text: s.finish(), words: Vec::new() })
-    }
-
-    fn new_stream(&self) -> Option<Box<dyn StreamDecoder>> {
         let stream = self.rec.create_stream();
         // Without leading context the cache-aware encoder drops the first word when speech
-        // starts at t=0 (seen on every TTS clip). 0.5 s of silence fixes it.
-        stream.accept_waveform(SAMPLE_RATE as i32, &vec![0.0; SAMPLE_RATE as usize / 2]);
-        Some(Box::new(SherpaStream { rec: self.rec.clone(), stream }))
+        // starts at t=0 (seen on every TTS clip). 0.5 s of silence fixes it; the tail padding
+        // gets the last chunk decoded.
+        let sr = SAMPLE_RATE as i32;
+        stream.accept_waveform(sr, &vec![0.0; SAMPLE_RATE as usize / 2]);
+        stream.accept_waveform(sr, pcm);
+        stream.accept_waveform(sr, &vec![0.0; (SAMPLE_RATE as usize) * 6 / 10]);
+        stream.input_finished();
+        self.drain(&stream);
+        let text = self.rec.get_result(&stream).map(|r| r.text.trim().to_string()).unwrap_or_default();
+        Ok(Hypothesis { text, words: Vec::new() })
     }
 }
 
@@ -188,9 +165,9 @@ impl VadTrimmer {
         Ok(Self { vad: Mutex::new(vad) })
     }
 
-    /// Returns the audio from the first to the last detected speech (with padding),
-    /// or nothing if no speech was found.
-    pub fn trim(&self, pcm: &[f32]) -> Vec<f32> {
+    /// The span from the first to the last detected speech (with padding), or an empty range
+    /// if no speech was found.
+    pub fn speech(&self, pcm: &[f32]) -> Range<usize> {
         let vad = self.vad.lock().unwrap();
         vad.reset();
         for chunk in pcm.chunks(512) {
@@ -204,12 +181,12 @@ impl VadTrimmer {
             vad.pop();
         }
         if first == usize::MAX {
-            return Vec::new();
+            return 0..0;
         }
         let pad_before = (SAMPLE_RATE as usize) / 4; // 250 ms
         let pad_after = (SAMPLE_RATE as usize) * 3 / 10; // 300 ms
         let a = first.saturating_sub(pad_before);
         let b = (last + pad_after).min(pcm.len());
-        pcm[a..b].to_vec()
+        a..b
     }
 }

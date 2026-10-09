@@ -1,6 +1,12 @@
-//! Push-to-talk session: capture thread + decode worker.
+//! Push-to-talk session: a capture thread and a decode worker, the same for every model.
+//!
+//! While the key is held, the worker ticks every `partial_interval_ms`. Each tick it polishes
+//! the oldest chunk in `Final` mode if enough audio waits (`chunks.rs`), then re-decodes the
+//! recent audio in `Partial` mode for the preview, confirming words once two passes agree
+//! (`partials.rs`). On release it polishes the rest and sends `Final`.
 
 use crate::audio::{MicInfo, SharedAudio};
+use crate::chunks::{self, Chunker, Polished};
 use crate::partials::LocalAgreement;
 use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,18 +20,20 @@ const SR: usize = SAMPLE_RATE as usize;
 /// Counters a session collects (for benchmarks and diagnostics).
 #[derive(Clone, Debug, Default)]
 pub struct SessionStats {
-    /// Re-decode passes run for partials (0 for natively streaming models).
+    /// Re-decode passes run for partials.
     pub partial_passes: u32,
     pub partial_decode_ms_total: f64,
     pub partial_decode_ms_max: f64,
     /// `Partial` events sent.
     pub partial_events: u32,
-    /// Streaming models: total ms spent in incremental decode.
-    pub stream_decode_ms_total: f64,
-    /// Time from stop (or end of WAV) until the worker started the final decode
-    /// (waiting for an in-flight partial pass and the capture thread).
+    /// Chunks polished while recording (the eager final pass), and their decode times.
+    pub chunks: u32,
+    pub chunk_decode_ms_total: f64,
+    pub chunk_decode_ms_max: f64,
+    /// Time from stop (or end of WAV) until the worker started the final decode (waiting for
+    /// an in-flight partial pass or chunk, and the capture thread).
     pub final_wait_ms: f64,
-    /// Final decode itself (incl. VAD trim).
+    /// Final decode of what was left unpolished (incl. VAD trim).
     pub final_decode_ms: f64,
     /// Confirmed partial text at the moment the final pass started.
     pub confirmed_at_stop: String,
@@ -76,8 +84,9 @@ impl Session {
 
 impl Drop for Session {
     /// Stops capture and waits for the worker to finish (it still sends `Final`, which takes
-    /// at most one final decode). Waiting matters: if the process exits while a decode thread
-    /// is still running, ggml-metal's static destructors can crash at exit (seen once).
+    /// at most a chunk decode and the final decode). Waiting matters: if the process exits
+    /// while a decode thread is still running, ggml-metal's static destructors can crash at
+    /// exit (seen once).
     fn drop(&mut self) {
         self.stop();
         self.join();
@@ -177,58 +186,13 @@ impl Worker {
     fn run(self) {
         let started = Instant::now();
         let mut warned = false;
-        if let Some(mut stream) = self.engine.model.new_stream() {
-            // Natively streaming model: feed audio as it arrives.
-            let mut fed = 0usize;
-            let mut last = (String::new(), String::new());
-            loop {
-                self.wait(Instant::now() + Duration::from_millis(100), fed);
-                self.mic_checks(started, &mut warned);
-                let new: Vec<f32> = self.audio.samples.lock().unwrap()[fed..].to_vec();
-                if !new.is_empty() {
-                    let t = Instant::now();
-                    stream.accept(&new);
-                    fed += new.len();
-                    self.ctl.stats.lock().unwrap().stream_decode_ms_total += t.elapsed().as_secs_f64() * 1e3;
-                    let split = stream.partial();
-                    if split != last && !(split.0.is_empty() && split.1.is_empty()) {
-                        last = split.clone();
-                        self.send(TranscriptEvent::Partial { confirmed: split.0, provisional: split.1 });
-                    }
-                }
-                if self.done() && self.audio.len() == fed {
-                    break;
-                }
-            }
-            let end = self.end_instant();
-            let t = Instant::now();
-            let redecode = self.engine.config.final_redecode;
-            // With a full re-decode coming, don't spend time flushing the stream.
-            let mut text = if redecode {
-                drop(stream);
-                String::new()
-            } else {
-                stream.finish()
-            };
-            if redecode {
-                let all = self.audio.samples.lock().unwrap().clone();
-                let trimmed = self.engine.trim(&all);
-                let _g = self.engine.decode_lock.lock().unwrap();
-                match self.engine.model.transcribe(&trimmed, DecodeMode::Final) {
-                    Ok(h) => text = h.text,
-                    Err(e) => self.send(TranscriptEvent::Error(format!("final re-decode failed: {e:#}"))),
-                }
-            }
-            self.finish(text, end, t, last.0);
-        } else {
-            self.run_redecode(started, &mut warned);
-        }
-    }
-
-    fn run_redecode(&self, started: Instant, warned: &mut bool) {
         let cfg = &self.engine.config;
+        let chunker = Chunker::new(cfg.chunk_secs);
+        let mut polished = Polished::new(self.engine.model.word_timings());
         let mut la = LocalAgreement::new();
-        let interval = Duration::from_millis(cfg.partial_interval_ms.max(1) as u64);
+        // With partials off the loop still ticks, to polish chunks.
+        let interval =
+            Duration::from_millis(if cfg.partial_interval_ms == 0 { 400 } else { cfg.partial_interval_ms } as u64);
         let window = (cfg.partial_window_secs.max(2.0) * SR as f32) as usize;
         let mut anchor = 0usize;
         let mut decoded_len = 0usize;
@@ -242,12 +206,20 @@ impl Worker {
                     break;
                 }
             }
-            self.mic_checks(started, warned);
+            self.mic_checks(started, &mut warned);
             if self.done() {
                 break;
             }
-            let pass_start = Instant::now();
-            next = pass_start + interval;
+            next = Instant::now() + interval;
+            if self.polish_chunk(&chunker, &mut polished) {
+                // The preview keeps only what follows the polished words, and its window moves
+                // up to the cut (less the chunks' context).
+                la.skip_to(polished.until());
+                anchor = anchor.max(polished.start().saturating_sub(polished.context()));
+                if self.done() {
+                    break;
+                }
+            }
             if cfg.partial_interval_ms == 0 {
                 continue;
             }
@@ -260,7 +232,7 @@ impl Worker {
                 }
                 if total - anchor > window {
                     let frozen = (la.confirmed_until() * SR as f32) as usize;
-                    anchor = anchor.max(frozen.min(total));
+                    anchor = anchor.max(frozen.saturating_sub(polished.context()).min(total));
                     if total - anchor > window {
                         anchor = total - window;
                     }
@@ -282,27 +254,8 @@ impl Worker {
             }
             match hyp {
                 Ok(h) => {
-                    let off = anchor as f32 / SR as f32;
-                    let timed = if h.words.is_empty() && !h.text.is_empty() {
-                        // Runtime gave no word timings: spread the words evenly over the window.
-                        let ws: Vec<&str> = h.text.split_whitespace().collect();
-                        let dur = window_pcm.len() as f32 / SR as f32 / ws.len().max(1) as f32;
-                        ws.iter()
-                            .enumerate()
-                            .map(|(i, t)| Word {
-                                text: t.to_string(),
-                                start: i as f32 * dur,
-                                end: (i + 1) as f32 * dur,
-                            })
-                            .collect()
-                    } else {
-                        h.words
-                    };
-                    let words: Vec<Word> = timed
-                        .iter()
-                        .map(|w| Word { text: w.text.clone(), start: w.start + off, end: w.end + off })
-                        .collect();
-                    let cur = la.update(&words);
+                    la.update(&h.timed_words(anchor as f32 / SR as f32, window_pcm.len() as f32 / SR as f32));
+                    let cur = preview(&polished, &la);
                     if cur != last && !(cur.0.is_empty() && cur.1.is_empty()) {
                         last = cur.clone();
                         self.send(TranscriptEvent::Partial { confirmed: cur.0, provisional: cur.1 });
@@ -314,21 +267,54 @@ impl Worker {
                 next = Instant::now() + Duration::from_millis(50);
             }
         }
+        // Released: polish the rest.
         let end = self.end_instant();
         let t = Instant::now();
-        let all = self.audio.samples.lock().unwrap().clone();
-        let trimmed = self.engine.trim(&all);
-        let text = {
-            let _g = self.engine.decode_lock.lock().unwrap();
-            match self.engine.model.transcribe(&trimmed, DecodeMode::Final) {
-                Ok(h) => h.text,
-                Err(e) => {
-                    self.send(TranscriptEvent::Error(format!("final decode failed: {e:#}")));
-                    String::new()
-                }
-            }
+        let confirmed = preview(&polished, &la).0;
+        let (pcm, span) = {
+            let a = self.audio.samples.lock().unwrap();
+            let span = polished.span(a.len(), a.len());
+            (a[span.clone()].to_vec(), span)
         };
-        self.finish(text, end, t, la.confirmed_text());
+        polished.add(&self.decode_final(&pcm, span.start), span, None);
+        self.finish(polished.text(), end, t, confirmed);
+    }
+
+    /// The eager final pass: if enough audio waits unpolished, decode the oldest chunk in
+    /// `Final` mode (see `chunks.rs`). True if it did.
+    fn polish_chunk(&self, chunker: &Chunker, polished: &mut Polished) -> bool {
+        let (pcm, span, end) = {
+            let a = self.audio.samples.lock().unwrap();
+            let Some(cut) = chunker.cut(&a[polished.start()..]) else { return false };
+            let end = polished.start() + cut;
+            let span = polished.span(end, a.len());
+            (a[span.clone()].to_vec(), span, end)
+        };
+        let t = Instant::now();
+        polished.add(&self.decode_final(&pcm, span.start), span, Some(end));
+        let ms = t.elapsed().as_secs_f64() * 1e3;
+        let mut s = self.ctl.stats.lock().unwrap();
+        s.chunks += 1;
+        s.chunk_decode_ms_total += ms;
+        s.chunk_decode_ms_max = s.chunk_decode_ms_max.max(ms);
+        true
+    }
+
+    /// `Final`-mode decode of `pcm`, which starts `offset` samples into the recording. Returns
+    /// the words with absolute times; failures become `Error` events.
+    fn decode_final(&self, pcm: &[f32], offset: usize) -> Vec<Word> {
+        let speech = self.engine.speech(pcm);
+        let hyp = {
+            let _g = self.engine.decode_lock.lock().unwrap();
+            self.engine.model.transcribe(&pcm[speech.clone()], DecodeMode::Final)
+        };
+        match hyp {
+            Ok(h) => h.timed_words((offset + speech.start) as f32 / SR as f32, speech.len() as f32 / SR as f32),
+            Err(e) => {
+                self.send(TranscriptEvent::Error(format!("final decode failed: {e:#}")));
+                Vec::new()
+            }
+        }
     }
 
     fn finish(&self, text: String, end: Instant, decode_start: Instant, confirmed: String) {
@@ -346,4 +332,12 @@ impl Worker {
         }
         self.send(TranscriptEvent::Final { text, audio_secs, finalize_ms });
     }
+}
+
+/// The preview: polished text, then the words confirmed after it, as `confirmed`; the words
+/// still changing as `provisional`.
+fn preview(polished: &Polished, la: &LocalAgreement) -> (String, String) {
+    let confirmed = [polished.text(), chunks::join(&polished.without_repeat(la.confirmed_words().to_vec()))];
+    let confirmed = confirmed.into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" ");
+    (confirmed, la.provisional_text().to_string())
 }

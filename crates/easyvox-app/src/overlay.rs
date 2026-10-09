@@ -32,6 +32,8 @@ pub enum Mode {
 
 #[derive(Default)]
 pub struct OverlayView {
+    /// Stable text. In a long dictation it can still change once, when the core swaps in the
+    /// polished text of a finished chunk (see `TranscriptEvent::Partial`).
     pub confirmed: String,
     /// Text that may still change; drawn dimmed.
     pub provisional: String,
@@ -67,7 +69,17 @@ impl OverlayView {
         cx.notify();
     }
 
-    /// The text in the pill (the tail of confirmed + provisional), and the byte range of the
+    /// The transcript so far: confirmed, then provisional. The core sends them as two runs of
+    /// words, so they need a space between them.
+    pub fn text(&self) -> String {
+        let joined = self.confirmed.is_empty()
+            || self.provisional.is_empty()
+            || self.confirmed.ends_with(' ')
+            || self.provisional.starts_with(' ');
+        format!("{}{}{}", self.confirmed, if joined { "" } else { " " }, self.provisional)
+    }
+
+    /// The text in the pill (the tail of [`text`](Self::text)), and the byte range of the
     /// provisional part.
     fn display_text(&self) -> (String, std::ops::Range<usize>) {
         match self.mode {
@@ -75,7 +87,7 @@ impl OverlayView {
             Mode::Notice => return (self.confirmed.clone(), 0..0),
             Mode::Live | Mode::Final => {}
         }
-        let full = format!("{}{}", self.confirmed, self.provisional);
+        let full = self.text();
         let total = full.chars().count();
         let (prefix, skip) = if total > MAX_CHARS { ("…", total - MAX_CHARS) } else { ("", 0) };
         let text: String = prefix.chars().chain(full.chars().skip(skip)).collect();
@@ -189,12 +201,16 @@ mod tests {
 
     #[test]
     fn short_text_is_shown_whole_with_the_provisional_tail_marked() {
-        let (text, prov) = view("Hello ", "world").display_text();
-        assert_eq!(text, "Hello world");
+        let (text, prov) = view("Hello,", "world").display_text();
+        assert_eq!(text, "Hello, world");
         assert_eq!(&text[prov], "world");
         let (text, prov) = view("Hello", "").display_text();
         assert_eq!(text, "Hello");
         assert!(prov.is_empty());
+        let (text, prov) = view("", "Hello").display_text();
+        assert_eq!((text.as_str(), &text[prov]), ("Hello", "Hello"));
+        // Error notes come with their own leading space.
+        assert_eq!(view("Hello", "  ⚠ oops").display_text().0, "Hello  ⚠ oops");
     }
 
     #[test]

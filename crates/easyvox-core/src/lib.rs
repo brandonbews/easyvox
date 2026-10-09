@@ -1,8 +1,14 @@
 //! easyvox-core: the UI-agnostic speech core for EasyVox.
 //!
-//! It captures audio, runs a swappable speech model with live partials, does one final pass
-//! on release, pastes the result and keeps a history. No UI code lives here, so the app shell
-//! can change without touching it.
+//! It captures audio, runs a swappable speech model for a live preview and the final text,
+//! pastes the result and keeps a history. No UI code lives here, so the app shell can change
+//! without touching it.
+//!
+//! Every model takes the same path, and all it has to do is turn audio into words with timings
+//! ([`SpeechModel`]). While the key is held, the session re-decodes the recent audio every few
+//! hundred ms for the preview, and polishes finished chunks of a long dictation in the
+//! background. On release it decodes only what's left, so the final text arrives in well under
+//! a second at any length.
 //!
 //! ```no_run
 //! use easyvox_core::*;
@@ -24,12 +30,14 @@
 //! wait for `Final`. Dropping a `Session` joins its worker thread, so drop it off the UI thread.
 
 pub mod audio;
+mod chunks;
 pub mod history;
 pub mod metrics;
 pub mod models;
 pub mod partials;
 pub mod paste;
 pub mod paths;
+mod pause;
 mod session;
 
 #[cfg(feature = "sherpa")]
@@ -37,6 +45,7 @@ mod sherpa;
 #[cfg(feature = "transcribe-cpp")]
 mod tcpp;
 
+use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -52,11 +61,18 @@ pub use tcpp::release_native_models;
 /// Events a session sends to the UI.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TranscriptEvent {
-    /// Live preview. `confirmed` is stable (only ever grows); `provisional` may still change.
+    /// Live preview: `confirmed` then `provisional` make up the transcript so far.
+    ///
+    /// `provisional` may change with every event. `confirmed` is stable and only grows, with one
+    /// exception: in a long dictation the session polishes each finished chunk (about 30 s of
+    /// audio, cut at a pause) while you keep talking, and that chunk's preview text is then
+    /// replaced by its polished text, which is what `Final` will contain. So a change only ever
+    /// touches text from a finished chunk, seconds behind the newest words.
     Partial { confirmed: String, provisional: String },
     /// Final text, sent after `Session::stop()` (push-to-talk key released), or when a
-    /// `WavReplay` file runs out. It comes from a separate pass and can differ from the
-    /// partials, so the UI replaces the preview with it.
+    /// `WavReplay` file runs out. Every word comes from a `Final`-mode decode (the chunks
+    /// polished while recording, then the rest), so it can differ from the preview, and the UI
+    /// replaces the preview with it.
     Final { text: String, audio_secs: f32, finalize_ms: u32 },
     /// A problem during the session (the mic delivered silence, a decode failed, ...).
     /// A `Final` still follows.
@@ -85,7 +101,6 @@ pub struct EngineConfig {
     /// CPU threads for inference. Default 4 (an M-series Mac has at least 4 performance cores).
     pub threads: usize,
     /// How often to re-decode for live partials, in ms. 0 disables partials.
-    /// Ignored by natively streaming models, which emit a partial per decoded chunk.
     pub partial_interval_ms: u32,
     /// Max audio window (seconds) re-decoded per partial pass. Older audio that has been
     /// confirmed is frozen and dropped from the window.
@@ -93,22 +108,21 @@ pub struct EngineConfig {
     /// Trim leading/trailing silence with Silero VAD before the final pass
     /// (needs `models_dir/vad/silero_vad.onnx` and the `sherpa` feature).
     pub vad_trim: bool,
-    /// Streaming models only: on stop, re-decode the whole recording offline instead of
-    /// flushing the stream (slower, usually more accurate). Needs a model that supports
-    /// both modes (Parakeet Unified).
-    pub final_redecode: bool,
+    /// Eager final pass: once this many seconds of audio wait unpolished, the session cuts off
+    /// the oldest stretch at a pause and decodes it in `Final` mode while the user keeps
+    /// talking, so release only waits for the rest (see `chunks.rs`). Default 30.
+    /// 0 decodes the whole recording in one pass on release, for comparisons: that pass grows
+    /// quadratically (21.6 s after 9 minutes).
+    pub chunk_secs: f32,
 }
 
-/// The default model (see `docs/spikes/core.md`): Parakeet Unified EN 0.6B on transcribe.cpp,
-/// native streaming partials, one offline pass over the whole recording on release.
+/// The default model: Parakeet Unified EN 0.6B on transcribe.cpp (see `DESIGN.md`, "Models").
 pub const RECOMMENDED_MODEL: &str = "parakeet-unified-en-0.6b-q5_k_m-gguf";
 
 impl EngineConfig {
-    /// [`RECOMMENDED_MODEL`] with `final_redecode = true` (needs the `transcribe-cpp` feature).
+    /// [`RECOMMENDED_MODEL`] with the default settings (needs the `transcribe-cpp` feature).
     pub fn recommended(models_dir: impl Into<PathBuf>) -> Self {
-        let mut c = Self::new(RECOMMENDED_MODEL, models_dir);
-        c.final_redecode = true;
-        c
+        Self::new(RECOMMENDED_MODEL, models_dir)
     }
 
     pub fn new(model_id: impl Into<String>, models_dir: impl Into<PathBuf>) -> Self {
@@ -119,7 +133,7 @@ impl EngineConfig {
             partial_interval_ms: 400,
             partial_window_secs: 20.0,
             vad_trim: false,
-            final_redecode: false,
+            chunk_secs: 30.0,
         }
     }
 }
@@ -136,8 +150,29 @@ pub struct Word {
 #[derive(Clone, Debug, Default)]
 pub struct Hypothesis {
     pub text: String,
-    /// Word timings. May be empty if the runtime gives none.
+    /// The words of `text` with their timings. Empty if the runtime gives none: the session
+    /// then spreads the words evenly over the audio, which is rough but enough.
     pub words: Vec<Word>,
+}
+
+impl Hypothesis {
+    /// The words with absolute times: shifted by `offset` seconds, or spread over
+    /// `offset..offset + secs` (the audio decoded) when the runtime gave no timings.
+    pub(crate) fn timed_words(self, offset: f32, secs: f32) -> Vec<Word> {
+        if self.words.is_empty() {
+            return spread_words(&self.text, offset, offset + secs);
+        }
+        let shift = |w: Word| Word { start: w.start + offset, end: w.end + offset, ..w };
+        self.words.into_iter().map(shift).collect()
+    }
+}
+
+/// `text`'s words spread evenly over `start..end` (seconds), for runtimes without word timings.
+pub(crate) fn spread_words(text: &str, start: f32, end: f32) -> Vec<Word> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let each = (end - start).max(0.0) / words.len().max(1) as f32;
+    let at = |i: usize| start + i as f32 * each;
+    words.iter().enumerate().map(|(i, w)| Word { text: w.to_string(), start: at(i), end: at(i + 1) }).collect()
 }
 
 /// Why a decode is happening; adapters may pick cheaper settings for partials.
@@ -147,33 +182,21 @@ pub enum DecodeMode {
     Final,
 }
 
-/// The adapter interface every speech runtime implements. Audio is always 16 kHz mono f32.
+/// The adapter interface every speech runtime implements: audio in, words with timings out.
+/// Audio is always 16 kHz mono f32. The session does the rest (preview, chunking, joining) the
+/// same way for every model; a runtime's quirks stay inside its adapter.
+///
+/// Natively streaming models (Parakeet Unified, Nemotron) are decoded offline like the rest.
+/// Their native streaming could come back later as an optimisation, if the re-decoded preview
+/// ever costs too much CPU or battery.
 pub trait SpeechModel: Send + Sync + 'static {
     fn info(&self) -> &ModelInfo;
-    /// Offline decode of a whole buffer.
+    /// Offline decode of a whole buffer, any length.
     fn transcribe(&self, pcm: &[f32], mode: DecodeMode) -> anyhow::Result<Hypothesis>;
-    /// Native streaming, if the model supports it. `None` means the session re-decodes a
-    /// sliding window for partials instead.
-    fn new_stream(&self) -> Option<Box<dyn StreamDecoder>> {
-        None
-    }
-}
-
-/// Incremental decoder for natively streaming models.
-pub trait StreamDecoder: Send {
-    /// Feed new 16 kHz mono samples; decodes whatever chunks are ready.
-    fn accept(&mut self, pcm: &[f32]);
-    /// Current `(confirmed, provisional)` text.
-    fn partial(&self) -> (String, String);
-    /// Flush the tail and return the final text.
-    fn finish(&mut self) -> String;
-}
-
-/// Splits append-only streaming output into (everything but the last word, last word).
-pub fn split_last_word(text: &str) -> (String, String) {
-    match text.rfind(' ') {
-        Some(i) => (text[..i].to_string(), text[i + 1..].to_string()),
-        None => (String::new(), text.to_string()),
+    /// Whether `transcribe` times each word, rather than giving coarser timings (segments) or
+    /// none. Chunks of a long dictation are decoded with context only then.
+    fn word_timings(&self) -> bool {
+        false
     }
 }
 
@@ -244,20 +267,19 @@ impl Engine {
         session::start(self.inner.clone(), source)
     }
 
-    /// One-shot decode of 16 kHz mono samples (benchmarks, re-transcribing history).
+    /// One-shot decode of 16 kHz mono samples (benchmarks, re-transcribing history). Word
+    /// times are relative to the start of `pcm`.
     pub fn transcribe_pcm(&self, pcm: &[f32]) -> anyhow::Result<Hypothesis> {
-        let pcm = self.inner.trim(pcm);
+        let speech = self.inner.speech(pcm);
         let _g = self.inner.decode_lock.lock().unwrap();
-        self.inner.model.transcribe(&pcm, DecodeMode::Final)
+        let mut h = self.inner.model.transcribe(&pcm[speech.clone()], DecodeMode::Final)?;
+        let offset = speech.start as f32 / SAMPLE_RATE as f32;
+        h.words.iter_mut().for_each(|w| (w.start, w.end) = (w.start + offset, w.end + offset));
+        Ok(h)
     }
 
     pub fn model_info(&self) -> &ModelInfo {
         self.inner.model.info()
-    }
-
-    /// A fresh incremental decoder, for natively streaming models (`None` otherwise).
-    pub fn stream_decoder(&self) -> Option<Box<dyn StreamDecoder>> {
-        self.inner.model.new_stream()
     }
 
     /// Wall time `load()` took, in ms.
@@ -271,12 +293,14 @@ impl Engine {
 }
 
 impl EngineInner {
-    pub(crate) fn trim<'a>(&self, pcm: &'a [f32]) -> std::borrow::Cow<'a, [f32]> {
+    /// The part of `pcm` a `Final` decode should see: all of it, or with `vad_trim` the span
+    /// from the first to the last speech (empty if there's none).
+    pub(crate) fn speech(&self, pcm: &[f32]) -> Range<usize> {
         #[cfg(feature = "sherpa")]
         if let Some(vad) = &self.vad {
-            return std::borrow::Cow::Owned(vad.trim(pcm));
+            return vad.speech(pcm);
         }
-        std::borrow::Cow::Borrowed(pcm)
+        0..pcm.len()
     }
 }
 

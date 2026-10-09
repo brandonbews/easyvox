@@ -217,7 +217,7 @@ async fn dictation(
         sleep(cx, 100).await;
         let (mode, text) = cx.update(|cx| {
             let view = controller.read(cx).overlay.view.read(cx);
-            (view.mode, format!("{}{}", view.confirmed, view.provisional))
+            (view.mode, view.text())
         });
         if mode == Mode::Live && partials.last().is_none_or(|(_, last)| *last != text) {
             partials.push((pressed.elapsed().as_millis(), text));
