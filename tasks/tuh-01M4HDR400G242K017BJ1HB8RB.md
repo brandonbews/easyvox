@@ -1,0 +1,16 @@
+# Energy spike: GPU vs cheaper preview vs Neural Engine
+
+`tuh-01M4HDR400G242K017BJ1HB8RB`
+
+- **Status:** open — ready
+- **Priority:** 2
+- **Labels:** `engine` `perf` `energy` `spike`
+- **Created:** 2026-10-09 22:50 UTC by `brandon`
+
+## Description
+
+Measure energy per minute of dictation on the same 5-min recording (real voice if available, else the long TTS clips): (P0) today's ggml-Metal with the idle fix, plus a cheaper preview; (P1) Parakeet encoder on the ANE via the glimpse-hq transcribe.cpp fork (coreml feature); (P2) FluidAudio CLI as a pure Core ML reference; (P3) Apple SpeechAnalyzer via a small Swift script. Tools without sudo: macmon pipe (brew), top -stats idlew,power, rusage v6 ri_energy_nj. Rule: move Parakeet to Core ML/ANE (pure-Rust objc2-core-ml adapter, ~2 weeks) only if it at least halves energy per minute. Research: ane-research artifact https://claude.ai/artifact/FdvUCLeFA2pd35qhy1k8dS
+
+## History
+
+_No activity yet._

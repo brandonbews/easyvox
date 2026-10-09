@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG038JCXHPQYECTZ1XNE`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 0
 - **Labels:** `engine`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -26,8 +26,14 @@ Proposed fix (prototyped in a scratch copy; patch ~170 lines in the orchestrator
 
 Open: which approach for Unified (decision with Brandon).
 
+Outcome (2026-10-09, commit 30a0c79): Brandon chose one pipeline for every model, with no model-specific streaming path. The preview re-decodes a sliding window for all models; ~30 s chunks are cut at pauses and polished while talking; only the tail is decoded on release. Final latency at 9 min: Unified 21.6 -> 0.38 s, v2 21.2 -> 0.38 s; WER at 9 min: Unified 0.86 %, v2 0.40 %. Peak memory ~840 MB. Whisper's >30 s text loss is fixed (3 min WER 16.3 -> 0.61 %). Native streaming removed. Details in docs/model-bench.md.
+
 ## History
 
 ### 2026-10-09 21:03 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-09 22:50 UTC — edit by `brandon`
+
+description edited · status held→done
