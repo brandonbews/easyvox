@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Actions are pinned to commit SHAs (tags can be moved); the comment names the release.
+
+jobs:
+  fmt:
+    name: rustfmt
+    # Formatting needs no macOS. Linux minutes are also ~10x cheaper than macOS ones on a
+    # private repository, so this runs first and the macOS job only starts if it passes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust (version and components from rust-toolchain.toml)
+        run: rustup set profile minimal && rustup toolchain install --no-self-update
+      - run: cargo fmt --all --check
+
+  check:
+    name: clippy, build, test
+    needs: fmt
+    # Pinned instead of macos-latest so the move to the next macOS/Xcode happens on purpose.
+    # macos-26 is Apple silicon (3-core M1, 7 GB RAM) with Xcode 26 and cmake preinstalled.
+    #
+    # No Metal toolchain step: nothing compiles Metal shaders at build time. gpui-kit 0.7.1
+    # enables GPUI's `runtime_shaders` feature (gpui-pre-apple's build.rs then only stitches the
+    # shader source), and transcribe-cpp-sys builds ggml with GGML_METAL_EMBED_LIBRARY. Both
+    # compile their shaders at run time. Revisit if a gpui-kit upgrade drops `runtime_shaders`.
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust (version and components from rust-toolchain.toml)
+        run: rustup set profile minimal && rustup toolchain install --no-self-update
+      - name: Tool versions
+        run: |
+          rustc -Vv
+          cmake --version
+          xcodebuild -version
+      # Caches ~/.cargo and the dependencies in target/ (GPUI and ggml are the slow part).
+      # The key covers rustc, Cargo.lock and rust-toolchain.toml. Only main saves; pull
+      # requests restore main's cache, which keeps the 10 GB repository quota for main.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Clippy (self-test feature)
+        run: cargo clippy -p easyvox-app --all-targets --features self-test --locked -- -D warnings
+      - name: Build
+        run: cargo build --workspace --locked
+      # Engine tests that need a real model are #[ignore]d, so no models are downloaded here.
+      # The optional `sherpa` feature (downloads ONNX Runtime) isn't built in CI.
+      - name: Test
+        run: cargo test --workspace --locked
