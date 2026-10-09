@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `human` `hands-on` `bench`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -17,6 +17,10 @@ Context: the testdata/ clips are macOS `say` voices. The top models all land aro
 - Add each to testdata/ with a row in testdata/manifest.tsv (id, speaker, category, the transcript exactly as it should be pasted).
 - Decide whether your voice clips go in the public repo.
 
+Done 2026-10-09: Brandon recorded on cheap AirPods in his office: recordings/ramble.wav (5:00 natural ramble, no reference transcript) and recordings/structured.wav (81 s reading of recordings/structured-reference.txt, the answer key). Originals are .m4a alongside; WAVs are 16 kHz mono (afconvert). Private and gitignored: see CLAUDE.md.
+
 ## History
 
-_No activity yet._
+### 2026-10-09 23:37 UTC — edit by `brandon`
+
+description edited · status held→done

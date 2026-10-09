@@ -2,10 +2,10 @@
 
 `tuh-01M4H2EGDR663G3XGTBA14BDNM`
 
-- **Status:** open — blocked on dependencies
+- **Status:** open — ready
 - **Priority:** 2
 - **Labels:** `models` `bench`
-- **Depends on:** [`tuh-h9ae`](tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) (on hold)
+- **Depends on:** [`tuh-h9ae`](tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) (done)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description
