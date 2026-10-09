@@ -19,8 +19,14 @@ Pointers: crates/easyvox-core/src/tcpp.rs; the transcribe-cpp crate and its vend
 
 Constraints: no regression in time to first words.
 
+In progress 2026-10-09: written but UNCOMMITTED in the working tree (app not yet compiled, gates and self-test not run). Backup patch: orchestrator scratchpad idle-wip.patch. Finish per easyvox-handoff-3.md. Approach: each binary sets GGML_METAL_NO_RESIDENCY=1 at the top of main (EASYVOX_METAL_RESIDENCY=1 restores the old behaviour). Measured: idle wake-ups 145/s -> 0.3/s, idle CPU 0.2 % -> 0.002 % of a core, no measurable first-dictation latency cost after 5 min idle.
+
 ## History
 
 ### 2026-10-09 21:43 UTC — edit by `brandon`
 
 priority 3→1
+
+### 2026-10-09 23:37 UTC — edit by `brandon`
+
+description edited

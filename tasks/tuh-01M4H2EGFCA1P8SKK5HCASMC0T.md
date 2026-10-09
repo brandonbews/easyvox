@@ -17,8 +17,14 @@ Acceptance: after the timeout, resident memory falls close to the no-model basel
 
 Pointers: crates/easyvox-app/src/controller.rs; crates/easyvox-core/src/session.rs, tcpp.rs; DESIGN.md "Engine and macOS gotchas" (quitting with a model loaded; ending a session blocks, so drop sessions off the UI thread).
 
+In progress 2026-10-09: written but UNCOMMITTED in the working tree (app not yet compiled, gates and self-test not run). Backup patch: orchestrator scratchpad idle-wip.patch. Finish per easyvox-handoff-3.md. Unload after 600 s (AppSettings.unload_after_secs), 'Keep model loaded' switch, reload on key-down while recording (reload 113-150 ms, first words ~0.48 s).
+
 ## History
 
 ### 2026-10-09 21:43 UTC — edit by `brandon`
 
 priority 3→1
+
+### 2026-10-09 23:37 UTC — edit by `brandon`
+
+description edited
