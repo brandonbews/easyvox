@@ -1,0 +1,22 @@
+# Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified)
+
+`tuh-01M4H2EGCYFBHHG4S9307GK2W3`
+
+- **Status:** open — ready
+- **Priority:** 2
+- **Labels:** `models` `app`
+- **Created:** 2026-10-09 19:32 UTC by `brandon`
+
+## Description
+
+Context: DESIGN.md "Licenses" and "Next steps" 3. The catalog has a license (name and URL), an attribution line and the model card for every model. Parakeet Unified's NVIDIA Open Model License requires the app to show "Licensed by NVIDIA Corporation under the NVIDIA Open Model License" with a link to the agreement.
+
+The ask: show the license, attribution and model-card link next to each model in Settings, links opening in the browser, plus an About or Acknowledgements spot that carries the active model's notice.
+
+Acceptance: the exact NVIDIA sentence with a working link appears for Parakeet Unified; CC-BY-4.0 models credit their creator (NVIDIA; Moondream for Parakeet Ultra later) with a license link; a test asserts every Default and Alternative catalog entry has a non-empty license name, license URL and attribution.
+
+Pointers: crates/easyvox-core/src/models.rs; crates/easyvox-app/src/settings.rs.
+
+## History
+
+_No activity yet._

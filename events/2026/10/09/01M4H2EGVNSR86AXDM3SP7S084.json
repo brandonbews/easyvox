@@ -1,0 +1,1 @@
+{"actor":"brandon","data":{"depends_on":null,"description":"DESIGN.md \"Paste at cursor\": may need a keyboard layout lookup.\n","labels":["app"],"priority":null,"status":"inbox","title":"Paste on non-QWERTY layouts: ⌘V is sent as key code 9"},"id":"01M4H2EGVNSR86AXDM3SP7S084","machine":"m-e24b618e","sig":null,"task":"tuh-01M4H2EGVNSR86AXDM3P8RQKPV","type":"task.created","v":3}
