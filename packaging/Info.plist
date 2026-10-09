@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>EasyVox</string>
+	<key>CFBundleDisplayName</key>
+	<string>EasyVox</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.easyvox.EasyVox</string>
+	<key>CFBundleExecutable</key>
+	<string>easyvox</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<!-- scripts/bundle.sh replaces both versions with the easyvox-app crate's version. -->
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EasyVox listens while you hold the push-to-talk shortcut and turns your speech into text, on this Mac only.</string>
+</dict>
+</plist>
