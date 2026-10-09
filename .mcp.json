@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tuhdoo": {
+      "command": "tuhdoo",
+      "args": ["mcp"]
+    }
+  }
+}

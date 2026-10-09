@@ -273,22 +273,8 @@ To address after the rest of the app is done.
   - **French dictation:** needs a multilingual model. The current English Parakeet models can't do it. Parakeet Ultra is the pick (see "Later: French").
   - **Speak French, get English:** Whisper has a built-in translate-to-English mode, or the optional cleanup LLM could translate. A live English preview while speaking French is the hard part, because translation needs more context than transcription, so the preview would lag or change more.
 
-## Next steps
+## Backlog and open questions
 
-1. Finish porting the app shell, then do the hands-on checks on the real app (`docs/ui-stack-spike.md`).
-2. Onboarding: ask for Microphone and Accessibility, download → verify → activate the default model, and warm up the Metal shaders. Settings reuses the same download flow for the alternatives.
-3. Show each model's license in the app, including the NVIDIA notice for Parakeet Unified.
-4. Record a few real-voice clips and bench the model list on them. The TTS clips can't tell the top models apart: they all land around 0.5 % WER.
-5. The settings file (`config.toml`, applied live).
-6. Add `TranscriptEvent::Level` to the core: the mic level, about 30 times a second, for the overlay's level indicator.
-7. Overlay theming (light and dark) and animation (see "Overlay animation"). Its colors are hard-coded dark for now.
-8. Engine: unload the model after idle, and fix or measure the idle wake-ups.
-9. Upgrade to transcribe-cpp 0.4 for Parakeet Ultra, when French work starts.
-10. Shipping: a Developer ID Application certificate, `cargo-packager`, the DMG and the Homebrew cask.
-
-## Open questions
-
-- Which updater to use for auto-updates.
-- How LLM cleanup gets around the one-ggml-per-binary rule (see the "two model" approach above).
+The backlog lives on the tuhdoo ledger, not in this file: run `tuhdoo backlog` in the repo (see `CLAUDE.md`). Open questions are held tasks labelled `decision`, and checks that need a person at an unlocked screen are labelled `hands-on`.
 
 Resolved in October 2026, each recorded in its section: the UI layer (Rust + GPUI Kit), the license (MIT, see `LICENSE`), the minimum macOS (26.0), the bundle id (`dev.easyvox.EasyVox`), the model list (Parakeet Unified default; Parakeet TDT v2 and Whisper base.en as downloads), audio in history (no) and the settings file (TOML, applied live).
