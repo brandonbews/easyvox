@@ -1,5 +1,7 @@
 # UI stack spike: Tauri vs GPUI Kit
 
+**Decision: Rust + GPUI Kit.** Tauri is dropped; only its report is kept. The hands-on checks below weren't done on the spikes. They're pending, and will be done on the real app instead (see "Hands-on checks").
+
 October 2026. Three agents built throwaway versions of EasyVox on this Mac (M4, 16 GB, macOS 26.6.2):
 
 - **`easyvox-core`**: a UI-agnostic Rust crate for audio, speech models, live partials, paste and history.
@@ -8,11 +10,7 @@ October 2026. Three agents built throwaway versions of EasyVox on this Mac (M4, 
 
 Both shells implement the same features and run the same real core end to end.
 
-The code, detailed reports and JSON evidence are in `~/Development/easyvox-spikes/`, which isn't in git:
-
-- `BRIEF.md`: the shared plan, the core ↔ UI contract and the scoring rubric
-- `reports/core.md`, `reports/tauri.md`, `reports/gpui-kit.md`: the full reports
-- `tauri/MANUAL_TESTS.md`, `gpui-kit/MANUAL_TESTS.md`: the hands-on checklists
+The full reports are in [`spikes/`](spikes/README.md): [`core.md`](spikes/core.md), [`gpui-kit.md`](spikes/gpui-kit.md) and [`tauri.md`](spikes/tauri.md), plus window snapshots. The spike code and the raw JSON evidence lived in a throwaway folder that is no longer kept; the code worth keeping was ported into `crates/`.
 
 ## Bottom line
 
@@ -33,7 +31,7 @@ The code, detailed reports and JSON evidence are in `~/Development/easyvox-spike
   - GPUI Kit's bigger risk is churn, not hacks: weekly releases, exact version pins, and runtime panics where you'd want compile errors.
 - **The same checks remain unverified in both.** The screen was locked, so nobody could press real keys, check focus, see a paste land, or use the mic.
 
-**Recommendation: GPUI Kit, if the hands-on checks below pass.** It best matches "lightweight, fast, Rust, Linux maybe." The choice is also cheap to reverse. Everything except the shell lives in `easyvox-core`: swapping the spike stubs for the real crate took one Cargo line plus 150–250 lines of app code in each shell. Switching to Tauri later would mean rewriting only a small shell. Pick Tauri instead if you'd rather follow Handy's footsteps and not track a fast-moving framework.
+**Recommendation (adopted): GPUI Kit.** It best matches "lightweight, fast, Rust, Linux maybe." The choice is also cheap to reverse. Everything except the shell lives in `easyvox-core`: swapping the spike stubs for the real crate took one Cargo line plus 150–250 lines of app code in each shell. Switching to Tauri later would mean rewriting only a small shell. Pick Tauri instead if you'd rather follow Handy's footsteps and not track a fast-moving framework.
 
 ## Feature comparison
 
@@ -129,20 +127,24 @@ Both stacks would need per-desktop work on Wayland for push-to-talk, the overlay
 - **Tauri:** goes through GTK3 layer-shell, and adds WebKitGTK quirks. Handy ships its overlay **off by default on Linux** for this reason.
 - **X11:** workable today with either.
 
-## What needs you (hands-on, via Jump Desktop)
+## Hands-on checks (pending)
 
-These checks decide the stack. Run them on the GPUI Kit build first; the full steps are in each `MANUAL_TESTS.md`.
+**Not done yet.** The stack was chosen without them. They'll run on the real EasyVox app, not the spikes, once its shell is ported. They need a person at the Mac with the screen unlocked:
 
-1. Unlock the screen. If an Input Monitoring prompt from an earlier automated run is waiting, Deny is fine.
-2. Grant **Microphone** and **Accessibility** to the spike app. Each spike has its own bundle id. Every rebuild changes the ad-hoc signature, so grants may need redoing after rebuilds.
-3. Focus TextEdit, hold ⌥Space and speak. Check three things: the overlay shows live text, **TextEdit keeps focus**, and the text is pasted when you release.
-4. Repeat over a full-screen app, and in another Space.
-5. Open Settings and History from the menu bar and confirm they come to the front.
-6. Check idle CPU in Activity Monitor with and without a window open.
+- [ ] Grant **Microphone** and **Accessibility** to the app. Dev builds are ad-hoc signed, so every rebuild may reset these grants.
+- [ ] Real ⌥Space presses: hold to record, release to transcribe.
+- [ ] The overlay shows live text while **the target app (e.g. TextEdit) keeps focus**.
+- [ ] The paste lands at the cursor on release.
+- [ ] The microphone delivers audio (only WAV replay has been tested so far).
+- [ ] The same over a full-screen app, and in another Space.
+- [ ] Settings and History come to the front when opened from the menu bar.
+- [ ] Idle CPU in Activity Monitor, with and without a window open.
+
+If one of these fails in a way GPUI Kit can't fix, the fallback is a Tauri shell around the same core (see the recommendation above).
 
 ## Next steps
 
-1. Do the hands-on checks, then choose the stack.
+1. Do the hands-on checks on the real app.
 2. Create a Developer ID Application certificate. Only the account holder can.
 3. Core follow-ups:
    - the idle wake-up fix
