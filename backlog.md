@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 21 ready · 4 blocked · 13 on hold · 8 inbox · 5 done · 0 cancelled
+0 in progress · 20 ready · 4 blocked · 13 on hold · 8 inbox · 6 done · 0 cancelled
 
 ## In progress
 
@@ -28,7 +28,6 @@ _None._
 | [`tuh-04zz`](tasks/tuh-01M4H2EGHS8QGWQCZ7TGRT04ZZ.md) | Check, and likely set, MACOSX_DEPLOYMENT_TARGET=26.0 in .cargo/config.toml | 3 | `build` |
 | [`tuh-y75b`](tasks/tuh-01M4H2EGJKYV58RHW70R9YY75B.md) | Future-incompat warning from the block 0.1.6 dependency | 3 | `deps` |
 | [`tuh-66zt`](tasks/tuh-01M4H2EGKDEZ7NPDTDRYRD66ZT.md) | Dependabot for the GitHub Actions SHA pins | 3 | `ci` `deps` |
-| [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) | Add the long-dictation clip generator to testdata/ | 3 | `bench` `testdata` |
 | [`tuh-8kk7`](tasks/tuh-01M4HDR425AX71RAQFA15Q8KK7.md) | Whisper base.en preview: heavy flicker and growing CPU | 3 | `engine` `models` |
 | [`tuh-0jj5`](tasks/tuh-01M4HDR42WSW44E2TM6C940JJ5.md) | Drop or use DecodeMode | 4 | `engine` `cleanup` |
 
@@ -81,6 +80,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
 - [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
 - [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) Decide the default model: Parakeet TDT v2 or Unified
+- [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) Add the long-dictation clip generator to testdata/
 
 ## Cancelled
 
