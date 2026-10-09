@@ -3,7 +3,7 @@
 `tuh-01M4H2EGFCA1P8SKK5HCASMC0T`
 
 - **Status:** open — ready
-- **Priority:** 3
+- **Priority:** 1
 - **Labels:** `engine` `perf`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
@@ -19,4 +19,6 @@ Pointers: crates/easyvox-app/src/controller.rs; crates/easyvox-core/src/session.
 
 ## History
 
-_No activity yet._
+### 2026-10-09 21:43 UTC — edit by `brandon`
+
+priority 3→1

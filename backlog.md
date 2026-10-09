@@ -12,13 +12,13 @@ _None._
 |---|---|---:|---|
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) | Core: download a model in the app — download, sha256 verify, activate | 1 | `models` `engine` |
+| [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) | Unload the speech model after a stretch of no use | 1 | `engine` `perf` |
+| [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) | Idle wake-ups from ggml-metal's residency loop | 1 | `engine` `perf` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
 | [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) | Settings file: ~/.config/easyvox/config.toml, applied live | 2 | `settings` `app` |
 | [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) | Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified) | 2 | `models` `app` |
 | [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
-| [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) | Unload the speech model after a stretch of no use | 3 | `engine` `perf` |
-| [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) | Idle wake-ups from ggml-metal's residency loop | 3 | `engine` `perf` |
 | [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) | Quiet the gpui "RefCell already borrowed" error logged at every launch | 3 | `app` |
 | [`tuh-04zz`](tasks/tuh-01M4H2EGHS8QGWQCZ7TGRT04ZZ.md) | Check, and likely set, MACOSX_DEPLOYMENT_TARGET=26.0 in .cargo/config.toml | 3 | `build` |
 | [`tuh-y75b`](tasks/tuh-01M4H2EGJKYV58RHW70R9YY75B.md) | Future-incompat warning from the block 0.1.6 dependency | 3 | `deps` |

@@ -3,7 +3,7 @@
 `tuh-01M4H2EGG52WC4E29B82S4KSMT`
 
 - **Status:** open — ready
-- **Priority:** 3
+- **Priority:** 1
 - **Labels:** `engine` `perf`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
@@ -21,4 +21,6 @@ Constraints: no regression in time to first words.
 
 ## History
 
-_No activity yet._
+### 2026-10-09 21:43 UTC — edit by `brandon`
+
+priority 3→1
