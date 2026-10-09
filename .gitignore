@@ -1,0 +1,12 @@
+# Build output
+/target/
+/dist/
+*.app
+*.dmg
+
+# Speech models are downloaded, never committed (scripts/fetch-model.sh)
+/models/
+*.gguf
+*.onnx
+
+.DS_Store

@@ -1,0 +1,59 @@
+[workspace]
+resolver = "3"
+members = ["crates/easyvox-core", "crates/easyvox-app", "crates/easyvox-bench"]
+default-members = ["crates/easyvox-core", "crates/easyvox-app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/brandonbews/easyvox"
+homepage = "https://easyvox.dev"
+publish = false
+
+[workspace.dependencies]
+easyvox-core = { path = "crates/easyvox-core", default-features = false }
+
+anyhow = "1"
+log = "0.4"
+serde_json = "1"
+
+# GPUI Kit ships weekly with breaking changes and pins its own GPUI snapshot
+# (gpui-kit 0.7.1 → gpui-pre =0.3.8). Keep this pin exact and upgrade on purpose.
+gpui-kit = "=0.7.1"
+
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false }
+objc2-app-kit = { version = "0.3", default-features = false }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+
+[profile.dev]
+debug = "limited"
+
+# Optimise the heavy dependencies even in dev builds, as GPUI Kit's own workspace does.
+[profile.dev.package]
+resvg = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }
+gpui-pre = { opt-level = 3 }
+gpui-pre-platform = { opt-level = 3 }
+gpui-pre-macos = { opt-level = 3 }
+# The cmake crate picks ggml's build type from the -sys crate's opt-level. Without this,
+# dev builds run an unoptimised ggml that is far too slow for live dictation.
+transcribe-cpp-sys = { opt-level = 3 }
+transcribe-cpp = { opt-level = 3 }
+
+[profile.release]
+strip = true
+# No LTO here: thin LTO makes incremental release builds take ~21 s instead of a few.
+# Shipping builds use the `dist` profile below.
+
+[profile.dist]
+inherits = "release"
+lto = "thin"

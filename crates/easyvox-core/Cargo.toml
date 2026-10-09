@@ -1,0 +1,47 @@
+[package]
+name = "easyvox-core"
+description = "UI-agnostic speech core for EasyVox: audio capture, swappable speech engines, live partials, paste and history."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["transcribe-cpp", "mic"]
+# Parakeet and Whisper GGUF models on transcribe.cpp (ggml, Metal on macOS). The recommended
+# runtime. Compiled from source by its -sys crate, so the build needs cmake.
+transcribe-cpp = ["dep:transcribe-cpp"]
+# Fallback runtime: sherpa-onnx with a statically linked ONNX Runtime (CPU). Adds Parakeet TDT
+# int8, Nemotron streaming, and Silero VAD for `EngineConfig::vad_trim`. Its build script
+# downloads a 21 MB prebuilt archive (set SHERPA_ONNX_ARCHIVE_DIR to reuse a local copy).
+sherpa = ["dep:sherpa-onnx"]
+# Microphone capture via cpal (CoreAudio on macOS).
+mic = ["dep:cpal"]
+
+# Linking rules (both fail silently or at runtime, not at build time):
+# - One ggml per binary. Don't add whisper-rs, llama-cpp bindings or anything else that vendors
+#   its own ggml next to transcribe-cpp; the linker quietly keeps one copy for both. Whisper GGUF
+#   models already run on transcribe-cpp.
+# - One ONNX Runtime per binary. Don't add `ort` (or crates built on it) next to `sherpa`.
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+hound = "3.5"
+libc = "0.2"
+rusqlite = { version = "0.40", features = ["bundled"] }
+cpal = { version = "0.18", optional = true }
+sherpa-onnx = { version = "1.13.8", optional = true }
+transcribe-cpp = { version = "0.3.1", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2.workspace = true
+objc2-foundation = { workspace = true, features = ["std", "NSString", "NSArray", "NSObject"] }
+objc2-app-kit = { workspace = true, features = ["std", "NSPasteboard"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGEvent", "CGEventTypes", "CGEventSource", "CGRemoteOperation"] }
+
+[lints]
+workspace = true
