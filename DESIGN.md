@@ -11,6 +11,8 @@ Working notes, not final decisions. Anything marked **Open** still needs a decis
 - Show text as it's recognized, in chunks, so you don't wait until the end.
 - On release, paste the transcript at the cursor. The transcript stays on the clipboard until something else replaces it.
 - History of past transcripts, each with a quick copy button.
+- Subtle, quick animation for polish: a live indicator that reacts when it hears you, a smooth open and close, and new words easing in.
+- Light and dark mode, following the macOS appearance setting and switching live when it changes. This covers the overlay, Settings and History; the menu bar icon is a template image, so macOS tints it automatically.
 - Local storage for history, settings and downloaded models.
 - Models are easy to swap, since we'll add options over time.
 - Use both "two model" approaches (see below) without giving up speed or lightness.
@@ -47,6 +49,17 @@ Working notes, not final decisions. Anything marked **Open** still needs a decis
   - Use a model that streams natively: streaming Parakeet variants, Kyutai STT, or Apple's SpeechAnalyzer (macOS 26+ only).
   - Use voice activity detection (Silero VAD) to cut the audio into chunks at pauses.
 - Live text goes in EasyVox's own floating window, not the target app. Typing provisional text into another app and then correcting it is fragile. The final text is pasted once, on release.
+
+### Overlay animation
+
+Subtle and quick. It should feel responsive, never slow you down, and never draw attention away from what you're typing into.
+
+- **Hearing input.** A small level indicator (a few bars or a waveform) moves with your voice and rests flat in silence. It's the first sign the mic is working. If no audio arrives at all, show a clear "can't hear you" state instead of a flat line.
+  - Needs the core to send audio levels about 30 times a second, smoothed, e.g. a new `TranscriptEvent::Level(f32)`. The current contract only sends text.
+- **Open and close.** A fast fade plus a slight scale or slide, roughly 150 ms in and 120 ms out. The pill opens on key press without waiting for the model, and closes right after the paste.
+- **New words and chunks.** New words fade in over about 100–150 ms. Provisional text eases to full strength when it's confirmed. Avoid layout jumps: the pill's width grows smoothly, and long text scrolls smoothly to keep the newest words in view.
+- **Reduce motion.** Respect the macOS "Reduce motion" setting: swap the movement for simple fades.
+- **Cost.** Animate only while the overlay is visible, with nothing running at idle. The level indicator redraws far more often than the text updates, so measure its CPU with the screen unlocked for both stacks; the spike only measured text updates, with no on-screen drawing.
 
 ### Paste at cursor
 
