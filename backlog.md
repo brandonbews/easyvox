@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 19 ready · 5 blocked · 15 on hold · 8 inbox · 3 done · 0 cancelled
+0 in progress · 20 ready · 5 blocked · 14 on hold · 8 inbox · 4 done · 0 cancelled
 
 ## In progress
 
@@ -10,6 +10,7 @@ _None._
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
+| [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) | Make Parakeet TDT v2 the default model | 0 | `models` |
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) | Core: download a model in the app — download, sha256 verify, activate | 1 | `models` `engine` |
 | [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) | Unload the speech model after a stretch of no use | 1 | `engine` `perf` |
@@ -59,7 +60,6 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-tz3a`](tasks/tuh-01M4H2EGN1Y7XVCGM2JVNSTZ3A.md) | Decide: which auto-updater | 3 | `human` `decision` `release` |
 | [`tuh-xm3z`](tasks/tuh-01M4H2EGQHWYDW7WSWNPARXM3Z.md) | Upgrade transcribe-cpp to 0.4 for Parakeet Ultra (French) | 4 | `models` `engine` |
 | [`tuh-n7dz`](tasks/tuh-01M4H2EGRBQ8Q57SAH4YT0N7DZ.md) | Decide: how LLM cleanup gets around the one-ggml-per-binary rule | 4 | `human` `decision` `engine` |
-| [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) | Decide the default model: Parakeet TDT v2 or Unified | 0 | `human` `decision` `models` |
 | [`tuh-h2jj`](tasks/tuh-01M4HDR43KDP1NSH6C16DFH2JJ.md) | Offer the ggml-metal idle-loop patch upstream | 3 | `human` `engine` `upstream` |
 
 ## Inbox
@@ -80,6 +80,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-1xne`](tasks/tuh-01M4H2EG038JCXHPQYECTZ1XNE.md) Multi-minute dictations: preview and final text hold up when the key is held for minutes
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
 - [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
+- [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) Decide the default model: Parakeet TDT v2 or Unified
 
 ## Cancelled
 
