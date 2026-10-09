@@ -9,18 +9,25 @@
 
 ## Description
 
-Held while an investigation runs outside tuhdoo (started 2026-10-09). When its findings land, write them into this description and reopen it, or split it into fix tasks.
+Brandon often holds the key for minutes and rambles. Investigated 2026-10-09 (TTS clips of 1/3/5/9-10 min, real-time session replays, M4).
 
-Context: DESIGN.md "Requirements": long dictations are normal use, holding the key for several minutes and rambling. The live preview has to keep up the whole time, and the final text has to arrive quickly with nothing dropped. Brandon often holds the key for minutes. The bench and tests so far cover clips of 3–30 s.
+Findings (as-is):
+- Final text after release grows with length squared on Parakeet: Unified 1.2 / 4.3 / 9.2 / 21.6 s at 1 / 3 / 5 / 9 min; TDT v2 about the same (21.2 s at 9 min). Cause: the offline pass is one full-attention pass over the whole recording (no cap, no internal chunking in transcribe-cpp 0.3.1). Peak memory 775 MB -> 1.19 GB, and 300-550 MB stays allocated afterwards (ggml keeps its largest compute buffer).
+- Parakeet accuracy holds at every length (0-1.5 % WER); no truncation seen, but upstream transcribe.cpp #71 reports TDT one-shot decodes dropping spans on ~70 s inputs.
+- Whisper base.en silently drops text past 30 s (16 % WER at 3 min, 85-word holes): tcpp.rs requests no timestamps on final passes, and in that mode a window that stops early still advances 30 s. Its preview also stalls (~20 s with nothing confirmed).
+- Live preview keeps up for the full 9 min on both Parakeets (Unified ~8 % CPU, v2 ~40 % of one core, flat).
+- Unified: only one run or stream per model at a time, so an offline decode can't run while its stream is open.
 
-The ask, once reopened: find where multi-minute sessions degrade (preview lag, memory growth, final-pass time over the whole recording, dropped audio or text) and fix it.
+Proposed fix (prototyped in a scratch copy; patch ~170 lines in the orchestrator's scratchpad longform/proposed-fix.diff):
+1. Whisper: request segment timestamps on final passes > 30 s. 3-min WER 16.3 % -> 0.76 %, short clips unchanged.
+2. Eager chunked final pass: EngineConfig::final_chunk_secs (bench --final-chunk). About every 30 s the session cuts at a pause and decodes the finished chunk while the user keeps talking; on release only the last <=30 s is decoded. 9 min: Unified 0.42 s (WER 1.04 %), TDT 0.35 s (0.92 %); Whisper 5 min 0.32 s. Peak ~820 MB.
+   Trade-off for Unified: each chunk closes and reopens the stream, so the preview pauses up to ~1.4 s once per chunk and confirmed preview text gets replaced by offline text (breaks "confirmed only grows"). TDT v2 and Whisper have no such issue (they re-decode, no stream).
+   Pause detection is energy-based (no VAD in the build); noisy rooms could fool it.
 
-Acceptance (sharpen from the findings): a replayed 5- and 10-minute recording yields a complete final transcript; the preview keeps up for the whole recording; finalize time and peak memory are measured and recorded in docs/model-bench.md.
-
-Pointers: crates/easyvox-core/src/session.rs, tcpp.rs, partials.rs, audio.rs; crates/easyvox-bench (`session`); testdata/long_*.wav.
-
-Constraints: one model in memory; the final text still comes from one offline pass unless the findings say otherwise.
+Open: which approach for Unified (decision with Brandon).
 
 ## History
 
-_No activity yet._
+### 2026-10-09 21:03 UTC — edit by `brandon`
+
+description edited
