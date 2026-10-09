@@ -10,3 +10,6 @@
 *.onnx
 
 .DS_Store
+
+# Private voice recordings for local benchmarks (never committed)
+/recordings/
