@@ -566,7 +566,7 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 36);
+        assert_eq!(keys.len(), 37);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
         }

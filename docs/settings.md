@@ -207,6 +207,21 @@ agreement_repeat_ms = 300
 # In words, from 0 to 20.
 agreement_max_repeat_words = 5
 
+# Local agreement: how far from where the word timings put the end of the confirmed
+# words a pass's copy of them is looked for, in words per word of the copy (a longer
+# copy is less likely to match by chance). A pass starts before the confirmed words
+# (`preview_context_ms`), so it opens by decoding their end again, and its new words
+# start after that copy. Timings move between passes, by a word or more for a model
+# that only times segments (Whisper's words are spread evenly over the pass), and two
+# passes that start their new words at different words never agree. At 2, Whisper's
+# passes that confirmed nothing fell by a quarter on a real voice and by three-quarters
+# on clean speech, and Parakeet's preview didn't change (`docs/model-bench.md`,
+# "Whisper's preview"). Higher finds copies further off, but a common word may match
+# by chance; 0 looks only right where the timings put it, much as before this setting
+# existed.
+# In words, from 0 to 10.
+agreement_reach_words = 2
+
 # Speech gate: preview passes that still run after speech stops, so the last words are
 # decoded with the silence after them and confirmed by two passes that agree. Then the
 # preview rests until the next word. 0 rests at once, and the last words may stay

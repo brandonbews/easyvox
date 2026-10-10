@@ -3,9 +3,10 @@
 //! Macháček et al. 2023, whisper_streaming). Each pass starts just before the confirmed words,
 //! so the session only re-decodes what may still change.
 //!
-//! Words are aligned across passes by time: a word belongs to the not-yet-confirmed tail if
-//! its midpoint lies after the end of the last confirmed word. Confirmed text only grows, until
-//! the session polishes a chunk and hands it over with [`LocalAgreement::skip_to`].
+//! Words are aligned across passes by time and text: a pass's new words start after its copy of
+//! the confirmed words' end, found by text near where the timings put it (the first word whose
+//! midpoint lies after the last confirmed word). Confirmed text only grows, until the session
+//! polishes a chunk and hands it over with [`LocalAgreement::skip_to`].
 
 use crate::Word;
 use crate::tuning::{Tuning, ms_secs};
@@ -27,6 +28,9 @@ pub struct LocalAgreement {
     repeat_secs: f32,
     /// Longest run of words checked for such a copy (`agreement_max_repeat_words`).
     max_repeat: usize,
+    /// How far from the time boundary a pass's copy of the confirmed words is looked for, in
+    /// words per word of the copy (`agreement_reach_words`).
+    reach: usize,
 }
 
 impl Default for LocalAgreement {
@@ -45,6 +49,7 @@ impl LocalAgreement {
             provisional: String::new(),
             repeat_secs: ms_secs(t.agreement_repeat_ms),
             max_repeat: t.agreement_max_repeat_words as usize,
+            reach: t.agreement_reach_words as usize,
         }
     }
 
@@ -80,21 +85,7 @@ impl LocalAgreement {
     /// Feed one pass. `words` must carry absolute times (window offset already added).
     /// Returns `(confirmed, provisional)`.
     pub fn update(&mut self, words: &[Word]) -> (String, String) {
-        let mut tail: Vec<Word> =
-            words.iter().filter(|w| (w.start + w.end) / 2.0 > self.confirmed_until).cloned().collect();
-        // Word boundaries jitter between passes (TDT frames are 80 ms), so a re-decoded copy
-        // of the last confirmed word(s) can slip past the time filter. Drop an n-gram at the
-        // start of the tail that repeats the end of the confirmed text (as whisper_streaming does).
-        if tail.first().is_some_and(|w| w.start < self.confirmed_until + self.repeat_secs) {
-            let max_n = self.max_repeat.min(self.confirmed.len()).min(tail.len());
-            for n in (1..=max_n).rev() {
-                let conf = &self.confirmed[self.confirmed.len() - n..];
-                if conf.iter().zip(&tail[..n]).all(|(c, t)| norm_word(&c.text) == norm_word(&t.text)) {
-                    tail.drain(..n);
-                    break;
-                }
-            }
-        }
+        let tail = &words[self.new_words_start(words)..];
         // Agreed prefix with the previous pass, never including the newest word of this
         // pass (it is often cut off mid-word at the window edge).
         let limit = tail.len().saturating_sub(1);
@@ -109,6 +100,39 @@ impl LocalAgreement {
         self.prev_tail = tail[n..].to_vec();
         self.provisional = self.prev_tail.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
         (self.confirmed_text(), self.provisional.clone())
+    }
+
+    /// Where the words a pass adds to the confirmed ones start, as an index into `words`.
+    ///
+    /// A pass starts a little before the confirmed words (`preview_context_ms`), so it opens by
+    /// decoding their end again. By timing, its new words start at the first word whose middle
+    /// lies after the last confirmed word. But timings move between passes: by a frame or two
+    /// for Parakeet (TDT frames are 80 ms), and by a word or more for a model that only times
+    /// segments, whose words are spread evenly over the pass (Whisper). Two passes that put
+    /// that boundary at different words never agree, and a word put on the wrong side is never
+    /// confirmed. So the boundary goes after the pass's copy of the confirmed words' end, found
+    /// by text: the longest copy of the last words (up to `agreement_max_repeat_words`) that
+    /// ends within `agreement_reach_words` words per word of the copy of where the timing puts
+    /// the boundary, the closest one if there are several, or one starting right at it. A copy
+    /// starting after the last confirmed word counts only within `agreement_repeat_ms` of it:
+    /// later, it's a word said again ("very, very"). With no copy, timing alone decides.
+    fn new_words_start(&self, words: &[Word]) -> usize {
+        let by_time = words.iter().position(|w| (w.start + w.end) / 2.0 > self.confirmed_until).unwrap_or(words.len());
+        let is_copy = |n: usize, end: usize| {
+            let (copy, conf) = (&words[end - n..end], &self.confirmed[self.confirmed.len() - n..]);
+            conf.iter().zip(copy).all(|(c, w)| norm_word(&c.text) == norm_word(&w.text))
+                && (end - n < by_time || copy[0].start < self.confirmed_until + self.repeat_secs)
+        };
+        for n in (1..=self.max_repeat.min(self.confirmed.len())).rev() {
+            let reach = n * self.reach;
+            let ends = by_time.saturating_sub(reach).max(n)..=(by_time + reach.max(n)).min(words.len());
+            let near = |&end: &usize| end.abs_diff(by_time) <= reach || end == by_time + n;
+            if let Some(end) = ends.filter(near).filter(|&end| is_copy(n, end)).min_by_key(|end| end.abs_diff(by_time))
+            {
+                return end;
+            }
+        }
+        by_time
     }
 }
 
@@ -173,6 +197,66 @@ mod tests {
         let (c, p) = la.update(&ws(&[("x", 2.0, 2.1), ("five", 3.2, 3.5), ("six", 3.6, 3.9)]));
         assert_eq!((c.as_str(), p.as_str()), ("", "five six"));
         assert!((la.confirmed_until() - 3.0).abs() < 1e-6);
+    }
+
+    /// "the big dog" confirmed, "ran to" provisional, as after two passes.
+    fn dog_ran(t: &Tuning) -> LocalAgreement {
+        let mut la = LocalAgreement::new(t);
+        la.update(&ws(&[("the", 0.0, 0.5), ("big", 0.5, 1.0), ("dog", 1.0, 1.5), ("sat", 1.5, 2.0)]));
+        la.update(&ws(&[("the", 0.0, 0.5), ("big", 0.5, 1.0), ("dog", 1.0, 1.5), ("ran", 1.5, 2.0), ("to", 2.0, 2.5)]));
+        assert_eq!((la.confirmed_text().as_str(), la.provisional_text()), ("the big dog", "ran to"));
+        la
+    }
+
+    #[test]
+    fn new_words_start_after_the_copy_of_the_confirmed_words_wherever_the_timings_put_it() {
+        // Whisper only times segments, so a pass's words are spread evenly over its audio, and
+        // where the confirmed words end moves by a word or more from pass to pass. Here the next
+        // pass (from 0.5 s) squeezes "ran" before the end of "dog" (1.5 s).
+        let pass = ws(&[
+            ("big", 0.5, 0.88),
+            ("dog", 0.88, 1.26),
+            ("ran", 1.26, 1.64),
+            ("to", 1.64, 2.02),
+            ("the", 2.02, 2.4),
+            ("park", 2.4, 2.78),
+        ]);
+        let mut la = dog_ran(&Tuning::default());
+        let (c, p) = la.update(&pass);
+        assert_eq!((c.as_str(), p.as_str()), ("the big dog ran to", "the park"));
+        // By timing alone, the pass's new words would start at "to": no agreement, and "ran"
+        // would never be confirmed.
+        let mut la = dog_ran(&Tuning { agreement_reach_words: 0, ..Tuning::default() });
+        let (c, p) = la.update(&pass);
+        assert_eq!((c.as_str(), p.as_str()), ("the big dog", "to the park"));
+        // The other way: a pass that stretches "dog" well past its end, beyond the
+        // `agreement_repeat_ms` a copy starting after it may have.
+        let mut la = dog_ran(&Tuning::default());
+        let (c, p) = la.update(&ws(&[
+            ("big", 0.5, 1.9),
+            ("dog", 1.9, 3.3),
+            ("ran", 3.3, 4.7),
+            ("to", 4.7, 6.1),
+            ("x", 6.1, 7.5),
+        ]));
+        assert_eq!((c.as_str(), p.as_str()), ("the big dog ran to", "x"));
+    }
+
+    #[test]
+    fn a_word_said_again_right_after_the_confirmed_words_stays() {
+        let mut la = LocalAgreement::default();
+        la.update(&ws(&[("it", 0.3, 0.5), ("was", 0.5, 0.8), ("very", 0.8, 1.2), ("ve", 1.25, 1.4)]));
+        la.update(&ws(&[("it", 0.3, 0.5), ("was", 0.5, 0.8), ("very", 0.8, 1.2), ("very", 1.25, 1.6)]));
+        assert_eq!(la.confirmed_text(), "it was very");
+        // The pass decodes the confirmed "very" again, then the second one, 50 ms later.
+        let (c, p) = la.update(&ws(&[
+            ("it", 0.3, 0.5),
+            ("was", 0.5, 0.8),
+            ("very", 0.8, 1.2),
+            ("very", 1.25, 1.6),
+            ("good", 1.7, 2.0),
+        ]));
+        assert_eq!((c.as_str(), p.as_str()), ("it was very very", "good"));
     }
 
     #[test]
