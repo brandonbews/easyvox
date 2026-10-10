@@ -13,7 +13,7 @@ No open questions are waiting; the fleet is unblocked.
 
 | In progress | Ready | Blocked | On hold | Inbox | Done | Cancelled |
 |---:|---:|---:|---:|---:|---:|---:|
-| 0 | 10 | 2 | 17 | 10 | 23 | 0 |
+| 0 | 10 | 2 | 18 | 9 | 24 | 0 |
 
 - [backlog.md](backlog.md) lists every task, grouped by state.
 - [escalations.md](escalations.md) lists the questions agents have raised for a human to answer.

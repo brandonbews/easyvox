@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG9QB2ETECD30F9RBR58`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `onboarding` `app`
 - **Depends on:** [`tuh-x7tv`](tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) (done)
@@ -29,8 +29,14 @@ Constraints: the bundle id dev.easyvox.EasyVox must not change; never open the m
 
 Update 2026-10-10 (orchestrator): the default model is now Parakeet TDT v2 (parakeet-tdt-0.6b-v2-q5_k_m-gguf, 539 MB; RECOMMENDED_MODEL), not Unified, which leaves the app (tuh-01M4K50SHF7C23M85P3F6PXSJ4). Reuse the Settings model row / download flow from tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M rather than building a second one. Downloads: easyvox_core::download (NSURLSession, resume, sha256 while streaming); a LICENSE.txt is written next to each downloaded model (tuh-01M4H2EGCYFBHHG4S9307GK2W3).
 
+Done in d989050: onboarding.rs (state machine, 10 unit tests), onboarding_window.rs (reuses ModelRow), controller onboard_if_needed, warm-up load, Settings > Permissions 'Open setup...'. No stored flag: opens when mic never asked, Accessibility off, or chosen model missing. Self-test 30/30. Open question for Brandon: someone keeping Accessibility off on purpose sees onboarding at every launch. Hands-on pass filed.
+
 ## History
 
 ### 2026-10-10 17:21 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 18:17 UTC — edit by `brandon`
+
+description edited · status open→done

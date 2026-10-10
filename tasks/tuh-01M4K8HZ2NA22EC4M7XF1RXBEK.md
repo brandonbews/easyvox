@@ -2,7 +2,7 @@
 
 `tuh-01M4K8HZ2NA22EC4M7XF1RXBEK`
 
-- **Status:** inbox — untriaged capture
+- **Status:** open — ready
 - **Priority:** 2
 - **Labels:** `tests` `downloads`
 - **Created:** 2026-10-10 15:57 UTC by `brandon`
@@ -13,4 +13,6 @@ crates/easyvox-core/tests/download.rs range_ignored failed once (2026-10-10, gat
 
 ## History
 
-_No activity yet._
+### 2026-10-10 18:17 UTC — edit by `brandon`
+
+status inbox→open
