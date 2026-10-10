@@ -15,7 +15,7 @@
 //!   binary's `main` can set it safely, so the binaries apply [`crate::process_env`].
 
 use crate::models::ModelInfo;
-use crate::{DecodeMode, EngineConfig, Hypothesis, SpeechModel, Word, spread_words};
+use crate::{EngineConfig, Hypothesis, SpeechModel, Word, spread_words};
 use anyhow::{Context, bail};
 use std::sync::{Arc, Mutex};
 use transcribe_cpp::{Model, RunOptions, Session, SessionOptions, TimestampKind};
@@ -89,7 +89,7 @@ impl SpeechModel for TcppModel {
         self.info
     }
 
-    fn transcribe(&self, pcm: &[f32], _mode: DecodeMode) -> anyhow::Result<Hypothesis> {
+    fn transcribe(&self, pcm: &[f32]) -> anyhow::Result<Hypothesis> {
         if pcm.len() < 1600 {
             return Ok(Hypothesis::default());
         }

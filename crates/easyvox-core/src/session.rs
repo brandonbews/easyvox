@@ -6,10 +6,10 @@
 //! recording that never does ends with an empty `Final` and no decode at all. The first tick
 //! comes once `preview_first_ms` of audio has followed the start of speech, the next ones as
 //! often until the preview shows words, then every `preview_interval_ms` ([`Tuning`], the
-//! session's own copy, taken when it started) while the key is held. Each tick it polishes the oldest chunk in `Final` mode if enough audio
-//! waits (`chunks.rs`), then re-decodes the newest audio in `Partial` mode for the preview,
-//! confirming words once two passes agree (`partials.rs`). That pass starts just before the
-//! confirmed words (`preview_context_ms`), so it only decodes what may still change. A tick
+//! session's own copy, taken when it started) while the key is held. Each tick it polishes the
+//! oldest chunk if enough audio waits (`chunks.rs`), then re-decodes the newest audio for the
+//! preview, confirming words once two passes agree (`partials.rs`). That pass starts just before
+//! the confirmed words (`preview_context_ms`), so it only decodes what may still change. A tick
 //! skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
 //! On release it polishes the rest and sends `Final`.
 //!
@@ -23,7 +23,7 @@ use crate::level::LevelMeter;
 use crate::partials::LocalAgreement;
 use crate::pause::{SpeechDetector, SpeechGate};
 use crate::tuning::{Tuning, ms_samples};
-use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
+use crate::{AudioSource, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -365,7 +365,7 @@ impl Worker {
             let t = Instant::now();
             let hyp = {
                 let _g = self.engine.decode_lock.lock().unwrap();
-                model.transcribe(&window_pcm, DecodeMode::Partial)
+                model.transcribe(&window_pcm)
             };
             let ms = t.elapsed().as_secs_f64() * 1e3;
             {
@@ -453,13 +453,13 @@ impl Worker {
         true
     }
 
-    /// `Final`-mode decode of `pcm`, which starts `offset` samples into the recording. Returns
+    /// The final decode of `pcm`, which starts `offset` samples into the recording. Returns
     /// the words with absolute times; failures become `Error` events.
     fn decode_final(&self, model: &dyn SpeechModel, pcm: &[f32], offset: usize) -> Vec<Word> {
         let speech = self.engine.speech(pcm);
         let hyp = {
             let _g = self.engine.decode_lock.lock().unwrap();
-            model.transcribe(&pcm[speech.clone()], DecodeMode::Final)
+            model.transcribe(&pcm[speech.clone()])
         };
         match hyp {
             Ok(h) => h.timed_words((offset + speech.start) as f32 / SR as f32, speech.len() as f32 / SR as f32),
@@ -513,7 +513,7 @@ mod tests {
             &models::catalog()[0]
         }
 
-        fn transcribe(&self, _pcm: &[f32], _mode: DecodeMode) -> anyhow::Result<Hypothesis> {
+        fn transcribe(&self, _pcm: &[f32]) -> anyhow::Result<Hypothesis> {
             self.decodes.fetch_add(1, Ordering::SeqCst);
             Ok(Hypothesis { text: "hello".into(), words: vec![] })
         }

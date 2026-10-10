@@ -109,8 +109,8 @@ pub enum TranscriptEvent {
     /// touches text from a finished chunk, seconds behind the newest words.
     Partial { confirmed: String, provisional: String },
     /// Final text, sent after `Session::stop()` (push-to-talk key released), or when a
-    /// `WavReplay` file runs out. Every word comes from a `Final`-mode decode (the chunks
-    /// polished while recording, then the rest), so it can differ from the preview, and the UI
+    /// `WavReplay` file runs out. Every word comes from a final decode (the chunks polished
+    /// while recording, then the rest), so it can differ from the preview, and the UI
     /// replaces the preview with it.
     ///
     /// Empty when the recording held no speech (silence or room noise; see [`Tuning`]'s
@@ -223,13 +223,6 @@ pub(crate) fn spread_words(text: &str, start: f32, end: f32) -> Vec<Word> {
     words.iter().enumerate().map(|(i, w)| Word { text: w.to_string(), start: at(i), end: at(i + 1) }).collect()
 }
 
-/// Why a decode is happening; adapters may pick cheaper settings for partials.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DecodeMode {
-    Partial,
-    Final,
-}
-
 /// The adapter interface every speech runtime implements: audio in, words with timings out.
 /// Audio is always 16 kHz mono f32. The session does the rest (preview, chunking, joining) the
 /// same way for every model; a runtime's quirks stay inside its adapter.
@@ -240,7 +233,7 @@ pub enum DecodeMode {
 pub trait SpeechModel: Send + Sync + 'static {
     fn info(&self) -> &ModelInfo;
     /// Offline decode of a whole buffer, any length.
-    fn transcribe(&self, pcm: &[f32], mode: DecodeMode) -> anyhow::Result<Hypothesis>;
+    fn transcribe(&self, pcm: &[f32]) -> anyhow::Result<Hypothesis>;
     /// Whether `transcribe` times each word, rather than giving coarser timings (segments) or
     /// none. Chunks of a long dictation are decoded with context only then.
     fn word_timings(&self) -> bool {
@@ -380,7 +373,7 @@ impl Engine {
         let model = self.inner.model()?;
         let speech = self.inner.speech(pcm);
         let _g = self.inner.decode_lock.lock().unwrap();
-        let mut h = model.transcribe(&pcm[speech.clone()], DecodeMode::Final)?;
+        let mut h = model.transcribe(&pcm[speech.clone()])?;
         let offset = speech.start as f32 / SAMPLE_RATE as f32;
         h.words.iter_mut().for_each(|w| (w.start, w.end) = (w.start + offset, w.end + offset));
         Ok(h)

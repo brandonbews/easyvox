@@ -2,7 +2,7 @@
 //! The online model is decoded like the offline ones: each buffer is streamed through it.
 
 use crate::models::{ModelInfo, SILERO_VAD_PATH};
-use crate::{DecodeMode, EngineConfig, Hypothesis, SAMPLE_RATE, SpeechModel, Word};
+use crate::{EngineConfig, Hypothesis, SAMPLE_RATE, SpeechModel, Word};
 use anyhow::{Context, bail};
 use sherpa_onnx::{
     OfflineRecognizer, OfflineRecognizerConfig, OnlineRecognizer, OnlineRecognizerConfig, OnlineStream, VadModelConfig,
@@ -73,7 +73,7 @@ impl SpeechModel for ParakeetModel {
         self.info
     }
 
-    fn transcribe(&self, pcm: &[f32], _mode: DecodeMode) -> anyhow::Result<Hypothesis> {
+    fn transcribe(&self, pcm: &[f32]) -> anyhow::Result<Hypothesis> {
         if pcm.len() < (SAMPLE_RATE as usize) / 10 {
             return Ok(Hypothesis::default());
         }
@@ -125,7 +125,7 @@ impl SpeechModel for StreamingModel {
     }
 
     /// Streams the whole buffer through. No word timings: the session spreads the words.
-    fn transcribe(&self, pcm: &[f32], _mode: DecodeMode) -> anyhow::Result<Hypothesis> {
+    fn transcribe(&self, pcm: &[f32]) -> anyhow::Result<Hypothesis> {
         let stream = self.rec.create_stream();
         // Without leading context the cache-aware encoder drops the first word when speech
         // starts at t=0 (seen on every TTS clip). 0.5 s of silence fixes it; the tail padding
