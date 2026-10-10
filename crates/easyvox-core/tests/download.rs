@@ -41,7 +41,8 @@ struct Behaviour {
     /// Answer this status, with no body, instead of the file.
     status: Option<u16>,
     /// Close the connection on reaching this byte of the file, for the first `n` file
-    /// requests (`usize::MAX`: all of them).
+    /// requests (`usize::MAX`: all of them). A cut waits until the client has reported bytes
+    /// ([`Server::saw`]): see [`serve`].
     cut_at: Option<(usize, usize)>,
     /// Send the first `bytes` of the response, then hold the socket open for `hold`, for the
     /// first file request only.
@@ -67,6 +68,8 @@ struct Server {
     port: u16,
     log: Arc<Mutex<Vec<Request>>>,
     stop: Arc<AtomicBool>,
+    /// Set by [`Server::saw`] once the client has reported bytes.
+    client_has_bytes: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -75,7 +78,9 @@ impl Server {
         let port = listener.local_addr().unwrap().port();
         let log: Arc<Mutex<Vec<Request>>> = Arc::default();
         let stop = Arc::new(AtomicBool::new(false));
-        let (payload, log2, stop2) = (Arc::new(payload), log.clone(), stop.clone());
+        let client_has_bytes = Arc::new(AtomicBool::new(false));
+        let (payload, log2, stop2, has_bytes2) =
+            (Arc::new(payload), log.clone(), stop.clone(), client_has_bytes.clone());
         let file_requests = Arc::new(Mutex::new(0usize));
         std::thread::spawn(move || {
             for stream in listener.incoming() {
@@ -83,12 +88,20 @@ impl Server {
                     break;
                 }
                 let Ok(stream) = stream else { continue };
-                let (payload, log, behaviour, file_requests) =
-                    (payload.clone(), log2.clone(), behaviour.clone(), file_requests.clone());
-                std::thread::spawn(move || serve(stream, &payload, &behaviour, &log, &file_requests));
+                let (payload, log, behaviour, file_requests, has_bytes) =
+                    (payload.clone(), log2.clone(), behaviour.clone(), file_requests.clone(), has_bytes2.clone());
+                std::thread::spawn(move || serve(stream, &payload, &behaviour, &log, &file_requests, &has_bytes));
             }
         });
-        Server { port, log, stop }
+        Server { port, log, stop, client_has_bytes }
+    }
+
+    /// Hands the server the client's progress, for a test that cuts the connection: the cut
+    /// waits for the client's first bytes.
+    fn saw(&self, p: Progress) {
+        if matches!(p, Progress::Downloading { done, .. } if done > 0) {
+            self.client_has_bytes.store(true, Ordering::Relaxed);
+        }
     }
 
     /// The pinned-style URL a catalog entry would have.
@@ -114,6 +127,7 @@ fn serve(
     b: &Behaviour,
     log: &Mutex<Vec<Request>>,
     file_requests: &Mutex<usize>,
+    client_has_bytes: &AtomicBool,
 ) {
     let Ok(read_half) = stream.try_clone() else { return };
     let mut reader = BufReader::new(read_half);
@@ -199,6 +213,18 @@ fn serve(
         }
         None => {
             let _ = stream.write_all(&body[..end]);
+        }
+    }
+    // A cut: hold the connection until the client has reported bytes, so a resume always has
+    // something to resume from. When a response ends early, NSURLSession reports the lost
+    // connection and drops whatever it had received but not yet handed to its delegate (the
+    // kernel delivers every byte: it's the client that discards them). How much that is depends
+    // on how busy the machine is, so without this wait the client could come back with nothing,
+    // and tests compare against what the client reported, never against the cut point.
+    if end < body.len() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !client_has_bytes.load(Ordering::Relaxed) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(1));
         }
     }
     // Dropping the stream closes it: early if `end` was cut short.
@@ -299,15 +325,20 @@ fn check(m: &ModelInfo, dir: &Path, result: &Result<PathBuf, DownloadError>, eve
     }
 }
 
-/// Where the first retry picked up: `done` at the first `Reconnecting` event.
-fn resumed_at(events: &[Progress]) -> usize {
+/// `done` at each `Reconnecting` event: where each retry picked up.
+fn retries_from(events: &[Progress]) -> Vec<usize> {
     events
         .iter()
-        .find_map(|p| match *p {
+        .filter_map(|p| match *p {
             Progress::Reconnecting { done, .. } => Some(done as usize),
             _ => None,
         })
-        .expect("a Reconnecting event")
+        .collect()
+}
+
+/// Where the first retry picked up.
+fn resumed_at(events: &[Progress]) -> usize {
+    *retries_from(events).first().expect("a Reconnecting event")
 }
 
 fn assert_installed(m: &ModelInfo, dir: &Path, bytes: &[u8]) {
@@ -356,12 +387,12 @@ fn interrupted_then_resumed() {
     let bytes = payload(3, PAYLOAD_LEN);
     let server = Server::start(bytes.clone(), Behaviour { cut_at: Some((MIB, 1)), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("resumed"));
-    let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
+    let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
     result.unwrap();
     assert_installed(&m, &dir, &bytes);
-    // NSURLSession may drop the last chunk it had buffered when the connection breaks, so the
-    // resume starts at or a little before the cut: wherever `done` was.
+    // NSURLSession drops what it hadn't handed over yet when the connection breaks (see
+    // `serve`), so the resume starts at or before the cut: wherever `done` was.
     let resumed_at = resumed_at(&events);
     assert!(resumed_at > 0 && resumed_at <= MIB, "{resumed_at}");
     let starts: Vec<_> = server.requests().iter().map(|r| r.range_start).collect();
@@ -376,13 +407,16 @@ fn interrupted_every_time() {
     let bytes = payload(4, PAYLOAD_LEN);
     let server = Server::start(bytes.clone(), Behaviour { cut_at: Some((MIB, usize::MAX)), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("interrupted"));
-    let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
+    let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
     assert!(matches!(result, Err(DownloadError::Network(_))), "{result:?}");
-    // Tries that got bytes up to the cut, then max_failures (3) in a row that got nothing.
+    // Tries that got bytes, then max_failures (3) in a row that got nothing, all from where the
+    // client got stuck: the cut, or before it if NSURLSession dropped the end (see `serve`).
+    let stuck_at = *retries_from(&events).last().expect("a Reconnecting event");
+    assert!(stuck_at > 0 && stuck_at <= MIB, "{events:?}");
     let requests = server.requests();
     let stuck: Vec<_> = requests.iter().rev().take(3).map(|r| r.range_start).collect();
-    assert_eq!(stuck, [Some(MIB); 3], "{requests:?}");
+    assert_eq!(stuck, [Some(stuck_at); 3], "{requests:?}");
     assert!(requests.len() >= 4, "{requests:?}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -492,7 +526,7 @@ fn redirect_then_resume() {
     let behaviour = Behaviour { redirect: true, cut_at: Some((MIB, 1)), ..Default::default() };
     let server = Server::start(bytes.clone(), behaviour);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("redirect"));
-    let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
+    let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
     result.unwrap();
     assert_installed(&m, &dir, &bytes);
@@ -514,7 +548,7 @@ fn range_ignored() {
     let behaviour = Behaviour { ignore_range: true, cut_at: Some((MIB, 1)), ..Default::default() };
     let server = Server::start(bytes.clone(), behaviour);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("range-ignored"));
-    let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
+    let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
     result.unwrap();
     assert_installed(&m, &dir, &bytes);
