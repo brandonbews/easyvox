@@ -1,11 +1,19 @@
-//! macOS: the overlay panel shim and key guard, and the right-⌥ event tap. Small helpers the
-//! self-test needs sit at the bottom, behind the `self-test` feature.
+//! macOS: the System Settings deep links, the overlay panel shim and key guard, and the right-⌥
+//! event tap. Small helpers the self-test needs sit at the bottom, behind the `self-test` feature.
 
 use anyhow::Context as _;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSPanel, NSView, NSWindow, NSWindowStyleMask};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
+
+// ───────────────────────── System Settings ─────────────────────────
+
+/// Deep links to System Settings → Privacy & Security, at one list.
+pub const PRIVACY_MICROPHONE: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+pub const PRIVACY_ACCESSIBILITY: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+pub const PRIVACY_INPUT_MONITORING: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
 
 // ───────────────────────── Overlay panel ─────────────────────────
 

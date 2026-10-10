@@ -17,10 +17,16 @@
 //! its state is in `AppStatus::downloads`. Switching models goes through `use_model`, which
 //! waits for a dictation to end, then frees the old model before loading the new one, so only
 //! one is ever in memory (see `MODEL_SWAP`).
+//!
+//! The permission prompts start here too (`request_mic`, `prompt_accessibility`), so onboarding
+//! and Settings show the same state. Onboarding opens at launch when a required step is missing
+//! (`onboard_if_needed`; see `onboarding.rs`).
 
 use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
+use crate::onboarding::LaunchFacts;
+use crate::onboarding_window::OnboardingView;
 use crate::overlay::Overlay;
 use crate::settings::{Page, SettingsView};
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
@@ -82,6 +88,9 @@ enum Phase {
 /// one save produces (or an editor writing in steps) make one reload.
 const CONFIG_SETTLE: Duration = Duration::from_millis(150);
 
+/// How long to wait for an answer to the Microphone prompt.
+const MIC_PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// Held while a model is freed or loaded on the background executor, so two models are never
 /// in memory together: a switch frees the old model before the new one loads, and a load that
 /// a later switch overtook frees its model before the next load starts.
@@ -124,6 +133,8 @@ pub struct Controller {
     settings_window: Option<AnyWindowHandle>,
     settings_view: Option<WeakEntity<SettingsView>>,
     history_window: Option<AnyWindowHandle>,
+    onboarding_window: Option<AnyWindowHandle>,
+    onboarding_view: Option<WeakEntity<OnboardingView>>,
     hide_task: Option<Task<()>>,
     load_task: Option<Task<()>>,
     /// Frees the model when it fires; replaced (cancelled) by every dictation.
@@ -173,6 +184,8 @@ impl Controller {
             settings_window: None,
             settings_view: None,
             history_window: None,
+            onboarding_window: None,
+            onboarding_view: None,
             hide_task: None,
             load_task: None,
             unload_task: None,
@@ -534,7 +547,7 @@ impl Controller {
         cx.global_mut::<AppSettings>().model = model_id.to_string();
         let generation = self.load_generation.fetch_add(1, Ordering::SeqCst) + 1;
         let latest = self.load_generation.clone();
-        let models_dir = easyvox_core::paths::models_dir();
+        let models_dir = cx.global::<AppStatus>().models_dir.clone();
         if let Ok(info) = easyvox_core::models::find(model_id)
             && !info.is_available(&models_dir)
         {
@@ -609,7 +622,10 @@ impl Controller {
     /// result arrive as [`UiEvent::Download`]. Does nothing if it's already downloading.
     pub fn download_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
         match easyvox_core::models::find(model_id) {
-            Ok(info) => self.start_download(info, easyvox_core::paths::models_dir(), cx),
+            Ok(info) => {
+                let models_dir = cx.global::<AppStatus>().models_dir.clone();
+                self.start_download(info, models_dir, cx);
+            }
             Err(e) => log::error!("download: {e:#}"),
         }
     }
@@ -642,7 +658,7 @@ impl Controller {
             }
             Err(e) => {
                 log::error!("download: couldn't start a thread for {id}: {e}");
-                DownloadStatus::Failed { error: format!("Couldn't start the download: {e}") }
+                DownloadStatus::Failed(DownloadError::Network(format!("couldn't start the download: {e}")))
             }
         };
         cx.global_mut::<AppStatus>().downloads.insert(id, status);
@@ -668,7 +684,8 @@ impl Controller {
     /// and one that's downloading.
     pub fn delete_model(&mut self, model_id: &str, cx: &mut Context<Self>) -> Result<(), String> {
         let info = easyvox_core::models::find(model_id).map_err(|e| e.to_string())?;
-        self.delete_model_at(info, &easyvox_core::paths::models_dir(), cx)
+        let models_dir = cx.global::<AppStatus>().models_dir.clone();
+        self.delete_model_at(info, &models_dir, cx)
     }
 
     /// [`delete_model`](Self::delete_model) for any entry, in any folder (the self-test uses
@@ -716,7 +733,7 @@ impl Controller {
                     }
                     Err(e) => {
                         log::error!("download: {model}: {e} ({e:?})");
-                        downloads.insert(model, DownloadStatus::Failed { error: e.to_string() });
+                        downloads.insert(model, DownloadStatus::Failed(e));
                     }
                 }
             }
@@ -862,6 +879,103 @@ impl Controller {
         }
         self.overlay.view.update(cx, |_, cx| cx.notify());
         cx.refresh_windows();
+    }
+
+    /// Shows the macOS Microphone prompt, from onboarding or Settings. It blocks until answered,
+    /// so it runs on the background executor; `AppStatus::mic_asking` is set meanwhile. Never
+    /// opens the microphone.
+    pub fn request_mic(&mut self, cx: &mut Context<Self>) {
+        if cx.global::<AppStatus>().mic_asking {
+            return;
+        }
+        log::info!("asking for Microphone access");
+        cx.global_mut::<AppStatus>().mic_asking = true;
+        cx.refresh_windows();
+        cx.spawn(async move |this, cx| {
+            let status = cx.background_spawn(async { easyvox_core::request_mic_permission(MIC_PROMPT_TIMEOUT) }).await;
+            log::info!("Microphone access: {status:?}");
+            let _ = this.update(cx, |_, cx| {
+                cx.global_mut::<AppStatus>().mic_asking = false;
+                cx.refresh_windows();
+            });
+        })
+        .detach();
+    }
+
+    /// Shows the macOS Accessibility prompt (from onboarding), which offers to open System
+    /// Settings. Returns at once; the grant comes when the user turns the switch on, and the
+    /// onboarding window notices it.
+    pub fn prompt_accessibility(&mut self, cx: &mut Context<Self>) {
+        let trusted = easyvox_core::prompt_accessibility();
+        log::info!("asked for Accessibility access (allowed already: {trusted})");
+        cx.global_mut::<AppStatus>().accessibility_prompted = true;
+        cx.refresh_windows();
+    }
+
+    /// Loads the chosen model if it's downloaded and isn't loaded or loading: onboarding's
+    /// "Get ready" step, also after a failed load. The first load under a new app identity
+    /// compiles ggml's Metal shaders (~14 s), so the first dictation doesn't wait for them.
+    pub fn warm_up(&mut self, cx: &mut Context<Self>) {
+        let busy = matches!(cx.global::<AppStatus>().engine, EngineStatus::Loading | EngineStatus::Ready { .. });
+        if !busy && self.is_idle() {
+            self.reload_chosen_model(cx);
+        }
+    }
+
+    /// Loads the chosen model from the models folder, freeing the one in memory first.
+    fn reload_chosen_model(&mut self, cx: &mut Context<Self>) {
+        let model = cx.global::<AppSettings>().model.clone();
+        self.unload_task = None;
+        let old = self.engine.take();
+        self.load_engine_replacing(&model, old, cx);
+    }
+
+    /// Opens onboarding if a required step is missing (see `LaunchFacts::needed`). True if it
+    /// did. `main` calls it at launch with what the system says; the self-test, with its own.
+    pub fn onboard_if_needed(&mut self, facts: &LaunchFacts, cx: &mut Context<Self>) -> bool {
+        log::info!("onboarding: {facts:?}, needed: {}", facts.needed());
+        if facts.needed() {
+            self.open_onboarding(cx);
+        }
+        facts.needed()
+    }
+
+    /// Opens the onboarding window, or brings it forward.
+    pub fn open_onboarding(&mut self, cx: &mut Context<Self>) {
+        if Self::bring_forward(self.onboarding_window, cx) {
+            return;
+        }
+        let options = window_options("Set Up EasyVox", size(px(640.), px(640.)), cx);
+        match gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| OnboardingView::new(window, cx))) {
+            Ok((handle, view)) => {
+                self.onboarding_window = Some(handle);
+                self.onboarding_view = Some(view.downgrade());
+                cx.activate(true);
+            }
+            Err(e) => log::error!("couldn't open onboarding: {e:#}"),
+        }
+    }
+
+    /// The onboarding view, while its window is open.
+    #[cfg(feature = "self-test")]
+    pub fn onboarding_view(&self) -> Option<Entity<OnboardingView>> {
+        self.onboarding_view.as_ref().and_then(WeakEntity::upgrade)
+    }
+
+    /// The onboarding window, if it was opened (it may have been closed since).
+    #[cfg(feature = "self-test")]
+    pub fn onboarding_window(&self) -> Option<AnyWindowHandle> {
+        self.onboarding_window
+    }
+
+    /// Points the app at another models folder and loads the chosen model from there, freeing
+    /// the one in memory first. The self-test uses it to run onboarding's download and warm-up
+    /// in a temporary folder, then to come back.
+    #[cfg(feature = "self-test")]
+    pub fn set_models_dir(&mut self, dir: PathBuf, cx: &mut Context<Self>) {
+        log::info!("models folder: {}", dir.display());
+        cx.global_mut::<AppStatus>().models_dir = dir;
+        self.reload_chosen_model(cx);
     }
 
     pub fn open_settings(&mut self, cx: &mut Context<Self>) {

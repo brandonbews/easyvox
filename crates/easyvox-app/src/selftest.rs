@@ -7,24 +7,32 @@
 //! The microphone is never opened (a test clip is replayed), ⌘V is never sent (the text is only
 //! copied), and history goes to a temporary database. The settings file is a temporary one too,
 //! unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then puts
-//! it back as it was. The model download check never touches the internet: it downloads from a
-//! server of its own on 127.0.0.1 into the temporary folder, and deletes only from there.
+//! it back as it was. The model download checks never touch the internet: they download from a
+//! server of their own on 127.0.0.1 into the temporary folder, and delete only from there.
+//!
+//! Onboarding is checked without touching a permission: the self-test reads the real ones
+//! (onboarding must have opened at launch exactly when one is missing), and otherwise shows the
+//! window injected answers. It never clicks a button that would bring up a macOS prompt.
 //!
 //! The speech models come from the models folder (`EASYVOX_MODELS_DIR` moves it). Nothing here
-//! writes to it or deletes from it. Switching models needs a second offered model in it, or that
-//! check is skipped.
+//! writes to it or deletes from it; onboarding's download check reads the chosen model from it
+//! to serve on 127.0.0.1. Switching models needs a second offered model in it, or that check is
+//! skipped.
 
 use crate::controller::Controller;
+use crate::onboarding::{Busy, LaunchFacts, Onboarding, Problem, State, StepId};
+use crate::onboarding_window::{Permissions, chosen_model};
 use crate::overlay::Mode;
 use crate::platform::{self, PanelState};
 use crate::settings::Page;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
-use easyvox_core::download::Progress;
+use easyvox_core::MicPermission;
+use easyvox_core::download::{DownloadError, Progress};
 use easyvox_core::models::{self, ModelInfo};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
 use serde_json::{Value, json};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -127,6 +135,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
         hotkey_id.is_some() && shortcut_error.is_none(),
         json!({"shortcut": shortcut, "error": shortcut_error}),
     );
+    onboarding_at_launch(&controller, &mut report, cx);
 
     let (theme_dark, system) = cx.update(|cx| (cx.theme().is_dark(), cx.window_appearance()));
     let system_dark = matches!(system, WindowAppearance::Dark | WindowAppearance::VibrantDark);
@@ -179,6 +188,12 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
             model_switch(&controller, &mut report, cx).await;
         }
         _ => report.check("switching models", false, json!("skipped: needs the model and the shortcut")),
+    }
+    onboarding_decision(&controller, &mut report, cx).await;
+    onboarding_states(&controller, &options, &mut report, cx).await;
+    match engine_ready {
+        true => onboarding_download(&controller, &options, &mut report, cx).await,
+        false => report.check("onboarding's download and warm-up", false, json!("skipped: needs the model")),
     }
 
     let pass = report.failed == 0;
@@ -511,7 +526,7 @@ async fn models_page(controller: &Entity<Controller>, report: &mut Report, cx: &
         Some(DownloadStatus::Running(Progress::Downloading { done: 120_000_000, total: 539_012_608 })),
         Some(DownloadStatus::Running(Progress::Verifying)),
         Some(DownloadStatus::Running(Progress::Reconnecting { attempt: 2, max: 5, done: 1, total: 2 })),
-        Some(DownloadStatus::Failed { error: "The downloaded file isn't the expected one.".into() }),
+        Some(DownloadStatus::Failed(DownloadError::ChecksumMismatch { expected: "a".into(), actual: "b".into() })),
         None,
     ];
     let mut draws = vec![];
@@ -593,7 +608,12 @@ async fn about_page(controller: &Entity<Controller>, report: &mut Report, cx: &m
 /// takes both files.
 async fn model_download(controller: &Entity<Controller>, options: &Options, report: &mut Report, cx: &mut AsyncApp) {
     let payload: Vec<u8> = (0..2 * 1024 * 1024u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 11) as u8).collect();
-    let server = match LocalServer::start(payload.clone()) {
+    let serve = Serve {
+        body: Body::Bytes(payload.clone()),
+        pace: Some((64 * 1024, Duration::from_millis(20))),
+        cut_once_at: None,
+    };
+    let server = match LocalServer::start(serve) {
         Ok(server) => server,
         Err(e) => return report.check("model download from a local server", false, json!(e.to_string())),
     };
@@ -603,7 +623,7 @@ async fn model_download(controller: &Entity<Controller>, options: &Options, repo
     let info: &'static ModelInfo = Box::leak(Box::new(ModelInfo {
         id: "self-test-download",
         path: "gguf/self-test.gguf",
-        download_url: String::leak(server.url()),
+        download_url: String::leak(server.url("self-test.gguf")),
         sha256: Some(String::leak(sha256)),
         download_bytes: payload.len() as u64,
         disk_bytes: payload.len() as u64,
@@ -665,7 +685,8 @@ async fn model_download(controller: &Entity<Controller>, options: &Options, repo
             && files == ["self-test.gguf", "self-test.gguf.LICENSE.txt"]
             && notice == info.license_notice(),
         json!({"ms": started.elapsed().as_millis(), "progress_seen": seen, "status_after": format!("{after:?}"),
-               "size": size, "files": files, "requests": server.requests(), "notice_lines": notice.lines().count()}),
+               "size": size, "files": files, "requests": server.requests().len(),
+               "notice_lines": notice.lines().count()}),
     );
 
     // As if it were the model in use: refused. (The setting is put back at once; nothing loads.)
@@ -696,7 +717,7 @@ async fn model_download(controller: &Entity<Controller>, options: &Options, repo
 /// switch writes is put back as it was. Skipped when no second offered model is downloaded.
 async fn model_use(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
     let name = "Use switches models after the dictation in progress, and frees the old one";
-    let models_dir = easyvox_core::paths::models_dir();
+    let models_dir = cx.update(|cx| cx.global::<AppStatus>().models_dir.clone());
     let original = cx.update(|cx| cx.global::<AppSettings>().model.clone());
     let Some(other) = models::offered().into_iter().find(|m| m.id != original && m.is_available(&models_dir)) else {
         return report.check(name, true, json!("skipped: no second offered model is downloaded"));
@@ -760,7 +781,7 @@ async fn model_use(controller: &Entity<Controller>, hotkey_id: u32, report: &mut
 /// Picking a model that isn't downloaded frees the engine and shows it as missing; picking the
 /// default again loads it back. Skipped when every offered model is downloaded here.
 async fn model_switch(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
-    let models_dir = easyvox_core::paths::models_dir();
+    let models_dir = cx.update(|cx| cx.global::<AppStatus>().models_dir.clone());
     let original = cx.update(|cx| cx.global::<AppSettings>().model.clone());
     let Some(missing) = models::offered().into_iter().find(|m| !m.is_available(&models_dir)) else {
         return report.check("picking a model that isn't downloaded", true, json!("skipped: all are downloaded"));
@@ -781,6 +802,266 @@ async fn model_switch(controller: &Entity<Controller>, report: &mut Report, cx: 
     );
 }
 
+/// Onboarding at launch, on this Mac's real answers (read, never changed): the window opened
+/// exactly when a required step is missing.
+fn onboarding_at_launch(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    let (facts, open) = cx.update(|cx| (crate::onboarding_window::launch_facts(cx), onboarding_open(controller, cx)));
+    report.check(
+        "onboarding opened at launch exactly when a required step is missing",
+        open == facts.needed(),
+        json!({"mic": format!("{:?}", facts.mic), "accessibility": facts.accessibility,
+               "model_downloaded": facts.model_downloaded, "needed": facts.needed(), "opened": open}),
+    );
+}
+
+/// The launch decision with injected answers, through the controller as `main` calls it: with
+/// nothing missing (or only a microphone the user refused) onboarding stays shut; with any
+/// required step missing it opens, and draws. It's left open for the next checks.
+async fn onboarding_decision(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    let all = LaunchFacts { mic: MicPermission::Authorized, accessibility: true, model_downloaded: true };
+    let mut results = vec![];
+    for (facts, should_open) in [
+        (all, false),
+        (LaunchFacts { mic: MicPermission::Denied, ..all }, false),
+        (LaunchFacts { mic: MicPermission::NotDetermined, ..all }, true),
+        (LaunchFacts { accessibility: false, ..all }, true),
+        (LaunchFacts { model_downloaded: false, ..all }, true),
+    ] {
+        cx.update(|cx| close_onboarding(controller, cx));
+        let closed = wait_for(cx, Duration::from_secs(3), |cx| !onboarding_open(controller, cx)).await.is_some();
+        let said = cx.update(|cx| controller.update(cx, |c, cx| c.onboard_if_needed(&facts, cx)));
+        let open = wait_for(cx, Duration::from_secs(1), |cx| onboarding_open(controller, cx)).await.is_some();
+        let drawn = open && cx.update(|cx| draw_onboarding(controller, cx));
+        let ok = closed && said == should_open && open == should_open && drawn == should_open;
+        results.push(json!({"facts": format!("{facts:?}"), "should_open": should_open, "opened": open,
+                            "drawn": drawn, "ok": ok}));
+    }
+    report.check(
+        "onboarding stays shut when nothing is missing, and opens and draws when a step is",
+        results.iter().all(|r| r["ok"] == true),
+        json!(results),
+    );
+}
+
+/// The window in every state a step can be in, from injected answers (the permissions pinned
+/// in the view, the download and the engine set in `AppStatus` for the draw only): what each
+/// step says matches, and the window draws. Everything is put back afterwards.
+async fn onboarding_states(controller: &Entity<Controller>, options: &Options, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::onboarding_window::DRAWN;
+    use std::sync::atomic::Ordering::Relaxed;
+    let name = "onboarding draws every step state, with the failure states' actions";
+    let Some(view) = cx.update(|cx| controller.read(cx).onboarding_view()) else {
+        return report.check(name, false, json!("the onboarding window isn't open"));
+    };
+    let Some(model) = cx.update(|cx| chosen_model(cx)) else {
+        return report.check(name, false, json!("no chosen model"));
+    };
+    let (real_dir, engine_before) = cx.update(|cx| {
+        let status = cx.global::<AppStatus>();
+        (status.models_dir.clone(), status.engine.clone())
+    });
+    let empty_dir = options.dir.join("no-models");
+    let total = model.download_bytes;
+    let (todo, done) = (State::ToDo, State::Done);
+    let offline = DownloadError::Offline("The Internet connection appears to be offline.".into());
+    let wrong = DownloadError::ChecksumMismatch { expected: "a".into(), actual: "b".into() };
+    let running = |p| Some(DownloadStatus::Running(p));
+    // (case, mic, mic prompt up, accessibility, prompted, download, downloaded, engine, expected)
+    #[rustfmt::skip]
+    let cases = [
+        ("fresh", MicPermission::NotDetermined, false, false, false, None, false, EngineStatus::Missing,
+         [todo.clone(), todo.clone(), todo.clone(), State::Waiting]),
+        ("prompts up, downloading", MicPermission::NotDetermined, true, false, true,
+         running(Progress::Downloading { done: total / 4, total }), false, EngineStatus::Missing,
+         [State::Busy(Busy::MicPrompt), State::Busy(Busy::AccessibilityPending), State::Busy(Busy::Downloading), State::Waiting]),
+        ("mic denied, connection cut", MicPermission::Denied, false, false, false,
+         running(Progress::Reconnecting { attempt: 1, max: 5, done: total / 2, total }), false, EngineStatus::Missing,
+         [State::Problem(Problem::MicDenied), todo.clone(), State::Busy(Busy::Resuming), State::Waiting]),
+        ("mic restricted, offline", MicPermission::Restricted, false, true, false,
+         Some(DownloadStatus::Failed(offline)), false, EngineStatus::Missing,
+         [State::Problem(Problem::MicRestricted), done.clone(), State::Problem(Problem::NoNetwork), State::Waiting]),
+        ("checksum mismatch", MicPermission::Authorized, false, true, false,
+         Some(DownloadStatus::Failed(wrong)), false, EngineStatus::Missing,
+         [done.clone(), done.clone(), State::Problem(Problem::WrongFile), State::Waiting]),
+        ("getting ready", MicPermission::Authorized, false, true, false, None, true, EngineStatus::Loading,
+         [done.clone(), done.clone(), done.clone(), State::Busy(Busy::WarmingUp)]),
+        ("load failed", MicPermission::Authorized, false, true, false, None, true,
+         EngineStatus::Failed { error: "injected".into() },
+         [done.clone(), done.clone(), done.clone(), State::Problem(Problem::LoadFailed("injected".into()))]),
+        ("all done", MicPermission::Authorized, false, true, false, None, true, EngineStatus::Ready { load_ms: 180 },
+         [done.clone(), done.clone(), done.clone(), done.clone()]),
+    ];
+    let mut draws = vec![];
+    for (case, mic, mic_asking, accessibility, prompted, download, downloaded, engine, expected) in cases {
+        let (drawn, states, finished) = cx.update(|cx| {
+            let status = cx.global_mut::<AppStatus>();
+            status.mic_asking = mic_asking;
+            status.accessibility_prompted = prompted;
+            status.engine = engine;
+            status.models_dir = if downloaded { real_dir.clone() } else { empty_dir.clone() };
+            match download {
+                Some(d) => status.downloads.insert(model.id, d),
+                None => status.downloads.remove(model.id),
+            };
+            view.update(cx, |v, cx| v.pin_permissions(Some(Permissions { mic, accessibility }), cx));
+            cx.refresh_windows();
+            let before = DRAWN.load(Relaxed);
+            let drawn = draw_onboarding(controller, cx) && DRAWN.load(Relaxed) > before;
+            let onboarding = view.read(cx).onboarding(cx);
+            let states: Vec<State> =
+                onboarding.as_ref().map(|o| o.steps.iter().map(|s| s.state.clone()).collect()).unwrap_or_default();
+            (drawn, states, onboarding.is_some_and(|o| o.finished()))
+        });
+        let ok = drawn && states == expected && finished == (case == "all done");
+        draws.push(json!({"case": case, "drawn": drawn, "states": format!("{states:?}"), "ok": ok}));
+    }
+    cx.update(|cx| {
+        let status = cx.global_mut::<AppStatus>();
+        status.mic_asking = false;
+        status.accessibility_prompted = false;
+        status.engine = engine_before;
+        status.models_dir = real_dir;
+        status.downloads.remove(model.id);
+        view.update(cx, |v, cx| v.pin_permissions(None, cx));
+        cx.refresh_windows();
+    });
+    report.check(name, draws.iter().all(|d| d["ok"] == true), json!(draws));
+}
+
+/// Onboarding's model and warm-up steps for real, in a temporary models folder: the chosen model
+/// downloads from a server on 127.0.0.1 (serving the copy in the models folder, which is only
+/// read), the connection is cut once and the download picks up where it stopped, the file lands
+/// verified with its license notice, and the controller loads it (the warm-up), leaving every
+/// step done. Then the app goes back to the real models folder.
+async fn onboarding_download(
+    controller: &Entity<Controller>,
+    options: &Options,
+    report: &mut Report,
+    cx: &mut AsyncApp,
+) {
+    let name = "onboarding downloads the model from a local server, resumes a cut connection, then warms it up";
+    let (real_dir, model, view) = cx.update(|cx| {
+        (cx.global::<AppStatus>().models_dir.clone(), chosen_model(cx), controller.read(cx).onboarding_view())
+    });
+    let (Some(model), Some(view)) = (model.filter(|m| m.is_available(&real_dir)), view) else {
+        return report.check(name, false, json!("needs the chosen model downloaded and the onboarding window open"));
+    };
+    let file = model.resolve(&real_dir);
+    let file_name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let serve = Serve { body: Body::File(file.clone()), pace: None, cut_once_at: Some(model.download_bytes * 2 / 5) };
+    let server = match LocalServer::start(serve) {
+        Ok(server) => server,
+        Err(e) => return report.check(name, false, json!(e.to_string())),
+    };
+    // The catalog entry, downloading from here instead of Hugging Face.
+    let info: &'static ModelInfo =
+        Box::leak(Box::new(ModelInfo { download_url: String::leak(server.url(&file_name)), ..model.clone() }));
+    let dir = options.dir.join("onboarding-models");
+    let steps = |cx: &mut App| -> Option<Onboarding> { view.read(cx).onboarding(cx) };
+    let model_and_warm_up =
+        |o: &Onboarding| (o.step(StepId::Model).state.clone(), o.step(StepId::WarmUp).state.clone());
+
+    // Both permissions shown as allowed (the real ones aren't touched), and an empty models folder.
+    cx.update(|cx| {
+        view.update(cx, |v, cx| {
+            v.pin_permissions(Some(Permissions { mic: MicPermission::Authorized, accessibility: true }), cx)
+        });
+        controller.update(cx, |c, cx| c.set_models_dir(dir.clone(), cx));
+    });
+    let emptied =
+        wait_for(cx, Duration::from_secs(10), |cx| matches!(cx.global::<AppStatus>().engine, EngineStatus::Missing))
+            .await;
+    let before = cx.update(|cx| steps(cx).map(|o| model_and_warm_up(&o)));
+    let offered_download = cx.update(|cx| steps(cx).map(|o| o.step(StepId::Model).actions.clone()));
+
+    // What the Download button does, with the local URL.
+    let started = Instant::now();
+    cx.update(|cx| controller.update(cx, |c, cx| c.start_download(info, dir.clone(), cx)));
+    let mut seen: Vec<(State, State)> = vec![];
+    let mut draws = 0;
+    let mut finished = false;
+    while started.elapsed() < Duration::from_secs(240) {
+        let now = cx.update(|cx| steps(cx));
+        let Some(now) = now else { break };
+        let pair = model_and_warm_up(&now);
+        if seen.last() != Some(&pair) {
+            seen.push(pair);
+            draws += usize::from(cx.update(|cx| draw_onboarding(controller, cx)));
+        }
+        if now.finished() {
+            finished = true;
+            break;
+        }
+        sleep(cx, 20).await;
+    }
+    let elapsed_ms = started.elapsed().as_millis();
+    let saw = |state: State| seen.iter().any(|(m, w)| *m == state || *w == state);
+    let (engine, loaded) = cx.update(|cx| {
+        (cx.global::<AppStatus>().engine.clone(), controller.read(cx).engine.as_ref().map(|e| e.model_info().id))
+    });
+    let files = names_in(&info.resolve(&dir).parent().map(Path::to_path_buf).unwrap_or_default());
+    let notice_ok = std::fs::read_to_string(info.license_notice_path(&dir)).is_ok_and(|n| n == info.license_notice());
+    let requests = server.requests();
+    drop(server);
+
+    // Back to the real models folder; the chosen model loads from there again.
+    cx.update(|cx| controller.update(cx, |c, cx| c.set_models_dir(real_dir.clone(), cx)));
+    let back = wait_for(cx, Duration::from_secs(60), |cx| {
+        matches!(cx.global::<AppStatus>().engine, EngineStatus::Ready { .. })
+            && controller.read(cx).engine.as_ref().is_some_and(|e| e.model_info().id == model.id)
+    })
+    .await;
+    cx.update(|cx| {
+        view.update(cx, |v, cx| v.pin_permissions(None, cx));
+        close_onboarding(controller, cx);
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let todo_first = before == Some((State::ToDo, State::Waiting));
+    report.check(
+        name,
+        emptied.is_some()
+            && todo_first
+            && offered_download == Some(vec![crate::onboarding::Action::Download])
+            && saw(State::Busy(Busy::Downloading))
+            && saw(State::Busy(Busy::Resuming))
+            && saw(State::Busy(Busy::WarmingUp))
+            && finished
+            && matches!(engine, EngineStatus::Ready { .. })
+            && loaded == Some(model.id)
+            && files.contains(&file_name)
+            && files.contains(&format!("{file_name}.LICENSE.txt"))
+            && files.len() == 2
+            && notice_ok
+            && requests.len() >= 2
+            && requests.iter().skip(1).any(Option::is_some)
+            && draws >= seen.len()
+            && back.is_some(),
+        json!({"model": model.id, "bytes": model.download_bytes, "ms": elapsed_ms,
+               "before": format!("{before:?}"), "states_seen": format!("{seen:?}"), "draws": draws,
+               "finished": finished, "engine": format!("{engine:?}"), "files": files, "notice_ok": notice_ok,
+               "requests_range_starts": requests, "back_to_real_folder_ms": back}),
+    );
+}
+
+/// Whether the onboarding window is open now.
+fn onboarding_open(controller: &Entity<Controller>, cx: &mut App) -> bool {
+    let Some(handle) = controller.read(cx).onboarding_window() else { return false };
+    handle.update(cx, |_, _, _| ()).is_ok()
+}
+
+fn close_onboarding(controller: &Entity<Controller>, cx: &mut App) {
+    if let Some(handle) = controller.read(cx).onboarding_window() {
+        let _ = handle.update(cx, |_, window, _| window.remove_window());
+    }
+}
+
+/// Draws the onboarding window. False if it isn't open or the draw failed.
+fn draw_onboarding(controller: &Entity<Controller>, cx: &mut App) -> bool {
+    let Some(handle) = controller.read(cx).onboarding_window() else { return false };
+    handle.update(cx, |_, window, cx| window.draw(cx).clear(cx)).is_ok()
+}
+
 /// The names in `dir`, hidden ones included.
 fn names_in(dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(dir)
@@ -790,42 +1071,62 @@ fn names_in(dir: &Path) -> Vec<String> {
     names
 }
 
-/// Serves one file over plain HTTP on 127.0.0.1, 64 KiB every 20 ms, so a download takes long
-/// enough to watch and to cancel. Stops when dropped.
+/// What a [`LocalServer`] serves, and how.
+struct Serve {
+    body: Body,
+    /// Send `.0` bytes every `.1`, so a download takes long enough to watch and to cancel.
+    /// `None`: as fast as the connection takes them.
+    pace: Option<(usize, Duration)>,
+    /// Close the first response's connection on reaching this byte of the file, as a dropped
+    /// connection would, so the download has to pick up where it stopped (`Range`).
+    cut_once_at: Option<u64>,
+}
+
+/// The file a [`LocalServer`] serves.
+enum Body {
+    Bytes(Vec<u8>),
+    /// Read from disk as it's sent (a model: hundreds of MB).
+    File(PathBuf),
+}
+
+/// Serves one file over plain HTTP on 127.0.0.1, with `Range` support. Stops when dropped.
 struct LocalServer {
     port: u16,
-    requests: Arc<std::sync::Mutex<u32>>,
+    /// Each request's `Range` start, if it had one.
+    requests: Arc<std::sync::Mutex<Vec<Option<u64>>>>,
     stop: Arc<AtomicBool>,
 }
 
 impl LocalServer {
-    fn start(payload: Vec<u8>) -> std::io::Result<Self> {
+    fn start(serve: Serve) -> std::io::Result<Self> {
+        let len = match &serve.body {
+            Body::Bytes(bytes) => bytes.len() as u64,
+            Body::File(path) => std::fs::metadata(path)?.len(),
+        };
         let listener = TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
-        let (stop, requests) = (Arc::new(AtomicBool::new(false)), Arc::new(std::sync::Mutex::new(0)));
-        let (stop2, requests2, payload) = (stop.clone(), requests.clone(), Arc::new(payload));
+        let (stop, requests) = (Arc::new(AtomicBool::new(false)), Arc::new(std::sync::Mutex::new(vec![])));
+        let (stop2, requests2) = (stop.clone(), requests.clone());
+        let (serve, cut) = (Arc::new(serve), Arc::new(AtomicBool::new(false)));
         std::thread::Builder::new().name("self-test-http".into()).spawn(move || {
             for stream in listener.incoming() {
                 if stop2.load(Ordering::Relaxed) {
                     break;
                 }
                 let Ok(stream) = stream else { continue };
-                if let Ok(mut n) = requests2.lock() {
-                    *n += 1;
-                }
-                let payload = payload.clone();
-                let _ = std::thread::Builder::new().spawn(move || serve_file(stream, &payload));
+                let (serve, cut, requests) = (serve.clone(), cut.clone(), requests2.clone());
+                let _ = std::thread::Builder::new().spawn(move || serve_file(stream, &serve, len, &cut, &requests));
             }
         })?;
         Ok(Self { port, requests, stop })
     }
 
-    fn url(&self) -> String {
-        format!("http://127.0.0.1:{}/resolve/0/self-test.gguf", self.port)
+    fn url(&self, file: &str) -> String {
+        format!("http://127.0.0.1:{}/resolve/0/{file}", self.port)
     }
 
-    fn requests(&self) -> u32 {
-        self.requests.lock().map_or(0, |n| *n)
+    fn requests(&self) -> Vec<Option<u64>> {
+        self.requests.lock().map_or_else(|_| vec![], |r| r.clone())
     }
 }
 
@@ -836,23 +1137,81 @@ impl Drop for LocalServer {
     }
 }
 
-fn serve_file(mut stream: TcpStream, payload: &[u8]) {
+fn serve_file(
+    mut stream: TcpStream,
+    serve: &Serve,
+    len: u64,
+    cut: &AtomicBool,
+    requests: &std::sync::Mutex<Vec<Option<u64>>>,
+) {
     let Ok(read_half) = stream.try_clone() else { return };
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
-    while reader.read_line(&mut line).is_ok_and(|n| n > 0) && line != "\r\n" {
-        line.clear();
+    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+        return; // the shutdown wake-up
     }
-    let head = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", payload.len());
+    let mut range = None;
+    loop {
+        line.clear();
+        if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("range")
+        {
+            range = value.trim().strip_prefix("bytes=").and_then(|v| v.trim_end_matches('-').parse::<u64>().ok());
+        }
+    }
+    if let Ok(mut r) = requests.lock() {
+        r.push(range);
+    }
+    let start = range.unwrap_or(0).min(len);
+    let head = match range {
+        None => format!("HTTP/1.1 200 OK\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n"),
+        Some(_) => format!(
+            "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{}/{len}\r\n\
+             Connection: close\r\n\r\n",
+            len - start,
+            len.saturating_sub(1)
+        ),
+    };
     if stream.write_all(head.as_bytes()).is_err() {
         return;
     }
-    for piece in payload.chunks(64 * 1024) {
+    let end = match serve.cut_once_at {
+        Some(at) if at > start && !cut.swap(true, Ordering::SeqCst) => at.min(len),
+        _ => len,
+    };
+    let chunk = serve.pace.map_or(1024 * 1024, |(bytes, _)| bytes);
+    let mut file = match &serve.body {
+        Body::Bytes(_) => None,
+        Body::File(path) => match std::fs::File::open(path).and_then(|mut f| f.seek(SeekFrom::Start(start)).map(|_| f))
+        {
+            Ok(f) => Some(f),
+            Err(_) => return,
+        },
+    };
+    let mut buf = vec![0; chunk];
+    let mut at = start;
+    while at < end {
+        let n = chunk.min((end - at) as usize);
+        let piece = match (&serve.body, file.as_mut()) {
+            (Body::Bytes(bytes), _) => &bytes[at as usize..at as usize + n],
+            (Body::File(_), Some(f)) => match f.read_exact(&mut buf[..n]) {
+                Ok(()) => &buf[..n],
+                Err(_) => return,
+            },
+            (Body::File(_), None) => return,
+        };
         if stream.write_all(piece).is_err() {
             return; // the download was cancelled
         }
-        std::thread::sleep(Duration::from_millis(20));
+        at += n as u64;
+        if let Some((_, every)) = serve.pace {
+            std::thread::sleep(every);
+        }
     }
+    // A cut: the connection closes here, short of the length announced.
 }
 
 fn panel_state(controller: &Entity<Controller>, cx: &mut AsyncApp) -> PanelState {

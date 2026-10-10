@@ -17,6 +17,8 @@ mod history;
 mod hotkey;
 mod logger;
 mod model_row;
+mod onboarding;
+mod onboarding_window;
 mod overlay;
 mod platform;
 #[cfg(feature = "self-test")]
@@ -91,6 +93,7 @@ fn main() {
         cx.set_activation_policy(ActivationPolicy::Accessory);
         cx.set_global(loaded.settings);
         cx.set_global(AppStatus {
+            models_dir: easyvox_core::paths::models_dir(),
             config_path: config.path().to_path_buf(),
             config_error,
             config_warnings: loaded.warnings,
@@ -159,7 +162,7 @@ fn main() {
 
         // Part files left by downloads that were killed (a crash, a force quit). Any that a
         // running download holds stay.
-        let models_dir = easyvox_core::paths::models_dir();
+        let models_dir = cx.global::<AppStatus>().models_dir.clone();
         let _ = std::thread::Builder::new()
             .name("remove-partials".into())
             .spawn(move || easyvox_core::download::remove_partials(&models_dir));
@@ -168,6 +171,11 @@ fn main() {
         // model that isn't downloaded yet shows as missing instead.
         let model = cx.global::<AppSettings>().model.clone();
         controller.update(cx, |c, cx| c.load_engine(&model, cx));
+
+        // First launch, or a step went missing since (a reset permission, a deleted model):
+        // onboarding. There's no "done" flag to store; the system and the models folder say.
+        let launch = onboarding_window::launch_facts(cx);
+        controller.update(cx, |c, cx| c.onboard_if_needed(&launch, cx));
 
         #[cfg(feature = "self-test")]
         if let Some(options) = self_test {

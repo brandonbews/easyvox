@@ -1,5 +1,5 @@
-//! One offered model, the way Settings lists it (and onboarding will): its name, size and "pick
-//! this if", what you can do with it now (Download with progress and Cancel; Use; Delete), and
+//! One offered model, the way Settings and onboarding list it: its name, size and "pick this
+//! if", what you can do with it now (Download with progress and Cancel; Use; Delete), and
 //! its credits: license, creator, the modification note and the model card, with links that open
 //! in the browser.
 //!
@@ -10,7 +10,7 @@
 
 use crate::controller;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
-use easyvox_core::download::{Progress, format_size};
+use easyvox_core::download::{DownloadError, Progress, format_size};
 use easyvox_core::models::ModelInfo;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::link::Link;
@@ -20,15 +20,15 @@ use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_fl
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Where a model stands. Worked out from the app's state apart from drawing, so it can be tested.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ModelState {
     NotDownloaded,
     Downloading(Progress),
-    /// The last download failed, for this reason (one sentence). Nothing was kept.
-    Failed(String),
+    /// The last download failed, for this reason. Nothing was kept.
+    Failed(DownloadError),
     /// On this Mac, taking this many bytes (the model and its license notice).
     Downloaded {
         bytes: u64,
@@ -39,7 +39,7 @@ impl ModelState {
     pub fn of(model: &ModelInfo, downloads: &HashMap<&'static str, DownloadStatus>, models_dir: &Path) -> Self {
         match downloads.get(model.id) {
             Some(DownloadStatus::Running(progress)) => Self::Downloading(*progress),
-            Some(DownloadStatus::Failed { error }) => Self::Failed(error.clone()),
+            Some(DownloadStatus::Failed(error)) => Self::Failed(error.clone()),
             None if model.is_available(models_dir) => Self::Downloaded { bytes: disk_usage(model, models_dir) },
             None => Self::NotDownloaded,
         }
@@ -59,7 +59,7 @@ fn disk_usage(model: &ModelInfo, models_dir: &Path) -> u64 {
 pub fn download_words(status: &DownloadStatus) -> String {
     match status {
         DownloadStatus::Running(progress) => progress_words(progress),
-        DownloadStatus::Failed { error } => format!("Download failed: {error}"),
+        DownloadStatus::Failed(error) => format!("Download failed: {error}"),
     }
 }
 
@@ -103,12 +103,11 @@ struct RowUi {
 #[derive(IntoElement)]
 pub struct ModelRow {
     model: &'static ModelInfo,
-    models_dir: PathBuf,
 }
 
 impl ModelRow {
     pub fn new(model: &'static ModelInfo) -> Self {
-        Self { model, models_dir: easyvox_core::paths::models_dir() }
+        Self { model }
     }
 }
 
@@ -119,7 +118,8 @@ impl RenderOnce for ModelRow {
         let model = self.model;
         let id = model.id;
         let key = |part: &str| ElementId::Name(format!("model-{id}-{part}").into());
-        let state = ModelState::of(model, &cx.global::<AppStatus>().downloads, &self.models_dir);
+        let status = cx.global::<AppStatus>();
+        let state = ModelState::of(model, &status.downloads, &status.models_dir);
         let active = cx.global::<AppSettings>().model == id;
         let engine = cx.global::<AppStatus>().engine.clone();
         let ui = window.use_keyed_state(key("ui"), cx, |_, _| RowUi::default());
@@ -349,8 +349,8 @@ fn segments(source: &str) -> Vec<(String, Option<String>)> {
 mod tests {
     // Not `super::*`: that brings in GPUI's own `test` attribute through `gpui_kit::*`.
     use super::{
-        DownloadStatus, HashMap, ModelState, Progress, credit_with_link, download_words, modification_with_link,
-        percent, progress_words, segments,
+        DownloadError, DownloadStatus, HashMap, ModelState, Progress, credit_with_link, download_words,
+        modification_with_link, percent, progress_words, segments,
     };
     use easyvox_core::models;
 
@@ -400,8 +400,9 @@ mod tests {
         let progress = Progress::Downloading { done: 10, total: m.download_bytes };
         downloads.insert(m.id, DownloadStatus::Running(progress));
         assert_eq!(ModelState::of(m, &downloads, &dir), ModelState::Downloading(progress));
-        downloads.insert(m.id, DownloadStatus::Failed { error: "The download failed. Timed out.".into() });
-        assert_eq!(ModelState::of(m, &downloads, &dir), ModelState::Failed("The download failed. Timed out.".into()));
+        let timed_out = DownloadError::Network("timed out".into());
+        downloads.insert(m.id, DownloadStatus::Failed(timed_out.clone()));
+        assert_eq!(ModelState::of(m, &downloads, &dir), ModelState::Failed(timed_out));
 
         downloads.clear();
         std::fs::create_dir_all(dir.join("gguf")).unwrap();
@@ -417,7 +418,7 @@ mod tests {
         assert_eq!(progress_words(&p), "Downloading… 120 MB of 539 MB");
         assert!((percent(&p) - 22.26).abs() < 0.01);
         assert_eq!(percent(&Progress::Verifying), 0.);
-        let failed = DownloadStatus::Failed { error: "Nothing was kept.".into() };
-        assert_eq!(download_words(&failed), "Download failed: Nothing was kept.");
+        let failed = DownloadStatus::Failed(DownloadError::Http(404));
+        assert_eq!(download_words(&failed), "Download failed: The server doesn't have this model (HTTP 404).");
     }
 }

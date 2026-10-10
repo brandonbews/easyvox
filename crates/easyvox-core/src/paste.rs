@@ -26,10 +26,32 @@ mod mac {
     #[link(name = "ApplicationServices", kind = "framework")]
     unsafe extern "C" {
         fn AXIsProcessTrusted() -> bool;
+        fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
+        /// A CFStringRef, toll-free bridged to NSString.
+        static kAXTrustedCheckOptionPrompt: *const std::ffi::c_void;
     }
 
+    /// Whether macOS lets this app post the ⌘V keystroke. Never prompts. It follows the
+    /// switch in System Settings live: no relaunch needed after it's turned on.
     pub fn accessibility_trusted() -> bool {
         unsafe { AXIsProcessTrusted() }
+    }
+
+    /// Shows macOS's Accessibility prompt ("… would like to control this computer using
+    /// accessibility features"), whose button opens System Settings at the right list, and adds
+    /// the app to that list, switched off. Returns at once with whether the app is already
+    /// allowed; the grant itself comes later, when the user turns the switch on. Only call it
+    /// when the user asked: it puts a dialog in front of them.
+    pub fn prompt_accessibility() -> bool {
+        use objc2_foundation::{NSDictionary, NSNumber, NSString};
+        // SAFETY: a CFStringRef constant from ApplicationServices, valid for the whole process.
+        let Some(key) = (unsafe { kAXTrustedCheckOptionPrompt.cast::<NSString>().as_ref() }) else {
+            return accessibility_trusted();
+        };
+        let yes = NSNumber::new_bool(true);
+        let options = NSDictionary::from_slices(&[key], &[&*yes]);
+        // SAFETY: NSDictionary is toll-free bridged to the CFDictionaryRef the call takes.
+        unsafe { AXIsProcessTrustedWithOptions(objc2::rc::Retained::as_ptr(&options).cast()) }
     }
 
     pub fn copy_to_clipboard(text: &str) -> anyhow::Result<ClipboardWrite> {
@@ -63,7 +85,7 @@ mod mac {
 }
 
 #[cfg(target_os = "macos")]
-pub use mac::{accessibility_trusted, copy_to_clipboard};
+pub use mac::{accessibility_trusted, copy_to_clipboard, prompt_accessibility};
 
 /// Puts text on the clipboard (and leaves it there), then simulates Cmd+V.
 /// Returns a clear error if the process lacks the Accessibility permission; the text is
@@ -82,6 +104,10 @@ pub fn paste_text(text: &str) -> anyhow::Result<()> {
 
 #[cfg(not(target_os = "macos"))]
 pub fn accessibility_trusted() -> bool {
+    false
+}
+#[cfg(not(target_os = "macos"))]
+pub fn prompt_accessibility() -> bool {
     false
 }
 #[cfg(not(target_os = "macos"))]

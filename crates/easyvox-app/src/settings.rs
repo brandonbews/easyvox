@@ -1,9 +1,11 @@
 //! The Settings window, built from GPUI Kit's `Settings` component (pages, groups, items), plus a
 //! shortcut recorder and permission rows. Its pages: General, Models (every offered model, to
-//! download, use or delete; see `model_row.rs`), Permissions and About (`about.rs`).
+//! download, use or delete; see `model_row.rs`), Permissions (with a button that opens
+//! onboarding again) and About (`about.rs`).
 
 use crate::controller;
 use crate::model_row::{ModelRow, download_words};
+use crate::platform::{PRIVACY_ACCESSIBILITY, PRIVACY_INPUT_MONITORING, PRIVACY_MICROPHONE};
 use crate::state::{AppSettings, AppStatus, EngineStatus};
 use easyvox_core::MicPermission;
 use easyvox_core::download::format_size;
@@ -13,14 +15,6 @@ use gpui_kit::component::setting::{SelectIndex, SettingField, SettingGroup, Sett
 use gpui_kit::component::{ActiveTheme, Sizable, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use std::time::Duration;
-
-const PRIVACY_MICROPHONE: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
-const PRIVACY_ACCESSIBILITY: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
-const PRIVACY_INPUT_MONITORING: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
-
-/// How long to wait for an answer to the Microphone prompt.
-const MIC_PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The window's pages, in sidebar order. The sidebar picks them by position; code names one
 /// only to open it (the tray's About item, the self-test).
@@ -36,8 +30,6 @@ pub enum Page {
 
 pub struct SettingsView {
     recorder: Entity<ShortcutRecorder>,
-    /// Set while the system Microphone prompt is up.
-    mic_request: Option<Task<()>>,
     /// The page [`show`](Self::show) asked for, and how many times it was asked. The `Settings`
     /// component keeps the selected page itself, keyed by its id, so a new id opens it on `page`.
     page: Page,
@@ -50,7 +42,7 @@ impl SettingsView {
         let recorder = cx.new(|cx| ShortcutRecorder::new(window, cx));
         let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
-        Self { recorder, mic_request: None, page: Page::default(), shown: 0, _appearance }
+        Self { recorder, page: Page::default(), shown: 0, _appearance }
     }
 
     /// Switches to `page`, as if it were clicked in the sidebar.
@@ -66,27 +58,9 @@ impl SettingsView {
         self.page
     }
 
-    /// Shows the system Microphone prompt. `request_mic_permission` blocks until the user
-    /// answers, so it runs on the background executor.
-    fn request_mic(&mut self, cx: &mut Context<Self>) {
-        if self.mic_request.is_some() {
-            return;
-        }
-        log::info!("asking for Microphone access");
-        self.mic_request = Some(cx.spawn(async move |this, cx| {
-            let status = cx.background_spawn(async { easyvox_core::request_mic_permission(MIC_PROMPT_TIMEOUT) }).await;
-            log::info!("Microphone access: {status:?}");
-            let _ = this.update(cx, |this, cx| {
-                this.mic_request = None;
-                cx.notify();
-            });
-        }));
-        cx.notify();
-    }
-
     fn general_page(&self, cx: &App) -> SettingPage {
         let recorder = self.recorder.clone();
-        let models_dir = easyvox_core::paths::models_dir();
+        let models_dir = cx.global::<AppStatus>().models_dir.clone();
         // The models the app offers (default first) that are downloaded and runnable here.
         let models: Vec<(SharedString, SharedString)> = easyvox_core::models::offered()
             .into_iter()
@@ -200,8 +174,8 @@ impl SettingsView {
     }
 
     /// Every model the app offers, downloaded or not, with what you can do with each.
-    fn models_page(&self) -> SettingPage {
-        let models_dir = easyvox_core::paths::models_dir();
+    fn models_page(&self, cx: &App) -> SettingPage {
+        let models_dir = cx.global::<AppStatus>().models_dir.clone();
         let mut group = SettingGroup::new()
             .title("Speech models")
             .description("EasyVox runs one model at a time, on this Mac. A switch applies from your next dictation.");
@@ -234,20 +208,29 @@ impl SettingsView {
     }
 
     fn permissions_page(&self, cx: &mut Context<Self>) -> SettingPage {
-        let this = cx.entity().downgrade();
-        let requesting = self.mic_request.is_some();
+        let requesting = cx.global::<AppStatus>().mic_asking;
         let mic = easyvox_core::mic_permission_status();
         let accessibility = easyvox_core::accessibility_trusted();
         let input_monitoring = crate::platform::input_monitoring_granted();
 
-        SettingPage::new("Permissions").group(
+        let setup = SettingField::render(|_, _, _| {
+            Button::new("open-onboarding").outline().small().label("Open setup…").on_click(|_, _, cx| {
+                controller::with(cx, |c, cx| c.open_onboarding(cx));
+            })
+        });
+        let setup =
+            SettingGroup::new()
+                .title("Setup")
+                .item(SettingItem::new("Set up EasyVox", setup).description(
+                    "The first launch's steps again: the Microphone, Accessibility and the speech model.",
+                ));
+        SettingPage::new("Permissions").group(setup).group(
             SettingGroup::new()
                 .title("macOS privacy")
                 .item(
                     SettingItem::new(
                         "Microphone",
                         SettingField::render(move |_, _, _| {
-                            let this = this.clone();
                             let (label, button) = match (mic, requesting) {
                                 (_, true) => ("Waiting for your answer…", None),
                                 (MicPermission::Authorized, _) => ("Allowed", None),
@@ -261,7 +244,7 @@ impl SettingsView {
                                 button.map(|text| {
                                     Button::new("microphone").outline().small().label(text).on_click(move |_, _, cx| {
                                         if mic == MicPermission::NotDetermined {
-                                            let _ = this.update(cx, |view, cx| view.request_mic(cx));
+                                            controller::with(cx, |c, cx| c.request_mic(cx));
                                         } else {
                                             cx.open_url(PRIVACY_MICROPHONE);
                                         }
@@ -295,7 +278,7 @@ impl SettingsView {
 impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // In sidebar order: the same as `Page`.
-        let pages = vec![self.general_page(cx), self.models_page(), self.permissions_page(cx), crate::about::page()];
+        let pages = vec![self.general_page(cx), self.models_page(cx), self.permissions_page(cx), crate::about::page()];
         let opened_on = SelectIndex { page_ix: self.page as usize, group_ix: None };
         v_flex()
             .size_full()

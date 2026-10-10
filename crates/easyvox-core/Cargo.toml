@@ -41,9 +41,10 @@ transcribe-cpp = { version = "0.3.1", optional = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2.workspace = true
-# NSURLSession and friends are for model downloads (`download/macos.rs`).
+# NSURLSession and friends are for model downloads (`download/macos.rs`); NSDictionary is for
+# the Accessibility prompt's options (`paste.rs`).
 objc2-foundation = { workspace = true, features = [
-    "std", "block2", "NSString", "NSArray", "NSObject",
+    "std", "block2", "NSString", "NSArray", "NSDictionary", "NSObject",
     "NSData", "NSDate", "NSError", "NSOperation", "NSURL", "NSURLCache", "NSURLRequest", "NSURLResponse",
     "NSURLSession", "NSValue",
 ] }

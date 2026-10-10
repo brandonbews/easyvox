@@ -66,13 +66,21 @@ easyvox_core::tunables! {
 
 impl Global for AppSettings {}
 
-/// Runtime status, written by the controller and shown in Settings.
+/// Runtime status, written by the controller and shown in Settings and onboarding.
 #[derive(Default)]
 pub struct AppStatus {
+    /// Where models are downloaded to and loaded from: `easyvox_core::paths::models_dir()`,
+    /// set at launch. The self-test points it at a temporary folder for a while.
+    pub models_dir: std::path::PathBuf,
     pub engine: EngineStatus,
     /// Model downloads running or failed, by catalog id. One is removed when it succeeds or is
     /// cancelled; a failed one stays until the next try or a delete.
     pub downloads: std::collections::HashMap<&'static str, DownloadStatus>,
+    /// The macOS Microphone prompt is up (asked from onboarding or Settings).
+    pub mic_asking: bool,
+    /// The macOS Accessibility prompt was shown since launch. Accessibility has no "denied"
+    /// answer to read back, so this is how onboarding knows to point at System Settings next.
+    pub accessibility_prompted: bool,
     /// Why the push-to-talk shortcut couldn't be registered, if it couldn't.
     pub shortcut_error: Option<String>,
     /// Why the right-⌥ tap couldn't be installed, if it couldn't.
@@ -86,7 +94,7 @@ pub struct AppStatus {
 
 impl Global for AppStatus {}
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum EngineStatus {
     #[default]
     NotLoaded,
@@ -107,8 +115,7 @@ pub enum EngineStatus {
 #[derive(Clone, Debug)]
 pub enum DownloadStatus {
     Running(easyvox_core::download::Progress),
-    /// The reason, one sentence for the UI. Nothing was kept.
-    Failed {
-        error: String,
-    },
+    /// Why it failed: its `Display` is one sentence for the UI, and onboarding reads the kind
+    /// (offline, wrong file, …) to say what to do. Nothing was kept.
+    Failed(easyvox_core::download::DownloadError),
 }

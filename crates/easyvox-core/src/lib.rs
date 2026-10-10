@@ -67,7 +67,7 @@ use std::time::Instant;
 pub use audio::{MicPermission, mic_permission_status, request_mic_permission};
 pub use history::{History, HistoryEntry};
 pub use models::{ModelInfo, Runtime, catalog};
-pub use paste::{accessibility_trusted, copy_to_clipboard, paste_text};
+pub use paste::{accessibility_trusted, copy_to_clipboard, paste_text, prompt_accessibility};
 pub use session::{Session, SessionStats};
 #[cfg(feature = "transcribe-cpp")]
 pub use tcpp::release_native_models;
