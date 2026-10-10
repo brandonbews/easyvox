@@ -336,7 +336,7 @@ pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
     let mut panel = None;
     let mut view = None;
     let window = cx.open_window(options, |window, cx| {
-        panel = Some(OverlayPanel::attach(window));
+        panel = Some(OverlayPanel::attach(window, cx));
         let v = cx.new(|cx: &mut Context<OverlayView>| OverlayView {
             // Light or dark changed: redraw in the other palette, even mid-dictation.
             _appearance: Some(cx.observe_window_appearance(window, |view: &mut OverlayView, _, cx| view.redraw(cx))),

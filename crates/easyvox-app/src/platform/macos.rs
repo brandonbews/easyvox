@@ -28,25 +28,36 @@ pub struct OverlayPanel {
     win: Retained<NSWindow>,
 }
 
+/// `NSWindowStyleMaskNonactivatingPanel`, which objc2-app-kit doesn't name.
+const NONACTIVATING_PANEL: usize = 1 << 7;
+
 impl OverlayPanel {
     /// Configures the window GPUI created for the overlay. Call it inside `open_window`.
-    pub fn attach(window: &gpui_kit::Window) -> anyhow::Result<Self> {
+    pub fn attach(window: &gpui_kit::Window, cx: &mut gpui_kit::App) -> anyhow::Result<Self> {
         let win = ns_window_of(window).context("no NSWindow behind the overlay")?;
-        const NONACTIVATING_PANEL: usize = 1 << 7;
         win.setIgnoresMouseEvents(true);
         win.setHasShadow(false);
         win.setHidesOnDeactivate(false);
-        // This fires a synchronous resize while GPUI is mid-update, so GPUI logs one harmless
-        // "RefCell already borrowed" (gpui window.rs, on_resize). The content size doesn't
-        // change: GPUI's frameless PopUp is already Titled | FullSizeContentView.
-        win.setStyleMask(NSWindowStyleMask(NSWindowStyleMask::Borderless.0 | NONACTIVATING_PANEL));
         if let Some(panel) = win.downcast_ref::<NSPanel>() {
             panel.setBecomesKeyOnlyIfNeeded(true);
         }
-        if let Err(e) = key_guard::install(&win) {
-            // The overlay still works; it just isn't protected against becoming key.
-            log::error!("overlay key guard not installed: {e}");
-        }
+        // A new style mask makes AppKit resize GPUI's view there and then (and back: the
+        // content size ends up the same), and GPUI's resize handler borrows the App, which is
+        // borrowed until GPUI's update ends. Done here, it would log "RefCell already borrowed"
+        // (gpui window.rs, on_resize). So it waits for the next turn of the run loop, as GPUI
+        // defers its own appearance changes. The key guard waits with it: it must come after
+        // the style mask, whose title bar removal unregisters KVO observers that a swizzled
+        // class no longer matches (AppKit throws). Until then the panel is hidden and unfocused
+        // (`show: false`, `focus: false`), so it can't become key.
+        let deferred = win.clone();
+        cx.spawn(async move |_| {
+            deferred.setStyleMask(NSWindowStyleMask(NSWindowStyleMask::Borderless.0 | NONACTIVATING_PANEL));
+            if let Err(e) = key_guard::install(&deferred) {
+                // The overlay still works; it just isn't protected against becoming key.
+                log::error!("overlay key guard not installed: {e}");
+            }
+        })
+        .detach();
         Ok(Self { win })
     }
 
@@ -61,12 +72,15 @@ impl OverlayPanel {
 
     #[cfg(feature = "self-test")]
     pub fn state(&self) -> PanelState {
+        let style = self.win.styleMask().0;
         PanelState {
             class: self.win.class().name().to_string_lossy().into_owned(),
             visible: self.win.isVisible(),
             key: self.win.isKeyWindow(),
             can_become_key: self.win.canBecomeKeyWindow(),
             ignores_mouse: self.win.ignoresMouseEvents(),
+            borderless: style & !NONACTIVATING_PANEL == NSWindowStyleMask::Borderless.0,
+            nonactivating: style & NONACTIVATING_PANEL != 0,
         }
     }
 }
@@ -255,6 +269,10 @@ pub struct PanelState {
     pub key: bool,
     pub can_become_key: bool,
     pub ignores_mouse: bool,
+    /// No title bar, frame or controls: the style mask is `Borderless`, give or take the
+    /// non-activating bit.
+    pub borderless: bool,
+    pub nonactivating: bool,
 }
 
 /// Gives EasyVox its own appearance (`Some(true)` dark, `Some(false)` light), as if the

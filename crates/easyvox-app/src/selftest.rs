@@ -167,8 +167,13 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
 
     let at_rest = panel_state(&controller, cx);
     report.check(
-        "overlay is a guarded, click-through panel",
-        at_rest.class == "EasyVoxOverlayPanel" && !at_rest.can_become_key && at_rest.ignores_mouse && !at_rest.visible,
+        "overlay is a guarded, click-through, borderless, non-activating panel",
+        at_rest.class == "EasyVoxOverlayPanel"
+            && !at_rest.can_become_key
+            && at_rest.ignores_mouse
+            && at_rest.borderless
+            && at_rest.nonactivating
+            && !at_rest.visible,
         panel_json(&at_rest),
     );
 
@@ -279,7 +284,12 @@ async fn dictation(
     let shown = panel_state(controller, cx);
     report.check(
         "overlay shows without taking focus",
-        shown.visible && !shown.key && !shown.can_become_key && shown.ignores_mouse,
+        shown.visible
+            && !shown.key
+            && !shown.can_become_key
+            && shown.ignores_mouse
+            && shown.borderless
+            && shown.nonactivating,
         panel_json(&shown),
     );
 
@@ -1373,7 +1383,7 @@ fn panel_state(controller: &Entity<Controller>, cx: &mut AsyncApp) -> PanelState
 
 fn panel_json(s: &PanelState) -> Value {
     json!({"class": s.class, "visible": s.visible, "key": s.key, "can_become_key": s.can_become_key,
-           "ignores_mouse": s.ignores_mouse})
+           "ignores_mouse": s.ignores_mouse, "borderless": s.borderless, "nonactivating": s.nonactivating})
 }
 
 async fn sleep(cx: &mut AsyncApp, ms: u64) {
