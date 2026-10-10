@@ -17,6 +17,11 @@ Acceptance: the binary's minos matches LSMinimumSystemVersion, or the task recor
 
 Pointers: packaging/Info.plist, scripts/bundle.sh, rust-toolchain.toml, .github/workflows/ci.yml.
 
+Finding (2026-10-10, agent): set it. Before: the binary's LC_BUILD_VERSION said minos 11.0 (rustc's aarch64 default), but every ggml/transcribe.cpp object said minos 27.0: with MACOSX_DEPLOYMENT_TARGET unset, cc-rs (which the cmake crate uses for flags) falls back to the installed SDK's version (Xcode 27, SDK 27.0), so the C code was built for a newer macOS than LSMinimumSystemVersion 26.0 promises (ggml's @available checks for 27 would compile away). CI builds with its own SDK, so its ggml target differed again. Added .cargo/config.toml with [env] MACOSX_DEPLOYMENT_TARGET = "26.0": now the binary's minos is 26.0, all ggml/transcribe objects and bundled sqlite are 26.0 (-mmacosx-version-min=26.0, CMAKE_OSX_DEPLOYMENT_TARGET 26.0), and a relink with -W linker-messages shows no deployment-target warnings. Updated the comments in scripts/bundle.sh (which deferred this to .cargo/config.toml) and ci.yml.
+Caching: cargo rebuilt only the crates that read the variable (objc2*, GPUI, easyvox: 38 crates); transcribe-cpp-sys's build script only watches TRANSCRIBE_DIR, TRANSCRIBE_CMAKE_ARGS and CMAKE_ARGS, so its cached ggml stayed at 27.0 until `cargo clean -p transcribe-cpp-sys` (done locally for dev, release and dist; the config comment says so for next time). CI: rust-cache v2.9.2 hashes .cargo/config.toml into its key, so the first main run after this misses the exact key, restores the previous cache by prefix, rebuilds those crates and saves a new entry: a one-time partial rebuild, not a cold one. CI's cached ggml keeps the runner SDK's target until transcribe-cpp-sys next rebuilds (harmless for tests; CI doesn't ship).
+
 ## History
 
-_No activity yet._
+### 2026-10-10 20:36 UTC — edit by `brandon`
+
+description edited
