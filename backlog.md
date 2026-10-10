@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 15 ready · 5 blocked · 13 on hold · 9 inbox · 13 done · 0 cancelled
+0 in progress · 14 ready · 6 blocked · 13 on hold · 9 inbox · 13 done · 0 cancelled
 
 ## In progress
 
@@ -16,7 +16,6 @@ _None._
 | [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) | Make dictation light: tune the preview until the GPU mostly rests while talking | 1 | `engine` `perf` `energy` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
-| [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) | Settings file: ~/.config/easyvox/config.toml, applied live | 2 | `settings` `app` |
 | [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) | Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified) | 2 | `models` `app` |
 | [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
 | [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) | Quiet the gpui "RefCell already borrowed" error logged at every launch | 3 | `app` |
@@ -32,6 +31,7 @@ _None._
 |---|---|---:|---|
 | [`tuh-br58`](tasks/tuh-01M4H2EG9QB2ETECD30F9RBR58.md) | Onboarding: Microphone and Accessibility, default model download, shader warm-up | 1 | depends on [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) |
 | [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) | Settings: click-to-download the alternative models | 2 | depends on [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) |
+| [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) | Settings file: ~/.config/easyvox/config.toml, applied live | 1 | depends on [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) |
 | [`tuh-btdp`](tasks/tuh-01M4H2EGNVZ00YA6604MXABTDP.md) | Shipping build: cargo-packager for Developer ID signing, notarization and the DMG | 3 | depends on [`tuh-2645`](tasks/tuh-01M4H2EGM7TG4S96QNRQHV2645.md) |
 | [`tuh-dtts`](tasks/tuh-01M4H2EGPP2HDY5Y1WD6ENDTTS.md) | Homebrew cask for the notarized DMG | 4 | depends on [`tuh-btdp`](tasks/tuh-01M4H2EGNVZ00YA6604MXABTDP.md) |
 | [`tuh-b8rb`](tasks/tuh-01M4HDR400G242K017BJ1HB8RB.md) | Energy spike: GPU vs cheaper preview vs Neural Engine | 2 | depends on [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) |

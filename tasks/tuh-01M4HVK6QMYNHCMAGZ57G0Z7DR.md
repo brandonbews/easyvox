@@ -22,8 +22,15 @@ The ask (this is the GPU half of the energy spike, tuh-01M4HDR400G242K017BJ1HB8R
 
 Then: decide whether the Neural Engine half is still worth running, against the best GPU setup found here (Brandon's rule: the ANE must at least halve energy per minute vs that).
 
+
+Added 2026-10-09: first gather every tuning constant that shapes feel or cost (preview interval and window, chunk length, join slack, SpeechGate threshold and settle passes, pause-finder levels and durations, ...) into one core struct with documented defaults (units, what each trades off), so the bench flags and the settings file (tuh-01M4H2EGC4XDQT10EWCXX1STG4, which exposes it under an advanced table) share one source of truth. The bench should be able to set any field (e.g. a generic --set key=value), which also makes the sweep easy.
+
 ## History
 
 ### 2026-10-10 02:59 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-10 03:33 UTC — edit by `brandon`
 
 description edited

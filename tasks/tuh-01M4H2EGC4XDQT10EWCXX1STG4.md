@@ -2,9 +2,10 @@
 
 `tuh-01M4H2EGC4XDQT10EWCXX1STG4`
 
-- **Status:** open — ready
-- **Priority:** 2
+- **Status:** open — blocked on dependencies
+- **Priority:** 1
 - **Labels:** `settings` `app`
+- **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (open)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description
@@ -24,6 +25,17 @@ Pointers: crates/easyvox-app/src/state.rs, settings.rs; crates/easyvox-core/src/
 
 Constraints: the path is ~/.config on macOS too, not ~/Library/Preferences. Agents can't grant Microphone or Accessibility, so the file holds no permission state.
 
+
+Added 2026-10-09 (Brandon): every tuning constant goes in the file too, not necessarily in the UI: "make it easy for us to tune the feel of the defaults, and then users have the benefit of advanced settings through the file if they want." So the file gets an [advanced] table (name to taste) exposing the core tuning struct from tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR: preview interval (today 400 ms), preview window cap, chunk length (~30 s), join slack, SpeechGate threshold and settle passes, pause-finder levels and durations, unload_after_secs, and any other constant that shapes feel or cost. Rules:
+- One source of truth: the defaults live in core; the file only overrides. Missing keys = defaults, so a default can change in a release without being frozen in old files (don't write untouched advanced keys back out; consider a commented reference listing of every key and its default, e.g. in README or `easyvox --print-default-config`).
+- Validate ranges; an out-of-range value logs a warning and falls back to the default for that key only.
+- Engine values apply from the next recording (no restart); say so in the docs.
+- Same keys for every model (one pipeline, no per-model tables).
+- Document every key, its default, its unit and what it trades off, in plain words.
+Priority raised to 1 so it lands right after the lightness task (which picks the defaults).
+
 ## History
 
-_No activity yet._
+### 2026-10-10 03:33 UTC — edit by `brandon`
+
+description edited · priority 2→1 · depends_on +tuh-z7dr
