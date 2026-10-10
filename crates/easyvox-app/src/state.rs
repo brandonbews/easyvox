@@ -70,6 +70,9 @@ impl Global for AppSettings {}
 #[derive(Default)]
 pub struct AppStatus {
     pub engine: EngineStatus,
+    /// Model downloads running or failed, by catalog id. One is removed when it succeeds or is
+    /// cancelled; a failed one stays until the next try or a delete.
+    pub downloads: std::collections::HashMap<&'static str, DownloadStatus>,
     /// Why the push-to-talk shortcut couldn't be registered, if it couldn't.
     pub shortcut_error: Option<String>,
     /// Why the right-⌥ tap couldn't be installed, if it couldn't.
@@ -87,12 +90,24 @@ impl Global for AppStatus {}
 pub enum EngineStatus {
     #[default]
     NotLoaded,
+    /// The chosen model isn't downloaded (or is only partly there), so there's no engine.
+    Missing,
     Loading,
     Ready {
         load_ms: u32,
     },
     /// Freed after a stretch of no use; the next dictation reloads it.
     Unloaded,
+    Failed {
+        error: String,
+    },
+}
+
+/// One model download, as Settings and onboarding show it.
+#[derive(Clone, Debug)]
+pub enum DownloadStatus {
+    Running(easyvox_core::download::Progress),
+    /// The reason, one sentence for the UI. Nothing was kept.
     Failed {
         error: String,
     },

@@ -2,8 +2,9 @@
 //! shortcut recorder and permission rows.
 
 use crate::controller;
-use crate::state::{AppSettings, AppStatus, EngineStatus};
+use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
 use easyvox_core::MicPermission;
+use easyvox_core::download::{Progress, format_size};
 use gpui_kit::component::button::Button;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings};
@@ -75,8 +76,16 @@ impl SettingsView {
         };
         let status = cx.global::<AppStatus>();
         let unload_after = duration_words(cx.global::<AppSettings>().app.unload_after_secs);
+        let chosen = cx.global::<AppSettings>().model.as_str();
         let engine = match &status.engine {
             EngineStatus::NotLoaded => "Not loaded.".to_string(),
+            EngineStatus::Missing => match status.downloads.get(chosen) {
+                Some(download) => download_words(download),
+                None => {
+                    let size = easyvox_core::models::find(chosen).map(|m| format_size(m.download_bytes));
+                    format!("Not downloaded yet ({}).", size.unwrap_or_default())
+                }
+            },
             EngineStatus::Loading => "Loading… The first load after installing takes about 15 s.".into(),
             EngineStatus::Ready { load_ms } => {
                 format!(
@@ -224,6 +233,22 @@ impl Render for SettingsView {
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .child(Settings::new("easyvox-settings").pages(pages))
+    }
+}
+
+/// A download's state in a few words: "Downloading… 120 MB of 539 MB".
+fn download_words(status: &DownloadStatus) -> String {
+    match status {
+        DownloadStatus::Running(Progress::Verifying) => "Checking the copy already downloaded…".into(),
+        DownloadStatus::Running(Progress::Downloading { done, total }) => {
+            format!("Downloading… {} of {}", format_size(*done), format_size(*total))
+        }
+        DownloadStatus::Running(Progress::Reconnecting { attempt, max, done, total }) => format!(
+            "Connection lost at {} of {}. Trying again ({attempt} of {max})…",
+            format_size(*done),
+            format_size(*total)
+        ),
+        DownloadStatus::Failed { error } => format!("Download failed: {error}"),
     }
 }
 

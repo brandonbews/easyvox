@@ -1,5 +1,6 @@
 //! Model catalog. Adding a model means adding an entry here, plus an adapter if it needs a new
-//! runtime. `scripts/fetch-model.sh` mirrors the GGUF entries' URLs and checksums.
+//! runtime. `download.rs` downloads these entries in the app; `scripts/fetch-model.sh` mirrors
+//! the GGUF entries' URLs and checksums for developers.
 //!
 //! Every entry says whether the app offers it ([`Offering`]). The app lists only the default and
 //! the alternatives; the rest stay in the catalog for `easyvox-bench` and comparisons. Which
@@ -104,9 +105,24 @@ impl ModelInfo {
         models_dir.join(self.path)
     }
 
-    /// Downloaded into `models_dir` and runnable by this build.
+    /// Downloaded into `models_dir` and runnable by this build. A single-file model (one with a
+    /// sha256) must also be its full size, so a truncated copy counts as not downloaded. The
+    /// sha256 itself is only checked when downloading: hashing 500 MB at every launch would cost
+    /// energy for nothing.
     pub fn is_available(&self, models_dir: &Path) -> bool {
-        self.runtime.is_compiled() && self.resolve(models_dir).exists()
+        let path = self.resolve(models_dir);
+        self.runtime.is_compiled()
+            && match self.sha256 {
+                Some(_) => std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() == self.download_bytes),
+                None => path.exists(),
+            }
+    }
+
+    /// Where [`crate::download`] writes the file while it downloads: hidden, next to the model.
+    pub fn partial_path(&self, models_dir: &Path) -> PathBuf {
+        let path = self.resolve(models_dir);
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        path.with_file_name(format!(".{name}.part"))
     }
 }
 
@@ -301,6 +317,24 @@ mod tests {
             );
             assert_eq!(Some(parts[4]), Path::new(m.path).file_name().and_then(|f| f.to_str()), "{}", m.id);
         }
+    }
+
+    /// A truncated copy doesn't count as downloaded; one of the right size does. Sparse files,
+    /// so no real model is needed.
+    #[test]
+    fn is_available_checks_the_size() {
+        let dir = std::env::temp_dir().join(format!("easyvox-models-test-{}", std::process::id()));
+        let m = find(crate::RECOMMENDED_MODEL).unwrap();
+        let path = m.resolve(&dir);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        assert!(!m.is_available(&dir), "missing");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(m.download_bytes - 1).unwrap();
+        assert!(!m.is_available(&dir), "one byte short");
+        file.set_len(m.download_bytes).unwrap();
+        assert!(m.is_available(&dir), "full size");
+        assert_eq!(m.partial_path(&dir), dir.join("gguf/.parakeet-tdt-0.6b-v2-Q5_K_M.gguf.part"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

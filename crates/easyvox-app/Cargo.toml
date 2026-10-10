@@ -15,7 +15,7 @@ path = "src/main.rs"
 [features]
 # `--self-test`: launch for real, check the native state and a full replay session, write
 # JSON, quit. For checking the app on a machine nobody is looking at.
-self-test = ["dep:serde_json"]
+self-test = ["dep:serde_json", "dep:sha2"]
 
 [dependencies]
 # Only the transcribe.cpp runtime and the mic. The sherpa-onnx fallback adds 18.5 MB.
@@ -24,6 +24,8 @@ gpui-kit.workspace = true
 anyhow.workspace = true
 log.workspace = true
 serde_json = { workspace = true, optional = true }
+# The self-test's download check hashes its payload. Same version core uses.
+sha2 = { version = "0.11", optional = true }
 async-channel = "2"
 # Menu bar icon and global shortcuts: Tauri-team crates, used without Tauri.
 tray-icon = { version = "0.26.1", default-features = false }

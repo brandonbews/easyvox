@@ -30,6 +30,9 @@ anyhow.workspace = true
 log.workspace = true
 hound = "3.5"
 libc = "0.2"
+# Hashes model downloads as they stream in. The app already builds this exact version (through
+# gpui-kit-assets → rust-embed), so it adds no code there. Uses the ARMv8 SHA-2 instructions.
+sha2 = "0.11"
 rusqlite = { version = "0.40", features = ["bundled"] }
 cpal = { version = "0.18", optional = true }
 sherpa-onnx = { version = "1.13.8", optional = true }
@@ -38,7 +41,12 @@ transcribe-cpp = { version = "0.3.1", optional = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2.workspace = true
-objc2-foundation = { workspace = true, features = ["std", "NSString", "NSArray", "NSObject"] }
+# NSURLSession and friends are for model downloads (`download/macos.rs`).
+objc2-foundation = { workspace = true, features = [
+    "std", "block2", "NSString", "NSArray", "NSObject",
+    "NSData", "NSDate", "NSError", "NSOperation", "NSURL", "NSURLCache", "NSURLRequest", "NSURLResponse",
+    "NSURLSession", "NSValue",
+] }
 objc2-app-kit = { workspace = true, features = ["std", "NSPasteboard"] }
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGEvent", "CGEventTypes", "CGEventSource", "CGRemoteOperation"] }

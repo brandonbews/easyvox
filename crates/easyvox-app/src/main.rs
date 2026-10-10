@@ -155,7 +155,15 @@ fn main() {
         })
         .detach();
 
-        // Loads on the background executor: the menu bar icon and shortcut work meanwhile.
+        // Part files left by downloads that were killed (a crash, a force quit). Any that a
+        // running download holds stay.
+        let models_dir = easyvox_core::paths::models_dir();
+        let _ = std::thread::Builder::new()
+            .name("remove-partials".into())
+            .spawn(move || easyvox_core::download::remove_partials(&models_dir));
+
+        // Loads on the background executor: the menu bar icon and shortcut work meanwhile. A
+        // model that isn't downloaded yet shows as missing instead.
         let model = cx.global::<AppSettings>().model.clone();
         controller.update(cx, |c, cx| c.load_engine(&model, cx));
 

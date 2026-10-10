@@ -1684,6 +1684,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "raw-window-handle",
  "serde_json",
+ "sha2 0.11.0",
  "toml_edit 0.25.17+spec-1.1.0",
  "tray-icon",
 ]
@@ -1713,6 +1714,7 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "rusqlite",
+ "sha2 0.11.0",
  "sherpa-onnx",
  "transcribe-cpp",
 ]

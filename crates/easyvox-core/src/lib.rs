@@ -35,9 +35,13 @@
 //! preview simply starts once the model is ready.
 //!
 //! Binaries set [`process_env`] first thing in `main`, before any thread starts.
+//!
+//! Models aren't bundled: [`download::download`] fetches a catalog model, checks its size and
+//! sha256, and only then puts it in place.
 
 pub mod audio;
 mod chunks;
+pub mod download;
 pub mod history;
 pub mod metrics;
 pub mod models;

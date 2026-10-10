@@ -11,17 +11,25 @@
 //! applied here and written to the file; outside edits to the file reach here through its
 //! watcher and are applied the same way, without writing anything back, so the two can't feed
 //! each other in a loop. Each dictation takes the pipeline's tuning in force when it starts.
+//!
+//! Models are downloaded here too (`download_model`), for onboarding and Settings alike. Each
+//! download runs `easyvox_core::download` on its own thread and reports on the same channel;
+//! its state is in `AppStatus::downloads`. Switching models goes through `use_model`, which
+//! frees the old model before loading the new one and waits for a dictation to end first.
 
 use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
 use crate::overlay::Overlay;
 use crate::settings::SettingsView;
-use crate::state::{AppSettings, AppStatus, EngineStatus};
+use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
 use crate::{platform, tray};
+use easyvox_core::download::{CancelToken, DownloadError, Progress};
+use easyvox_core::models::ModelInfo;
 use easyvox_core::{AudioSource, Engine, MicPermission, Session, TranscriptEvent};
 use gpui_kit::component::Theme;
 use gpui_kit::*;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -32,6 +40,21 @@ pub enum UiEvent {
     Transcript { seq: u64, event: TranscriptEvent },
     // The settings file may have changed (from its watcher, on a background thread).
     ConfigChanged,
+    // From a model download's thread.
+    Download { model: &'static str, update: DownloadUpdate },
+}
+
+pub enum DownloadUpdate {
+    Progress(Progress),
+    Done(Result<PathBuf, DownloadError>),
+}
+
+/// A running model download.
+struct DownloadJob {
+    cancel: CancelToken,
+    /// Keeps App Nap from throttling the download. The Mac can still idle-sleep: the download
+    /// picks up where it stopped after the wake.
+    _no_app_nap: ActivityGuard,
 }
 
 enum Phase {
@@ -99,6 +122,10 @@ pub struct Controller {
     #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
     pub config_reloads: u32,
     right_option_tap: bool,
+    /// Model downloads running now, by catalog id.
+    downloads: HashMap<&'static str, DownloadJob>,
+    /// A model picked while a dictation was running: switched to once it ends.
+    pending_model: Option<String>,
     /// Push-to-talk replays this WAV instead of opening the microphone (debug and self-test).
     pub source_override: Option<PathBuf>,
     /// Simulate ⌘V after copying the final text. The self-test turns it off: it must never
@@ -135,6 +162,8 @@ impl Controller {
             config_task: None,
             config_reloads: 0,
             right_option_tap: false,
+            downloads: HashMap::new(),
+            pending_model: None,
             source_override: None,
             auto_paste: true,
         }
@@ -166,6 +195,7 @@ impl Controller {
                     let _ = this.update(cx, |c, cx| c.reload_settings(cx));
                 }));
             }
+            UiEvent::Download { model, update } => self.on_download(model, update, cx),
         }
     }
 
@@ -181,6 +211,10 @@ impl Controller {
             tray::MENU_HISTORY => self.open_history(cx),
             tray::MENU_QUIT => {
                 log::info!("quitting");
+                // Best effort: a part file the exit leaves behind goes at the next launch.
+                for job in self.downloads.values() {
+                    job.cancel.cancel();
+                }
                 cx.quit();
             }
             _ => log::warn!("unknown menu item {id:?}"),
@@ -224,6 +258,7 @@ impl Controller {
         let Some(engine) = self.engine.clone() else {
             let msg = match &cx.global::<AppStatus>().engine {
                 EngineStatus::Failed { .. } => "The speech model didn't load: see Settings",
+                EngineStatus::Missing => "No speech model downloaded yet: see Settings",
                 _ => "The speech model is still loading…",
             };
             self.show_notice(msg.into(), cx);
@@ -304,6 +339,9 @@ impl Controller {
                 self.sync_engine_status(cx);
                 self.schedule_unload(cx);
                 self.deliver(text, audio_secs, cx);
+                if let Some(model) = self.pending_model.take() {
+                    self.use_model(&model, cx);
+                }
             }
             TranscriptEvent::Error(e) => {
                 // The core still sends a Final after an error.
@@ -437,17 +475,56 @@ impl Controller {
 
     /// Picks the speech model (from Settings).
     pub fn select_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
-        self.load_engine(model_id, cx);
+        self.use_model(model_id, cx);
         self.save_settings(cx);
     }
 
-    /// Loads (or switches to) a speech model on the background executor. The engine it
-    /// replaces is dropped there too, since freeing a model can block.
-    pub fn load_engine(&mut self, model_id: &str, cx: &mut Context<Self>) {
-        // No tuning here: each session takes the one in force when it starts.
-        let mut config = easyvox_core::EngineConfig::recommended(easyvox_core::paths::models_dir());
-        config.model_id = model_id.to_string();
+    /// Makes `model_id` the speech model: the one way to switch. During a dictation the switch
+    /// waits for it to end. The old model is freed before the new one loads, so only one is
+    /// ever in memory. A model that isn't downloaded leaves no engine, with
+    /// [`EngineStatus::Missing`]. Doesn't write the settings file.
+    pub fn use_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
         cx.global_mut::<AppSettings>().model = model_id.to_string();
+        if !self.is_idle() {
+            log::info!("engine: switching to {model_id} once this dictation ends");
+            self.pending_model = Some(model_id.to_string());
+            return;
+        }
+        self.pending_model = None;
+        if self.engine.as_ref().is_some_and(|e| e.model_info().id == model_id) {
+            return; // already in use
+        }
+        self.drop_engine(cx);
+        self.load_engine(model_id, cx);
+    }
+
+    /// Frees the engine, on the background executor: freeing a model can block.
+    fn drop_engine(&mut self, cx: &mut Context<Self>) {
+        self.unload_task = None;
+        if let Some(old) = self.engine.take() {
+            cx.background_spawn(async move { drop(old) }).detach();
+        }
+    }
+
+    /// Loads (or reloads) a speech model on the background executor. An engine it replaces is
+    /// dropped there too, since freeing a model can block. If the model isn't downloaded,
+    /// there's no engine and the status says so.
+    pub fn load_engine(&mut self, model_id: &str, cx: &mut Context<Self>) {
+        cx.global_mut::<AppSettings>().model = model_id.to_string();
+        let models_dir = easyvox_core::paths::models_dir();
+        if let Ok(info) = easyvox_core::models::find(model_id)
+            && !info.is_available(&models_dir)
+        {
+            log::warn!("engine: {model_id} isn't downloaded ({})", info.resolve(&models_dir).display());
+            self.load_task = None;
+            self.drop_engine(cx);
+            cx.global_mut::<AppStatus>().engine = EngineStatus::Missing;
+            cx.refresh_windows();
+            return;
+        }
+        // No tuning here: each session takes the one in force when it starts.
+        let mut config = easyvox_core::EngineConfig::recommended(models_dir);
+        config.model_id = model_id.to_string();
         cx.global_mut::<AppStatus>().engine = EngineStatus::Loading;
         cx.refresh_windows();
         log::info!("engine: loading {model_id}");
@@ -476,6 +553,119 @@ impl Controller {
                 cx.refresh_windows();
             });
         }));
+    }
+
+    /// Downloads a catalog model into the models folder, on its own thread; progress and the
+    /// result arrive as [`UiEvent::Download`]. Does nothing if it's already downloading.
+    #[allow(dead_code)] // onboarding and Settings call it (their own tasks)
+    pub fn download_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
+        match easyvox_core::models::find(model_id) {
+            Ok(info) => self.start_download(info, easyvox_core::paths::models_dir(), cx),
+            Err(e) => log::error!("download: {e:#}"),
+        }
+    }
+
+    /// [`download_model`](Self::download_model) for any entry, into any folder (the self-test
+    /// uses its own).
+    #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
+    pub fn start_download(&mut self, info: &'static ModelInfo, models_dir: PathBuf, cx: &mut Context<Self>) {
+        let id = info.id;
+        if self.downloads.contains_key(id) {
+            return;
+        }
+        let cancel = CancelToken::new();
+        let tx = self.tx.clone();
+        let token = cancel.clone();
+        let thread = std::thread::Builder::new().name(format!("download-{id}")).spawn(move || {
+            let send = |update| {
+                let _ = tx.send_blocking(UiEvent::Download { model: id, update });
+            };
+            let result = easyvox_core::download::download(info, &models_dir, &token, |p| {
+                send(DownloadUpdate::Progress(p));
+            });
+            send(DownloadUpdate::Done(result));
+        });
+        let status = match thread {
+            Ok(_) => {
+                log::info!("download: {id} started");
+                let no_app_nap = cx.background_executor().prevent_app_nap("EasyVox model download");
+                self.downloads.insert(id, DownloadJob { cancel, _no_app_nap: no_app_nap });
+                DownloadStatus::Running(Progress::Downloading { done: 0, total: info.download_bytes })
+            }
+            Err(e) => {
+                log::error!("download: couldn't start a thread for {id}: {e}");
+                DownloadStatus::Failed { error: format!("Couldn't start the download: {e}") }
+            }
+        };
+        cx.global_mut::<AppStatus>().downloads.insert(id, status);
+        cx.refresh_windows();
+    }
+
+    /// Stops a running download. Its `Done(Err(Cancelled))` follows and clears its status;
+    /// nothing is left on disk.
+    #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
+    pub fn cancel_download(&mut self, model_id: &str) {
+        if let Some(job) = self.downloads.get(model_id) {
+            log::info!("download: cancelling {model_id}");
+            job.cancel.cancel();
+        }
+    }
+
+    /// Whether `model_id` is downloading now.
+    #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
+    pub fn is_downloading(&self, model_id: &str) -> bool {
+        self.downloads.contains_key(model_id)
+    }
+
+    /// Deletes a downloaded model. Refuses the model in use (or picked) and one that's
+    /// downloading.
+    #[allow(dead_code)] // the Settings model list calls it (its own task)
+    pub fn delete_model(&mut self, model_id: &str, cx: &mut Context<Self>) -> Result<(), String> {
+        let info = easyvox_core::models::find(model_id).map_err(|e| e.to_string())?;
+        let in_use = self.engine.as_ref().is_some_and(|e| e.model_info().id == info.id);
+        if in_use || cx.global::<AppSettings>().model == info.id || self.pending_model.as_deref() == Some(info.id) {
+            return Err("This is the model in use. Pick another one first.".into());
+        }
+        if self.downloads.contains_key(info.id) {
+            return Err("This model is downloading. Cancel the download first.".into());
+        }
+        easyvox_core::download::delete(info, &easyvox_core::paths::models_dir())
+            .map_err(|e| format!("Couldn't delete the model: {e}"))?;
+        log::info!("download: deleted {}", info.id);
+        cx.global_mut::<AppStatus>().downloads.remove(info.id);
+        cx.refresh_windows();
+        Ok(())
+    }
+
+    fn on_download(&mut self, model: &'static str, update: DownloadUpdate, cx: &mut Context<Self>) {
+        match update {
+            DownloadUpdate::Progress(p) => {
+                cx.global_mut::<AppStatus>().downloads.insert(model, DownloadStatus::Running(p));
+            }
+            DownloadUpdate::Done(result) => {
+                self.downloads.remove(model); // and with it the App Nap guard
+                let downloads = &mut cx.global_mut::<AppStatus>().downloads;
+                match result {
+                    Ok(path) => {
+                        log::info!("download: {model} ready at {}", path.display());
+                        downloads.remove(model);
+                        // The chosen model just arrived (first launch, or it was missing): load it.
+                        if cx.global::<AppSettings>().model == model && self.engine.is_none() {
+                            self.use_model(model, cx);
+                        }
+                    }
+                    Err(DownloadError::Cancelled) => {
+                        log::info!("download: {model} cancelled");
+                        downloads.remove(model);
+                    }
+                    Err(e) => {
+                        log::error!("download: {model}: {e} ({e:?})");
+                        downloads.insert(model, DownloadStatus::Failed { error: e.to_string() });
+                    }
+                }
+            }
+        }
+        cx.refresh_windows();
     }
 
     /// Changes the push-to-talk shortcut (from the Settings recorder).
@@ -608,7 +798,7 @@ impl Controller {
             self.ensure_right_option_tap(cx);
         }
         if new.model != old.model {
-            self.load_engine(&new.model, cx);
+            self.use_model(&new.model, cx);
         } else if new.keep_model_loaded != old.keep_model_loaded
             || new.app.unload_after_secs != old.app.unload_after_secs
         {

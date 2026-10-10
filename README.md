@@ -11,7 +11,8 @@ Website: [easyvox.dev](https://easyvox.dev)
 🚧 Early development, not usable yet. There's nothing to install.
 
 - The speech core (`crates/easyvox-core`) is in place and tested.
-- The app shell (`crates/easyvox-app`, built with [GPUI Kit](https://github.com/longbridge/gpui-kit)) is ported from the prototype: menu bar icon, ⌥Space push-to-talk, the live-text overlay, Settings and History. Onboarding and model downloads inside the app come next.
+- The app shell (`crates/easyvox-app`, built with [GPUI Kit](https://github.com/longbridge/gpui-kit)) is ported from the prototype: menu bar icon, ⌥Space push-to-talk, the live-text overlay, Settings and History.
+- Model downloads inside the app work underneath (download, sha256 check, then activate, through macOS's own networking, so system proxy settings apply), but nothing in the app starts one yet: the onboarding and Settings screens for that come next. Until then a missing model shows as "Not downloaded yet" in Settings.
 
 The plan and the decisions behind it are in [DESIGN.md](DESIGN.md).
 
@@ -22,7 +23,7 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 1. **Xcode** or the Command Line Tools (`xcode-select --install`). Apple's separate Metal toolchain isn't needed: GPUI and the speech runtime compile their Metal shaders when the app runs, not at build time. The cost moves to the first launch: the first model load takes about 14 s, once.
 2. **cmake**, which builds the speech runtime: `brew install cmake`.
 3. **Rust** through [rustup](https://rustup.rs). `rust-toolchain.toml` pins the version, and rustup installs it on the first build.
-4. **The speech model**, Parakeet TDT 0.6B v2 (~539 MB). The finished app will download it during onboarding; for development, fetch it yourself:
+4. **The speech model**, Parakeet TDT 0.6B v2 (~539 MB). The finished app downloads it during onboarding; for development, fetch it yourself (the script works on a fresh clone, before the first build):
 
    ```sh
    scripts/fetch-model.sh              # the default model
@@ -40,7 +41,14 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 
    # End-to-end engine tests. They need the model from step 4.
    cargo test -p easyvox-core --release -- --ignored
+
+   # Live download checks against Hugging Face, when the catalog changes: a HEAD of every
+   # offered model's URL, and a real 85 MB download into a temporary folder. They need the
+   # internet, so they also need this variable; without it they do nothing.
+   EASYVOX_LIVE_DOWNLOADS=1 cargo test -p easyvox-core --test download_live -- --ignored
    ```
+
+   `cargo test` covers the in-app downloader offline, against a small HTTP server on 127.0.0.1.
 
 6. **Make the app:**
 
@@ -52,7 +60,7 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 
    It writes `dist/EasyVox.app` and signs it ad hoc, which needs no certificate. macOS ties the Microphone and Accessibility permissions to the signature, so you may have to grant them again after each rebuild.
 
-   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), checks that an edit to the settings file applies live (on a temporary settings file, unless `EASYVOX_CONFIG` names one), writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
+   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), checks that an edit to the settings file applies live (on a temporary settings file, unless `EASYVOX_CONFIG` names one), downloads a file from a server of its own on 127.0.0.1 into a temporary folder (never the internet), checks that picking a model that isn't downloaded shows it as missing, writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy, the build and the tests on macOS 26 for pushes to `main` and for pull requests.
 

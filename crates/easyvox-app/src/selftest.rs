@@ -7,16 +7,23 @@
 //! The microphone is never opened (a test clip is replayed), ⌘V is never sent (the text is only
 //! copied), and history goes to a temporary database. The settings file is a temporary one too,
 //! unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then puts
-//! it back as it was.
+//! it back as it was. The model download check never touches the internet: it downloads from a
+//! server of its own on 127.0.0.1 into the temporary folder.
 
 use crate::controller::Controller;
 use crate::overlay::Mode;
 use crate::platform::{self, PanelState};
-use crate::state::{AppSettings, AppStatus, EngineStatus};
+use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
+use easyvox_core::download::Progress;
+use easyvox_core::models::{self, ModelInfo};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
 use serde_json::{Value, json};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// The clip replayed as if spoken (about 11 s), and its transcript in `testdata/manifest.tsv`.
@@ -157,6 +164,10 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
 
     config_live_reload(&controller, &mut report, cx).await;
     windows(&controller, &mut report, cx).await;
+    model_download(&controller, &options, &mut report, cx).await;
+    if engine_ready {
+        model_switch(&controller, &mut report, cx).await;
+    }
 
     let pass = report.failed == 0;
     let json = json!({
@@ -420,6 +431,177 @@ async fn windows(controller: &Entity<Controller>, report: &mut Report, cx: &mut 
         opened.is_some() && drawn == 2,
         json!({"menu_actions": format!("{clicked:?}"), "opened_ms": opened, "windows_drawn": drawn}),
     );
+}
+
+/// A model download through the controller, the way onboarding and Settings start one, from a
+/// server on 127.0.0.1 into the temporary folder: progress reaches `AppStatus`, a cancel
+/// leaves nothing behind, and a full download lands verified with its status cleared.
+async fn model_download(controller: &Entity<Controller>, options: &Options, report: &mut Report, cx: &mut AsyncApp) {
+    let payload: Vec<u8> = (0..2 * 1024 * 1024u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 11) as u8).collect();
+    let server = match LocalServer::start(payload.clone()) {
+        Ok(server) => server,
+        Err(e) => return report.check("model download from a local server", false, json!(e.to_string())),
+    };
+    use sha2::Digest as _;
+    let sha256: String = sha2::Sha256::digest(&payload).iter().map(|b| format!("{b:02x}")).collect();
+    let Ok(default) = models::find(easyvox_core::RECOMMENDED_MODEL) else { return };
+    let info: &'static ModelInfo = Box::leak(Box::new(ModelInfo {
+        id: "self-test-download",
+        path: "gguf/self-test.gguf",
+        download_url: String::leak(server.url()),
+        sha256: Some(String::leak(sha256)),
+        download_bytes: payload.len() as u64,
+        disk_bytes: payload.len() as u64,
+        ..default.clone()
+    }));
+    let dir = options.dir.join("models");
+    let start = |cx: &mut AsyncApp| {
+        let dir = dir.clone();
+        cx.update(|cx| controller.update(cx, |c, cx| c.start_download(info, dir, cx)));
+    };
+    let status = |cx: &mut App| cx.global::<AppStatus>().downloads.get(info.id).cloned();
+    let downloaded = |cx: &mut App| match status(cx) {
+        Some(DownloadStatus::Running(Progress::Downloading { done, .. })) => done,
+        _ => 0,
+    };
+
+    start(cx);
+    let progressed = wait_for(cx, Duration::from_secs(5), |cx| downloaded(cx) > 0).await;
+    cx.update(|cx| controller.update(cx, |c, _| c.cancel_download(info.id)));
+    let cleared =
+        wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).is_downloading(info.id) && status(cx).is_none())
+            .await;
+    let left = names_in(&dir.join("gguf"));
+    report.check(
+        "a cancelled model download leaves nothing behind",
+        progressed.is_some() && cleared.is_some() && left.is_empty(),
+        json!({"progress_ms": progressed, "cleared_ms": cleared, "files_left": left}),
+    );
+
+    start(cx);
+    let mut seen: Vec<u64> = vec![];
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(10) && cx.update(|cx| controller.read(cx).is_downloading(info.id)) {
+        let done = cx.update(downloaded);
+        if done > 0 && seen.last() != Some(&done) {
+            seen.push(done);
+        }
+        sleep(cx, 20).await;
+    }
+    let (busy, after) = cx.update(|cx| (controller.read(cx).is_downloading(info.id), status(cx)));
+    let path = info.resolve(&dir);
+    let size = std::fs::metadata(&path).map(|m| m.len()).ok();
+    let files = names_in(&dir.join("gguf"));
+    report.check(
+        "a model download from a local server shows progress and lands verified",
+        !busy
+            && after.is_none()
+            && !seen.is_empty()
+            && seen.windows(2).all(|w| w[0] <= w[1])
+            && size == Some(info.download_bytes)
+            && info.is_available(&dir)
+            && files == ["self-test.gguf"],
+        json!({"ms": started.elapsed().as_millis(), "progress_seen": seen, "status_after": format!("{after:?}"),
+               "size": size, "files": files, "requests": server.requests()}),
+    );
+}
+
+/// Picking a model that isn't downloaded frees the engine and shows it as missing; picking the
+/// default again loads it back. Skipped when every offered model is downloaded here.
+async fn model_switch(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    let models_dir = easyvox_core::paths::models_dir();
+    let original = cx.update(|cx| cx.global::<AppSettings>().model.clone());
+    let Some(missing) = models::offered().into_iter().find(|m| !m.is_available(&models_dir)) else {
+        return report.check("picking a model that isn't downloaded", true, json!("skipped: all are downloaded"));
+    };
+    cx.update(|cx| controller.update(cx, |c, cx| c.use_model(missing.id, cx)));
+    let (status, engine) =
+        cx.update(|cx| (cx.global::<AppStatus>().engine.clone(), controller.read(cx).engine.is_some()));
+    cx.update(|cx| controller.update(cx, |c, cx| c.use_model(&original, cx)));
+    let back = wait_for(cx, Duration::from_secs(30), |cx| {
+        matches!(cx.global::<AppStatus>().engine, EngineStatus::Ready { .. })
+            && controller.read(cx).engine.as_ref().is_some_and(|e| e.model_info().id == original)
+    })
+    .await;
+    report.check(
+        "picking a model that isn't downloaded shows it missing; picking the default loads it again",
+        matches!(status, EngineStatus::Missing) && !engine && back.is_some(),
+        json!({"missing": missing.id, "status": format!("{status:?}"), "engine_kept": engine, "reloaded_ms": back}),
+    );
+}
+
+/// The names in `dir`, hidden ones included.
+fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .map(|entries| entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+/// Serves one file over plain HTTP on 127.0.0.1, 64 KiB every 20 ms, so a download takes long
+/// enough to watch and to cancel. Stops when dropped.
+struct LocalServer {
+    port: u16,
+    requests: Arc<std::sync::Mutex<u32>>,
+    stop: Arc<AtomicBool>,
+}
+
+impl LocalServer {
+    fn start(payload: Vec<u8>) -> std::io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        let (stop, requests) = (Arc::new(AtomicBool::new(false)), Arc::new(std::sync::Mutex::new(0)));
+        let (stop2, requests2, payload) = (stop.clone(), requests.clone(), Arc::new(payload));
+        std::thread::Builder::new().name("self-test-http".into()).spawn(move || {
+            for stream in listener.incoming() {
+                if stop2.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Ok(stream) = stream else { continue };
+                if let Ok(mut n) = requests2.lock() {
+                    *n += 1;
+                }
+                let payload = payload.clone();
+                let _ = std::thread::Builder::new().spawn(move || serve_file(stream, &payload));
+            }
+        })?;
+        Ok(Self { port, requests, stop })
+    }
+
+    fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/resolve/0/self-test.gguf", self.port)
+    }
+
+    fn requests(&self) -> u32 {
+        self.requests.lock().map_or(0, |n| *n)
+    }
+}
+
+impl Drop for LocalServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let _ = TcpStream::connect(("127.0.0.1", self.port)); // wakes the accept loop
+    }
+}
+
+fn serve_file(mut stream: TcpStream, payload: &[u8]) {
+    let Ok(read_half) = stream.try_clone() else { return };
+    let mut reader = BufReader::new(read_half);
+    let mut line = String::new();
+    while reader.read_line(&mut line).is_ok_and(|n| n > 0) && line != "\r\n" {
+        line.clear();
+    }
+    let head = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", payload.len());
+    if stream.write_all(head.as_bytes()).is_err() {
+        return;
+    }
+    for piece in payload.chunks(64 * 1024) {
+        if stream.write_all(piece).is_err() {
+            return; // the download was cancelled
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn panel_state(controller: &Entity<Controller>, cx: &mut AsyncApp) -> PanelState {
