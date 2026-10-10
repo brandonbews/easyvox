@@ -1,11 +1,14 @@
-//! Pause detection: where to cut a long recording into chunks (see `chunks.rs`), and whether
-//! anything was said since the last preview pass ([`SpeechGate`]).
+//! Speech and pause detection: whether a recording holds any speech and where it starts
+//! ([`SpeechDetector`]), where to cut a long recording into chunks (see `chunks.rs`), and
+//! whether anything was said since the last preview pass ([`SpeechGate`]).
 //!
-//! Energy-based for now: a pause is a run of quiet 30 ms frames, and a frame is quiet when its
-//! level is well under the loud frames around it (their 90th percentile), or under a silence
-//! level whatever the level around. By default that's 20 dB under, or under about -55 dBFS
-//! (see [`Tuning`]'s `pause_*` and `gate_*` fields). It needs no model, but it can't tell a
-//! breath or room noise from speech. A VAD (e.g. Silero) can replace it behind these functions.
+//! Energy-based for now, on the levels of 30 ms frames. A pause is a run of quiet frames, and a
+//! frame is quiet when its level is well under the loud frames around it (their 90th
+//! percentile), or under a silence level whatever the level around. By default that's 20 dB
+//! under, or under about -55 dBFS (see [`Tuning`]'s `pause_*` and `gate_*` fields). Speech is
+//! the other way round: frames well above the quietest ones (`speech_*`). It needs no model,
+//! but it can't tell a breath, a cough or a loud room from speech. A VAD (e.g. Silero) can
+//! replace it behind these functions.
 
 use crate::SAMPLE_RATE;
 use crate::tuning::{Tuning, db_to_linear};
@@ -93,6 +96,78 @@ impl SpeechGate {
             return true;
         }
         false
+    }
+}
+
+/// Frames at or under this level (-100 dBFS) are digital silence, not the room: a Bluetooth
+/// microphone can start with a stretch of zeros.
+const DIGITAL_SILENCE: f32 = 1e-5;
+/// The room's level counts once this many frames (0.3 s) of it were heard.
+const MIN_ROOM_FRAMES: usize = 10;
+
+/// Whether a recording holds speech, and where it starts (the `speech_*` fields of [`Tuning`]).
+/// Until a recording holds speech the session decodes nothing, so silence or room noise gives
+/// empty text, with no final pass, instead of words a model made up. The first preview pass
+/// counts from where speech starts.
+///
+/// Speech is a run of `speech_min_ms` of frames louder than the room by `speech_above_noise_db`,
+/// or louder than `speech_loud_dbfs` whatever the room, and never at or under
+/// `gate_silence_dbfs`. The room is the recording's quietest frames, their 10th percentile,
+/// leaving out digital silence; until 0.3 s of it was heard, only `speech_loud_dbfs` counts.
+/// Every check reads the whole recording again against the room measured so far, so a guess
+/// made from the first few frames can't stick.
+pub(crate) struct SpeechDetector {
+    above_room: f32,
+    loud: f32,
+    silence: f32,
+    /// Frames of speech needed in a row; 0 takes every recording as speech.
+    min_frames: usize,
+    /// The level of every whole frame so far.
+    levels: Vec<f32>,
+}
+
+impl SpeechDetector {
+    pub(crate) fn new(t: &Tuning) -> Self {
+        Self {
+            above_room: db_to_linear(t.speech_above_noise_db),
+            loud: db_to_linear(t.speech_loud_dbfs),
+            silence: db_to_linear(t.gate_silence_dbfs),
+            min_frames: (t.speech_min_ms as usize).div_ceil(FRAME_MS),
+            levels: Vec::new(),
+        }
+    }
+
+    /// Where speech starts in `pcm`, the recording so far (a sample offset), or `None` if it
+    /// holds none yet. Call it again as the recording grows: only the new frames are measured.
+    pub(crate) fn onset(&mut self, pcm: &[f32]) -> Option<usize> {
+        if self.min_frames == 0 {
+            return Some(0);
+        }
+        let (measured, whole) = (self.levels.len() * FRAME, pcm.len() / FRAME * FRAME);
+        if whole > measured {
+            self.levels.extend(frame_levels(&pcm[measured..whole]));
+        }
+        let speech = self.speech_level();
+        let mut run = 0;
+        for (i, level) in self.levels.iter().enumerate() {
+            run = if *level > speech { run + 1 } else { 0 };
+            if run == self.min_frames {
+                return Some((i + 1 - run) * FRAME);
+            }
+        }
+        None
+    }
+
+    /// Frames louder than this are speech.
+    fn speech_level(&self) -> f32 {
+        let mut room: Vec<f32> = self.levels.iter().copied().filter(|level| *level > DIGITAL_SILENCE).collect();
+        let above_room = if room.len() >= MIN_ROOM_FRAMES {
+            let k = room.len() / 10;
+            *room.select_nth_unstable_by(k, f32::total_cmp).1 * self.above_room
+        } else {
+            f32::INFINITY
+        };
+        above_room.min(self.loud).max(self.silence)
     }
 }
 
@@ -267,6 +342,70 @@ pub(crate) mod tests {
         assert_eq!(decoding_ticks(&noise).len(), 5);
         // Digital silence never decodes.
         assert!(decoding_ticks(&audio(&[(2.0, 0.0)])).is_empty());
+    }
+
+    /// Feeds `pcm` to a speech detector every 100 ms, as the session does before the first
+    /// preview pass, and returns the onset (seconds) each check found.
+    fn onsets(t: &Tuning, pcm: &[f32]) -> Vec<Option<f32>> {
+        let mut speech = SpeechDetector::new(t);
+        (1..=pcm.len() / (SR / 10)).map(|i| speech.onset(&pcm[..i * SR / 10]).map(|at| at as f32 / SR as f32)).collect()
+    }
+
+    /// Where the detector finds speech once it has heard all of `pcm`, checking as it goes.
+    fn onset(pcm: &[f32]) -> Option<f32> {
+        onsets(&Tuning::default(), pcm).last().copied().flatten()
+    }
+
+    #[test]
+    fn speech_starts_where_the_voice_does() {
+        // Digital silence (a Bluetooth mic starting), room noise at -46 dBFS, then a voice.
+        let pcm = audio(&[(0.5, 0.0), (0.5, 0.007), (1.0, 0.3)]);
+        let at = onset(&pcm).unwrap();
+        assert!((0.97..=1.0).contains(&at), "{at}");
+        // A voice from the first frame, with no quiet frames to measure the room by, counts at
+        // once (it's louder than `speech_loud_dbfs`).
+        let checks = onsets(&Tuning::default(), &audio(&[(1.0, 0.3)]));
+        assert_eq!(checks[1], Some(0.0), "{checks:?}");
+    }
+
+    #[test]
+    fn silence_room_noise_and_clicks_hold_no_speech() {
+        assert_eq!(onset(&audio(&[(2.0, 0.0)])), None);
+        // Room noise at -46 dBFS, even right after digital silence.
+        assert_eq!(onset(&audio(&[(0.5, 0.0), (3.0, 0.007)])), None);
+        // A 60 ms click in the room: too short to be speech.
+        assert_eq!(onset(&audio(&[(1.0, 0.007), (0.06, 0.3), (1.0, 0.007)])), None);
+        // A short word is long enough.
+        let at = onset(&audio(&[(1.0, 0.007), (0.15, 0.3), (1.0, 0.007)])).unwrap();
+        assert!((0.97..=1.0).contains(&at), "{at}");
+    }
+
+    #[test]
+    fn a_soft_voice_counts_against_a_quiet_room() {
+        // A voice at -43 dBFS, under `speech_loud_dbfs`, but 30 dB over a room at -73 dBFS.
+        let at = onset(&audio(&[(1.0, 0.0003), (0.5, 0.01)])).unwrap();
+        assert!((0.97..=1.0).contains(&at), "{at}");
+        // ...and 12 dB over a room at -55 dBFS, where a soft voice on a laptop's own mic may
+        // sit. Over a room at -46 dBFS it's only 3 dB louder: not speech.
+        let at = onset(&audio(&[(1.0, 0.0025), (0.5, 0.01)])).unwrap();
+        assert!((0.97..=1.0).contains(&at), "{at}");
+        assert_eq!(onset(&audio(&[(1.0, 0.007), (0.5, 0.01)])), None);
+    }
+
+    #[test]
+    fn a_guess_from_the_first_frames_does_not_stick() {
+        // Digital silence, one frame fading in (-87 dBFS), then room noise at -50 dBFS. Against
+        // the faded frame alone, the room would pass for speech; every check reads it again.
+        let mut pcm = audio(&[(0.15, 0.0)]);
+        pcm.extend(std::iter::repeat_n(0.00006, FRAME));
+        pcm.extend(audio(&[(2.0, 0.0045)]));
+        assert!(onsets(&Tuning::default(), &pcm).iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn speech_min_ms_zero_takes_every_recording_as_speech() {
+        let t = Tuning { speech_min_ms: 0, ..Tuning::default() };
+        assert_eq!(onsets(&t, &audio(&[(0.5, 0.0)])).last(), Some(&Some(0.0)));
     }
 
     #[test]

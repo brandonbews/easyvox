@@ -1,6 +1,6 @@
 //! Every number that shapes how dictation feels or what it costs, in one place: how often the
 //! preview re-decodes and how much, how long dictations are cut into chunks and joined again,
-//! and what counts as a pause.
+//! and what counts as speech or a pause.
 //!
 //! The defaults here are the single source of truth: the settings file (`[advanced]`) or a
 //! benchmark overrides single fields and leaves the rest alone, so a default can change in a
@@ -11,8 +11,9 @@
 //! Units, the same for every field, and named by the key's ending:
 //! - durations are whole milliseconds (`_ms`);
 //! - loudness is in decibels of RMS level: a `_db` is relative to another level (-20 is a
-//!   tenth of it, 0 the same), a `_dbfs` relative to full scale (0 is the loudest a sample can
-//!   be; -55 is about 0.0018). [`db_to_linear`] turns them into the levels the code compares;
+//!   tenth of it, 0 the same, 20 ten times it), a `_dbfs` relative to full scale (0 is the
+//!   loudest a sample can be; -55 is about 0.0018). [`db_to_linear`] turns them into the
+//!   levels the code compares;
 //! - counts are whole numbers (`_words`, `_passes`).
 
 use crate::SAMPLE_RATE;
@@ -109,7 +110,7 @@ macro_rules! tunables {
 
 tunables! {
     /// The pipeline's tuning: the live preview, the chunks polished while you talk, how they're
-    /// joined, and how pauses are found. See the module docs for the units.
+    /// joined, and how speech and pauses are found. See the module docs for the units.
     ///
     /// Build it with `Tuning::default()` and change fields, or by name with [`Tuning::set`];
     /// [`Tuning::validate`] puts out-of-range values back to their defaults.
@@ -122,6 +123,13 @@ tunables! {
         /// being said; past it the saving flattens while the lag keeps growing
         /// (`docs/model-bench.md`, "Lightness").
         preview_interval_ms: u32 = 1_600, 0..=10_000;
+        /// When the first preview pass runs: once this much audio has followed the start of
+        /// speech (see `speech_above_noise_db`). Until the preview shows words, the next passes
+        /// come as often (at least 100 ms apart), then every `preview_interval_ms`. Lower shows
+        /// the first words sooner, but a first pass with too little speech shows nothing and
+        /// costs another; higher keeps you waiting for the first words. It's a pass or two per
+        /// dictation, so it costs almost nothing.
+        preview_first_ms: u32 = 500, 0..=10_000;
         /// The most recent audio one preview pass decodes, at most. A pass normally starts just
         /// before the confirmed words (`preview_context_ms`), so it's usually much shorter; this
         /// only caps it while passes keep disagreeing and nothing gets confirmed. Lower makes
@@ -137,8 +145,9 @@ tunables! {
         /// doesn't depend on it. 120000 decodes everything since the last cut, much as the
         /// preview did before this setting existed.
         preview_context_ms: u32 = 1_000, 0..=120_000;
-        /// Audio needed before the first preview pass. Lower can show the first word a moment
-        /// sooner, but spends a pass on too little audio to decode.
+        /// Audio needed before the first preview pass, counted from the start of the recording
+        /// (the pass also waits for `preview_first_ms` of speech). Lower can show the first word
+        /// a moment sooner, but spends a pass on too little audio to decode.
         preview_min_audio_ms: u32 = 300, 0..=5_000;
         /// Rest between two preview passes when they can't keep up with `preview_interval_ms`
         /// (a pass, or a chunk polished in the same tick, took longer than the interval). Higher
@@ -162,10 +171,30 @@ tunables! {
         /// room noise, but may skip soft words until a louder one comes; lower errs towards
         /// decoding. The final text decodes everything either way.
         gate_quiet_db: f32 = -20.0, -60.0..=0.0;
-        /// Speech gate: ...and louder than this, so that before any speech only near-silence
-        /// lets the preview rest. Higher ignores more background noise; lower counts fainter
-        /// sounds as speech.
+        /// Speech gate: ...and louder than this. Higher ignores more background noise; lower
+        /// counts fainter sounds as speech. Nothing at or under it counts as speech for
+        /// `speech_above_noise_db` either.
         gate_silence_dbfs: f32 = -55.0, -120.0..=0.0;
+        /// Speech detection: a 30 ms frame counts as speech when it's this much louder than the
+        /// room, which is the recording's quietest frames (their 10th percentile, once there's
+        /// 0.3 s of sound; digital silence doesn't count). Until a recording holds speech,
+        /// nothing is decoded: no preview, no final pass. So a recording of silence or room
+        /// noise gives empty text, where a model could make up words (Whisper wrote "you" for
+        /// 2 s of silence). Missing speech would lose the whole dictation, so this errs low: 6
+        /// still catches a soft voice whose loudest moments are only 10 dB over the room, and
+        /// a steady room stays under it. Higher ignores louder noises (a breath, a chair), but
+        /// may miss a soft voice; lower takes fainter sounds for speech.
+        speech_above_noise_db: f32 = 6.0, 0.0..=60.0;
+        /// Speech detection: ...or louder than this, however loud the room. It catches speech
+        /// that starts at once, before any quiet frames show how loud the room is, and speech
+        /// in a loud room. Higher can hold the first words back until the room is measured;
+        /// lower can take a loud room's noise for speech.
+        speech_loud_dbfs: f32 = -35.0, -120.0..=0.0;
+        /// Speech detection: frames like that must follow each other for this long (rounded up
+        /// to whole 30 ms frames), so a click or a bump isn't speech. Higher ignores longer
+        /// noises, but may miss a very short word. 0 treats every recording as speech from its
+        /// start, and decodes it all.
+        speech_min_ms: u32 = 120, 0..=10_000;
         /// Once this much audio waits unpolished, the oldest stretch is cut at a pause and
         /// decoded in final mode while you keep talking; release then only waits for the rest.
         /// Chunks come out 0.5 to 2 times this long: the cut goes in the longest pause in the

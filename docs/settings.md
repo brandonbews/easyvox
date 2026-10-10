@@ -32,12 +32,12 @@ Problems show under **Settings → General → Settings file**, and in the log (
 
 ## Loudness is in decibels
 
-Four keys say how loud is "quiet": `gate_quiet_db` and `pause_quiet_db` compare with your own speech, and `gate_silence_dbfs` and `pause_silence_dbfs` with the loudest sound a microphone can record.
+Six keys say how loud is "quiet" or "speech": `gate_quiet_db` and `pause_quiet_db` compare with your own speech, `speech_above_noise_db` with the room, and `gate_silence_dbfs`, `pause_silence_dbfs` and `speech_loud_dbfs` with the loudest sound a microphone can record.
 
-- **dB** (`_db`) is relative to another level. -20 dB is a tenth of it, -6 dB about half, 0 dB the same.
+- **dB** (`_db`) is relative to another level. -20 dB is a tenth of it, -6 dB about half, 0 dB the same, and 20 dB ten times it.
 - **dBFS** (`_dbfs`) is relative to full scale, the loudest a sample can be (0 dBFS). In the recordings EasyVox was tuned on (AirPods in an office), speech is about -17 dBFS and the room about -50 dBFS.
 
-Both are always 0 or below. Closer to 0 means louder. Before October 2026 these were linear levels (0.1 and 0.0018); the defaults moved to -20 dB and -55 dBFS, and behave the same on every test clip.
+The `_dbfs` keys are always 0 or below, and so are the two `_quiet_db` keys; `speech_above_noise_db` is 0 or above, since speech is louder than the room. Closer to 0 dBFS means louder. Before October 2026 the `gate_*` and `pause_*` levels were linear (0.1 and 0.0018); the defaults moved to -20 dB and -55 dBFS, and behave the same on every test clip.
 
 ## Examples
 
@@ -72,6 +72,14 @@ gate_quiet_db = -14
 gate_silence_dbfs = -45
 ```
 
+A recording with no speech in it gives no text: nothing is decoded, nothing is pasted, and the overlay says it didn't catch anything. The check errs towards decoding, but if it ever happens to you while you did speak (a whisper, or a microphone turned right down in a noisy room), count fainter sounds as speech. `speech_min_ms = 0` turns the check off, and decodes every recording.
+
+```toml
+[advanced]
+speech_above_noise_db = 3
+speech_loud_dbfs = -45
+```
+
 ## Every key
 
 Each key, at its default, with its unit, its range and what raising or lowering it trades off. The app prints the same text: `easyvox --print-default-config` (in a build, `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config`; from source, `cargo run -p easyvox-app -- --print-default-config`). A test keeps this page in step with the code.
@@ -103,7 +111,8 @@ keep_model_loaded = false
 
 [advanced]
 # Settings the window doesn't show: how long the overlay stays up and the model stays
-# loaded, then the numbers behind the live preview, the chunks and the pauses.
+# loaded, then the numbers behind the live preview, the chunks, and what counts as
+# speech or a pause.
 
 # How long EasyVox keeps the speech model in memory after your last dictation, unless
 # "Keep model loaded" is on. Freeing it takes the app from about 670 MB to about
@@ -138,6 +147,15 @@ overlay_max_chars = 72
 # In milliseconds, from 0 to 10000.
 preview_interval_ms = 1600
 
+# When the first preview pass runs: once this much audio has followed the start of
+# speech (see `speech_above_noise_db`). Until the preview shows words, the next passes
+# come as often (at least 100 ms apart), then every `preview_interval_ms`. Lower shows
+# the first words sooner, but a first pass with too little speech shows nothing and
+# costs another; higher keeps you waiting for the first words. It's a pass or two per
+# dictation, so it costs almost nothing.
+# In milliseconds, from 0 to 10000.
+preview_first_ms = 500
+
 # The most recent audio one preview pass decodes, at most. A pass normally starts just
 # before the confirmed words (`preview_context_ms`), so it's usually much shorter; this
 # only caps it while passes keep disagreeing and nothing gets confirmed. Lower makes
@@ -157,8 +175,9 @@ preview_window_ms = 20000
 # In milliseconds, from 0 to 120000.
 preview_context_ms = 1000
 
-# Audio needed before the first preview pass. Lower can show the first word a moment
-# sooner, but spends a pass on too little audio to decode.
+# Audio needed before the first preview pass, counted from the start of the recording
+# (the pass also waits for `preview_first_ms` of speech). Lower can show the first word
+# a moment sooner, but spends a pass on too little audio to decode.
 # In milliseconds, from 0 to 5000.
 preview_min_audio_ms = 300
 
@@ -194,11 +213,37 @@ gate_settle_passes = 2
 # In dB (relative to another level), from -60 to 0.
 gate_quiet_db = -20
 
-# Speech gate: ...and louder than this, so that before any speech only near-silence
-# lets the preview rest. Higher ignores more background noise; lower counts fainter
-# sounds as speech.
+# Speech gate: ...and louder than this. Higher ignores more background noise; lower
+# counts fainter sounds as speech. Nothing at or under it counts as speech for
+# `speech_above_noise_db` either.
 # In dBFS (decibels relative to full scale), from -120 to 0.
 gate_silence_dbfs = -55
+
+# Speech detection: a 30 ms frame counts as speech when it's this much louder than the
+# room, which is the recording's quietest frames (their 10th percentile, once there's
+# 0.3 s of sound; digital silence doesn't count). Until a recording holds speech,
+# nothing is decoded: no preview, no final pass. So a recording of silence or room
+# noise gives empty text, where a model could make up words (Whisper wrote "you" for
+# 2 s of silence). Missing speech would lose the whole dictation, so this errs low: 6
+# still catches a soft voice whose loudest moments are only 10 dB over the room, and
+# a steady room stays under it. Higher ignores louder noises (a breath, a chair), but
+# may miss a soft voice; lower takes fainter sounds for speech.
+# In dB (relative to another level), from 0 to 60.
+speech_above_noise_db = 6
+
+# Speech detection: ...or louder than this, however loud the room. It catches speech
+# that starts at once, before any quiet frames show how loud the room is, and speech
+# in a loud room. Higher can hold the first words back until the room is measured;
+# lower can take a loud room's noise for speech.
+# In dBFS (decibels relative to full scale), from -120 to 0.
+speech_loud_dbfs = -35
+
+# Speech detection: frames like that must follow each other for this long (rounded up
+# to whole 30 ms frames), so a click or a bump isn't speech. Higher ignores longer
+# noises, but may miss a very short word. 0 treats every recording as speech from its
+# start, and decodes it all.
+# In milliseconds, from 0 to 10000.
+speech_min_ms = 120
 
 # Once this much audio waits unpolished, the oldest stretch is cut at a pause and
 # decoded in final mode while you keep talking; release then only waits for the rest.

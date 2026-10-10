@@ -5,11 +5,12 @@
 //! without touching it.
 //!
 //! Every model takes the same path, and all it has to do is turn audio into words with timings
-//! ([`SpeechModel`]). While the key is held, the session re-decodes the newest audio every
-//! second or two for the preview, and polishes finished chunks of a long dictation in the
-//! background. On release it decodes only what's left, so the final text arrives in well under
-//! a second at any length. The numbers that shape all this, and their defaults, are in
-//! [`Tuning`].
+//! ([`SpeechModel`]). While the key is held, the session re-decodes the newest audio for the
+//! preview, first half a second after you start speaking and then every second or two, and
+//! polishes finished chunks of a long dictation in the background. On release it decodes only
+//! what's left, so the final text arrives in well under a second at any length. A recording
+//! without speech isn't decoded at all, and its final text is empty. The numbers that shape
+//! all this, and their defaults, are in [`Tuning`].
 //!
 //! ```no_run
 //! use easyvox_core::*;
@@ -109,6 +110,9 @@ pub enum TranscriptEvent {
     /// `WavReplay` file runs out. Every word comes from a `Final`-mode decode (the chunks
     /// polished while recording, then the rest), so it can differ from the preview, and the UI
     /// replaces the preview with it.
+    ///
+    /// Empty when the recording held no speech (silence or room noise; see [`Tuning`]'s
+    /// `speech_*`): then nothing was decoded at all, the same for every model.
     Final { text: String, audio_secs: f32, finalize_ms: u32 },
     /// A problem during the session (the mic delivered silence, a decode failed, ...).
     /// A `Final` still follows.

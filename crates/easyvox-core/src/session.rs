@@ -1,10 +1,13 @@
 //! Push-to-talk session: a capture thread and a decode worker, the same for every model.
 //!
 //! Capture starts at once. The worker first makes sure the model is loaded (reloading it if the
-//! engine was unloaded while idle; the audio meanwhile just buffers), then ticks every
-//! `preview_interval_ms` ([`Tuning`], the session's own copy, taken when it started) while the
-//! key is held. Each tick it polishes the oldest chunk in `Final` mode if enough audio waits
-//! (`chunks.rs`), then re-decodes the newest audio in `Partial` mode for the preview,
+//! engine was unloaded while idle; the audio meanwhile just buffers), then waits for speech
+//! (`pause::SpeechDetector`): until the recording holds some, nothing is decoded, and a
+//! recording that never does ends with an empty `Final` and no decode at all. The first tick
+//! comes once `preview_first_ms` of audio has followed the start of speech, the next ones as
+//! often until the preview shows words, then every `preview_interval_ms` ([`Tuning`], the
+//! session's own copy, taken when it started) while the key is held. Each tick it polishes the oldest chunk in `Final` mode if enough audio
+//! waits (`chunks.rs`), then re-decodes the newest audio in `Partial` mode for the preview,
 //! confirming words once two passes agree (`partials.rs`). That pass starts just before the
 //! confirmed words (`preview_context_ms`), so it only decodes what may still change. A tick
 //! skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
@@ -13,7 +16,7 @@
 use crate::audio::{MicInfo, SharedAudio};
 use crate::chunks::{self, Chunker, Polished};
 use crate::partials::LocalAgreement;
-use crate::pause::SpeechGate;
+use crate::pause::{SpeechDetector, SpeechGate};
 use crate::tuning::{Tuning, ms_samples};
 use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,6 +32,8 @@ const SR: usize = SAMPLE_RATE as usize;
 const POLISH_TICK_MS: u32 = 400;
 /// The preview window never gets shorter than this, whatever `preview_window_ms` says.
 const MIN_WINDOW_MS: u32 = 2_000;
+/// How often the worker looks for speech until it has heard some.
+const SPEECH_POLL: Duration = Duration::from_millis(100);
 
 /// Counters a session collects (for benchmarks and diagnostics).
 #[derive(Clone, Debug, Default)]
@@ -56,6 +61,9 @@ pub struct SessionStats {
     pub final_wait_ms: f64,
     /// Final decode of what was left unpolished (incl. VAD trim).
     pub final_decode_ms: f64,
+    /// Where speech started, in seconds of audio (`pause::SpeechDetector`). `None`: the
+    /// recording held none, so nothing was decoded and the final text is empty.
+    pub speech_onset_secs: Option<f32>,
     /// Confirmed partial text at the moment the final pass started.
     pub confirmed_at_stop: String,
     pub audio_secs: f32,
@@ -234,29 +242,43 @@ impl Worker {
         let mut gate = SpeechGate::new(t);
         let preview_on = t.preview_interval_ms > 0;
         let interval = Duration::from_millis(if preview_on { t.preview_interval_ms } else { POLISH_TICK_MS } as u64);
+        // Until the preview shows words, passes come as often as the first one (some models need
+        // more than `preview_first_ms` of speech before they write anything).
+        let until_words = Duration::from_millis(t.preview_first_ms as u64).max(SPEECH_POLL);
         let window = ms_samples(t.preview_window_ms.max(MIN_WINDOW_MS));
         let context = ms_samples(t.preview_context_ms);
         let min_audio = ms_samples(t.preview_min_audio_ms);
         let min_gap = Duration::from_millis(t.preview_min_gap_ms as u64);
         let mut anchor = 0usize;
         let mut decoded_len = 0usize;
-        // The first tick comes one interval after the start, or at once if loading the model
-        // took longer than that.
-        let mut next = (started + interval).max(Instant::now());
+        let mut speech = SpeechDetector::new(t);
+        // Where speech starts, once the first tick has come. Nothing is decoded before.
+        let mut onset = None;
+        let mut next = Instant::now();
         let mut last = (String::new(), String::new());
         loop {
-            // Sleep until the next tick (new audio alone doesn't wake us early).
-            loop {
-                self.wait(next, usize::MAX);
-                if self.done() || Instant::now() >= next {
+            if onset.is_none() {
+                // The first tick: once the recording holds speech (and, with the preview on,
+                // enough of it for the first pass).
+                onset = self.wait_for_speech(&mut speech, started, &mut warned);
+                if onset.is_none() {
                     break;
+                }
+            } else {
+                // Sleep until the next tick (new audio alone doesn't wake us early).
+                loop {
+                    self.wait(next, usize::MAX);
+                    if self.done() || Instant::now() >= next {
+                        break;
+                    }
                 }
             }
             self.mic_checks(started, &mut warned);
             if self.done() {
                 break;
             }
-            next = Instant::now() + interval;
+            let shown = !(last.0.is_empty() && last.1.is_empty());
+            next = Instant::now() + if preview_on && !shown { until_words } else { interval };
             if self.polish_chunk(model, &chunker, &mut polished) {
                 // The preview keeps only what follows the polished words, and its window moves
                 // up to the cut (less the chunks' context).
@@ -327,17 +349,48 @@ impl Worker {
                 next = Instant::now() + min_gap;
             }
         }
-        // Released: polish the rest.
+        // Released: polish the rest, if the recording held any speech. Once the first tick has
+        // come it did, whatever the room sounds like by now.
         let end = self.end_instant();
         let t = Instant::now();
         let confirmed = preview(&polished, &la).0;
-        let (pcm, span) = {
-            let a = self.audio.samples.lock().unwrap();
-            let span = polished.span(a.len(), a.len());
-            (a[span.clone()].to_vec(), span)
-        };
-        polished.add(&self.decode_final(model, &pcm, span.start), span, None);
+        let onset = onset.or_else(|| speech.onset(&self.audio.samples.lock().unwrap()));
+        self.ctl.stats.lock().unwrap().speech_onset_secs = onset.map(|at| at as f32 / SR as f32);
+        if onset.is_some() {
+            let (pcm, span) = {
+                let a = self.audio.samples.lock().unwrap();
+                let span = polished.span(a.len(), a.len());
+                (a[span.clone()].to_vec(), span)
+            };
+            polished.add(&self.decode_final(model, &pcm, span.start), span, None);
+        }
         self.finish(polished.text(), end, t, confirmed);
+    }
+
+    /// Waits for the first tick: until the recording holds speech and, with the preview on,
+    /// `preview_first_ms` of audio has followed its start (and `preview_min_audio_ms` in all).
+    /// Returns where speech starts, or `None` if the input ended first.
+    fn wait_for_speech(&self, speech: &mut SpeechDetector, started: Instant, warned: &mut bool) -> Option<usize> {
+        let t = &self.tuning;
+        let (after, min_audio) = match t.preview_interval_ms {
+            0 => (0, 0),
+            _ => (ms_samples(t.preview_first_ms), ms_samples(t.preview_min_audio_ms)),
+        };
+        let mut due = usize::MAX;
+        loop {
+            // Look again every 100 ms, or as soon as the audio reaches the first tick.
+            self.wait(Instant::now() + SPEECH_POLL, due.saturating_sub(1));
+            self.mic_checks(started, warned);
+            if self.done() {
+                return None;
+            }
+            let a = self.audio.samples.lock().unwrap();
+            let onset = speech.onset(&a);
+            due = onset.map_or(usize::MAX, |at| (at + after).max(min_audio));
+            if a.len() >= due {
+                return onset;
+            }
+        }
     }
 
     /// The eager final pass: if enough audio waits unpolished, decode the oldest chunk in
@@ -400,4 +453,80 @@ fn preview(polished: &Polished, la: &LocalAgreement) -> (String, String) {
     let confirmed = [polished.text(), chunks::join(&polished.without_repeat(la.confirmed_words().to_vec()))];
     let confirmed = confirmed.into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" ");
     (confirmed, la.provisional_text().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pause::tests::audio;
+    use crate::{Engine, EngineConfig, Hypothesis, ModelInfo, models};
+    use std::sync::atomic::AtomicU32;
+
+    /// A model that hears "hello" in anything, and counts its decodes.
+    #[derive(Default)]
+    struct Counting {
+        decodes: AtomicU32,
+    }
+
+    impl SpeechModel for Counting {
+        fn info(&self) -> &ModelInfo {
+            &models::catalog()[0]
+        }
+
+        fn transcribe(&self, _pcm: &[f32], _mode: DecodeMode) -> anyhow::Result<Hypothesis> {
+            self.decodes.fetch_add(1, Ordering::SeqCst);
+            Ok(Hypothesis { text: "hello".into(), words: vec![] })
+        }
+    }
+
+    /// Replays `pcm` in real time through a session on a [`Counting`] model. Returns the final
+    /// text, the number of decodes and the session's counters.
+    fn replay(name: &str, pcm: &[f32]) -> (String, u32, SessionStats) {
+        let dir = std::env::temp_dir().join(format!("easyvox-session-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = dir.join(format!("{name}.wav"));
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: SAMPLE_RATE,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = hound::WavWriter::create(&wav, spec).unwrap();
+        pcm.iter().for_each(|x| writer.write_sample(*x).unwrap());
+        writer.finalize().unwrap();
+        let model = Arc::new(Counting::default());
+        let engine = Engine::from_model(model.clone(), EngineConfig::new("counting", &dir)).unwrap();
+        let (session, events) = engine.start(AudioSource::WavReplay(wav.clone())).unwrap();
+        let text = loop {
+            if let TranscriptEvent::Final { text, .. } = events.recv_timeout(Duration::from_secs(10)).unwrap() {
+                break text;
+            }
+        };
+        session.join();
+        let _ = std::fs::remove_file(&wav);
+        (text, model.decodes.load(Ordering::SeqCst), session.stats())
+    }
+
+    #[test]
+    fn silence_and_room_noise_are_never_decoded() {
+        // Digital silence, and room noise at -46 dBFS after a Bluetooth mic's first zeros.
+        for (name, pcm) in [("silence", audio(&[(1.5, 0.0)])), ("room", audio(&[(0.3, 0.0), (1.5, 0.007)]))] {
+            let (text, decodes, stats) = replay(name, &pcm);
+            assert_eq!((text.as_str(), decodes, stats.speech_onset_secs), ("", 0, None), "{name}");
+            assert!(stats.finished, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_short_word_is_previewed_soon_after_it_starts_and_decoded() {
+        // A 0.3 s word after 0.4 s of room noise, then 0.6 s more. The first preview pass comes
+        // 0.5 s after the word starts, long before the 1.6 s interval.
+        let pcm = audio(&[(0.4, 0.007), (0.3, 0.3), (0.6, 0.007)]);
+        let (text, decodes, stats) = replay("word", &pcm);
+        assert_eq!(text, "hello");
+        let onset = stats.speech_onset_secs.unwrap();
+        assert!((0.37..=0.4).contains(&onset), "{onset}");
+        assert_eq!(stats.partial_passes, 1);
+        assert_eq!(decodes, 2, "one preview pass and the final pass");
+    }
 }

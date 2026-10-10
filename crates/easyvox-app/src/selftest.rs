@@ -1,6 +1,6 @@
 //! `--self-test` (feature `self-test`): runs the real app through scripted dictations and
 //! checks it from the inside, for a Mac nobody is looking at (screen locked, no key presses):
-//! one with the model loaded, then one right after the idle timeout freed it.
+//! one with the model loaded, one right after the idle timeout freed it, and one of silence.
 //! It writes a JSON report and exits 0 through the tray's Quit item when every check passes,
 //! or 1 otherwise.
 //!
@@ -158,6 +158,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
         (true, Some(id)) => {
             dictation(&controller, id, &options, &mut report, cx).await;
             dictation_after_unload(&controller, id, &mut report, cx).await;
+            silence(&controller, id, &mut report, cx).await;
         }
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
@@ -357,6 +358,49 @@ async fn dictation_after_unload(
         json!({"start_ms": started, "status_at_start": format!("{status_at_start:?}"),
                "first_words_ms": first_words_ms, "status_after": format!("{status_after:?}"),
                "release_to_idle_ms": finished, "text": final_text, "wer": wer}),
+    );
+}
+
+/// A press with nothing said (the silent test clip): the core decodes nothing and sends empty
+/// text, so nothing is copied or saved, and the overlay says so, then hides.
+async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
+    cx.update(|cx| {
+        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join("silence_2s.wav")))
+    });
+    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let clipboard_before = platform::clipboard_change_count();
+    let pressed = platform::post_hotkey_event(hotkey_id, true);
+    let started = wait_for(cx, Duration::from_secs(1), |cx| !controller.read(cx).is_idle()).await;
+    sleep(cx, 1500).await;
+    let released = platform::post_hotkey_event(hotkey_id, false);
+    let finished = wait_for(cx, Duration::from_secs(5), |cx| controller.read(cx).is_idle()).await;
+    let (mode, notice) = cx.update(|cx| {
+        let view = controller.read(cx).overlay.view.read(cx);
+        (view.mode, view.text())
+    });
+    let notice_ms = cx.update(|cx| cx.global::<AppSettings>().app.overlay_hide_after_notice_ms);
+    let hidden = wait_for(cx, Duration::from_millis(u64::from(notice_ms) + 2000), |cx| {
+        !controller.read(cx).overlay.panel.state().visible
+    })
+    .await;
+    let history_after = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let clipboard_after = platform::clipboard_change_count();
+    cx.update(|cx| {
+        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join(format!("{CLIP}.wav"))))
+    });
+    report.check(
+        "silence pastes and saves nothing, and the overlay says so",
+        pressed == 0
+            && released == 0
+            && started.is_some()
+            && finished.is_some()
+            && mode == Mode::Notice
+            && hidden.is_some()
+            && history_after == history_before
+            && clipboard_after == clipboard_before,
+        json!({"release_to_idle_ms": finished, "overlay": notice, "hidden_after_ms": hidden,
+               "history_entries_added": history_after - history_before,
+               "clipboard_changed": clipboard_after != clipboard_before}),
     );
 }
 

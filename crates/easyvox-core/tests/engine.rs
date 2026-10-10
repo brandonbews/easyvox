@@ -6,7 +6,7 @@
 #![cfg(feature = "transcribe-cpp")]
 
 use easyvox_core::{AudioSource, Engine, EngineConfig, RECOMMENDED_MODEL, TranscriptEvent, Tuning, models, paths};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 fn clip(name: &str) -> PathBuf {
@@ -36,7 +36,15 @@ fn replay_with(
     name: &str,
     tuning: Tuning,
 ) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
-    let (session, events) = engine.start_with(AudioSource::WavReplay(clip(name)), tuning).unwrap();
+    replay_wav(engine, &clip(name), tuning)
+}
+
+fn replay_wav(
+    engine: &Engine,
+    wav: &Path,
+    tuning: Tuning,
+) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
+    let (session, events) = engine.start_with(AudioSource::WavReplay(wav.to_path_buf()), tuning).unwrap();
     let mut partials = vec![];
     let final_text = loop {
         match events.recv_timeout(Duration::from_secs(30)).expect("session stalled") {
@@ -160,4 +168,52 @@ fn each_session_takes_its_own_tuning_without_a_reload() {
     assert!(partials.len() >= 3 && stats.chunks == 0, "{} partials, {} chunks", partials.len(), stats.chunks);
     assert!(stats.model_wait_ms < 50.0, "the session waited {:.0} ms for the model: it reloaded", stats.model_wait_ms);
     assert_eq!(engine.load_ms(), load_ms, "the model loaded again");
+}
+
+/// 3 s of room noise: 0.3 s of digital silence (a Bluetooth mic starting), then white noise at
+/// about -50 dBFS, the level of the room in the author's own recordings.
+fn room_noise_wav() -> PathBuf {
+    let path = std::env::temp_dir().join(format!("easyvox-room-noise-{}.wav", std::process::id()));
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 16_000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create(&path, spec).unwrap();
+    let mut state = 0x2545_f491_u32;
+    for i in 0..48_000 {
+        // xorshift: uniform in -1..1, times 0.0055 for an RMS of about 0.0032 (-50 dBFS).
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        let x = if i < 4_800 { 0.0 } else { (state as f32 / u32::MAX as f32 * 2.0 - 1.0) * 0.0055 };
+        writer.write_sample((x * 32_768.0) as i16).unwrap();
+    }
+    writer.finalize().unwrap();
+    path
+}
+
+/// No speech, no decode: silence and room noise give empty text on every model the app offers
+/// (Whisper base.en wrote "you" for the silent clip), and a short command still comes through.
+#[test]
+#[ignore = "needs the offered models (scripts/fetch-model.sh)"]
+fn silence_and_room_noise_give_empty_text_on_every_offered_model() {
+    let dir = paths::models_dir();
+    let noise = room_noise_wav();
+    for info in models::offered() {
+        assert!(info.is_available(&dir), "{} is missing; run scripts/fetch-model.sh {}", info.id, info.id);
+        let engine = Engine::load(EngineConfig::new(info.id, &dir)).expect("load model");
+        let tuning = engine.config().tuning;
+        for wav in [clip("silence_2s.wav"), noise.clone()] {
+            let (partials, text, stats) = replay_wav(&engine, &wav, tuning);
+            let decoded = (partials.len(), stats.partial_passes, stats.chunks, stats.speech_onset_secs);
+            assert_eq!((text.as_str(), decoded), ("", (0, 0, 0, None)), "{} on {}", info.id, wav.display());
+        }
+        let (partials, text, stats) = replay(&engine, "cmd_moira.wav");
+        let errors = word_errors("Turn off the lights in the kitchen.", &text);
+        assert!(errors <= 1 && !partials.is_empty(), "{}: {text:?}, {} partials", info.id, partials.len());
+        assert_eq!(stats.speech_onset_secs, Some(0.0), "{}", info.id);
+    }
+    let _ = std::fs::remove_file(noise);
 }

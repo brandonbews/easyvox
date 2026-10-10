@@ -399,7 +399,8 @@ pub fn default_config_text() -> String {
     }
     out.push_str(&format!(
         "\n[{ADVANCED}]\n# Settings the window doesn't show: how long the overlay stays up and the model stays\n\
-         # loaded, then the numbers behind the live preview, the chunks and the pauses.\n"
+         # loaded, then the numbers behind the live preview, the chunks, and what counts as\n\
+         # speech or a pause.\n"
     ));
     for field in defaults.app.fields().into_iter().chain(defaults.tuning.fields()) {
         out.push('\n');
@@ -538,7 +539,7 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 27);
+        assert_eq!(keys.len(), 31);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
         }

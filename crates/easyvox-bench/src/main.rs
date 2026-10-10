@@ -486,7 +486,7 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
     Ok(json!({
         "wav": wav.file_name().map(|f| f.to_string_lossy()),
         "audio_secs": audio_secs, "finalize_ms": finalize_ms, "final_at_ms": fms,
-        "model_wait_ms": stats.model_wait_ms,
+        "model_wait_ms": stats.model_wait_ms, "speech_onset_secs": stats.speech_onset_secs,
         "final_wait_ms": stats.final_wait_ms, "final_decode_ms": stats.final_decode_ms,
         "final_text": final_text,
         "partials": {

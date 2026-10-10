@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech.
 
 ## Results
 
@@ -21,7 +21,7 @@ How to read it:
 
 - **Word error rate:** the share of words that came out wrong, over the 14 speech clips, 6 runs each. Lower is better. It ignores punctuation and case, and counts "10" and "ten" as the same, but not "342" and "three hundred and forty two".
 - **Empty or failed:** decodes of a speech clip that returned no text or an error (14 clips × 6 runs = 84).
-- **2 s of silence:** what the model wrote for a clip with no speech. It should write nothing.
+- **2 s of silence:** what the model wrote for a clip with no speech, decoding it on its own. It should write nothing. The app no longer decodes such a recording at all (see [First words and silence](#first-words-and-silence)).
 - **First words:** how long after you start talking the live preview shows its first words.
 - **Text ready after release:** from the end of the speech (key released) to the final text.
 - **CPU while talking:** share of one CPU core during the session, live preview included. The GPU does most of the work and isn't counted.
@@ -35,7 +35,7 @@ How to read it:
 
 **Small slot: Whisper base.en stays; Canary 180M Flash is bench only.** Canary was clean on two of the three counts: no empty transcripts (the [transcribe.cpp #140](https://github.com/handy-computer/transcribe.cpp/issues/140) bug never showed up), nothing written on silence, and no crash or hang. But on transcribe-cpp 0.3.1 it writes every number as words: "$342" came out as "three hundred and forty two dollars", and a phone number as "five five five zero one four two". The runtime has no number-formatting (ITN) switch for Canary. On the three number clips that's 57 % WER, against 0 % for every other model. On the other eleven clips Canary and Whisper tie (1.52 % each). So it fails the "no worse than Whisper base.en" bar (7.12 % vs 1.37 %), and digits matter for dictation. Its Q8_0 file wasn't tried: that test was only for empty transcripts, which didn't happen, and quantization can't add number formatting.
 
-Whisper base.en's own flaw showed up too: it wrote "you" for 2 s of silence and added a stray "Mhm." after one long clip. The app should skip the final pass when a recording holds no speech.
+Whisper base.en's own flaw showed up too: it wrote "you" for 2 s of silence and added a stray "Mhm." after one long clip. The app should skip the final pass when a recording holds no speech. (It does now, for every model: see [First words and silence](#first-words-and-silence).)
 
 **v2: Q5_K_M replaces Q8_0.** Both files wrote exactly the same text for every clip. First words appear just as fast (0.45–0.48 s for both). Q5_K_M decodes about 5 % slower, so its final text lands 10–20 ms later (medians of 3 sessions each), well inside the run-to-run spread and far below what anyone can notice. In return it's 191 MB smaller to download and uses about 190 MB less memory. The Q8_0 entry is gone from the catalog.
 
@@ -224,7 +224,7 @@ Before → after, one run each after the change. The "before" ramble and read-al
 - **What's there.** `vad/silero_vad.onnx` (644 KB) runs only on sherpa-onnx's ONNX runtime, which the app doesn't build in (it would add 18.5 MB). In the bench (`--features sherpa`, then `--vad`), it only trims leading and trailing silence before the final decodes (`EngineConfig::vad_trim`). Nothing uses it for the cuts or the speech gate.
 - **Would a VAD help?** Not for the cuts on this recording. A VAD tells speech from steady noise better than loudness does, but loudness found every pause here with 12 dB to spare. The one word v2 lost (see "Joins") was a soft word at the edge of a real pause. A VAD would still cut in that pause, and the word would still be lost: the fix for that is in the join rules. Voices or typing nearby fool both, since a VAD hears any speech, not just the speaker's.
 - **Recommendation: keep the energy pause finder as it is.** If louder rooms start forcing cuts, the cheap fix is a noise-floor term in `quiet_level`: quiet = the louder of (speech − 20 dB) and (floor + 6 dB), where the floor is the 10th percentile of the window's frames. In the replay this gave the same 13 cuts on the real recording, and kept all 13 in pauses with up to −32 dBFS of added noise, where today's rule forces cuts from −38 dBFS. The speech gate uses the same threshold, so the preview would need checking too.
-- **Whisper's "you" before the first word** comes from the speech gate, which decodes room noise until it has heard speech, so that quiet first words aren't missed. A plain level check would stop it. That's the same check `DESIGN.md` asks for before the final pass, and it needs no VAD.
+- **Whisper's "you" before the first word** comes from the speech gate, which decodes room noise until it has heard speech, so that quiet first words aren't missed. A plain level check would stop it. That's the same check `DESIGN.md` asks for before the final pass, and it needs no VAD. (Done: nothing is decoded before speech now; see [First words and silence](#first-words-and-silence).)
 
 ### What it means for the model list
 
@@ -333,6 +333,72 @@ $B session --model $M --wav testdata/punct_samantha.wav --out lat.json
 
 - **Where the numbers come from:** energy and "GPU active" (`gpu_active_ratio`) from `run.jsonl`; CPU from `cpu.cpu_pct_of_one_core`, release latency from `finalize_ms` (and `final_wait_ms`, `final_decode_ms`), passes from `partials.passes`, their mean length from `partials.window_secs_mean` (new), word errors from `wer.wer`.
 - **The preview's lag:** for each word of v2's one-pass decode of the ramble (from [Real voice](#real-voice), with word timings), the time of the first preview update (the partial lines on stderr) whose last three words match the decode at that word, minus the time the word ended.
+
+## First words and silence
+
+Run on the morning of 10 October 2026, same M4, against the build before (commit 6e59ccc) with the same defaults otherwise. Two changes, the same for every model (`Tuning` in `crates/easyvox-core/src/tuning.rs`; `DESIGN.md`, "Live text while speaking"):
+
+- **No speech, no decode.** Until a recording holds speech, nothing is decoded: no preview pass, no chunk, no final pass. A recording that never does ends with empty text. Speech is 120 ms in a row of 30 ms frames at least 6 dB louder than the room (the recording's 10th percentile, leaving out digital silence), or louder than -35 dBFS whatever the room, never at or under -55 dBFS (`speech_above_noise_db`, `speech_loud_dbfs`, `speech_min_ms`, `gate_silence_dbfs`; `SpeechDetector` in `pause.rs`).
+- **The first preview pass runs 0.5 s after speech starts** (`preview_first_ms`), instead of 1.6 s after the key press. Until the preview shows words, the next passes come 0.5 s apart too, then every 1.6 s.
+
+Real-time `session` replays on Parakeet TDT v2 unless a model is named, the two builds alternating, each run waiting for a quiet machine:
+
+| | Before | After |
+|---|---:|---:|
+| First words, the 13 text-to-speech clips (speech starts at the key press; 3–8 runs each) | 1.70 s (1.66–1.73) | **0.58 s** (0.55–0.69) |
+| First words after speech starts, 28 dictation starts cut from the two real recordings (median, slowest) | 0.98 s, 1.25 s | **0.58 s, 0.62 s** |
+| … Parakeet Unified | 1.03 s, 2.21 s | **0.60 s, 1.63 s** |
+| … Whisper base.en | 1.02 s, 1.27 s | **0.62 s, 0.72 s** |
+| First words, 5-minute ramble (speech starts 1.5 s in; 3 runs each) | 3.39 s | **2.17 s** |
+| Energy per minute, 5-minute ramble (3 runs each) | 37.7 J (34.6–41.2) | 39.0 J (36.8–41.0) |
+| GPU power added / GPU active / CPU, share of one core | 0.53 W / 6.1 % / 7.8 % | 0.52 W / 6.1 % / 7.8 % |
+| Preview behind the voice: median / 95th pct (ramble) | 0.80–0.86 / 1.77–1.95 s | 0.76–0.80 / 1.91–1.93 s |
+| Read aloud, word errors: v2 / Unified / Whisper | 1.68 / 2.10 / 6.72 % | 1.68 / 2.10 / 6.72 %, the same text |
+| `lf_3m_pauses`, word errors: v2 / Unified / Whisper | 0 / 0 / 0.52 % | 0 / 0 / 0.87 % (see below) |
+| Text ready after release: 11 s / 30 s clip (8 runs each, median) | 0.21 / 0.46 s | 0.19 / 0.45 s |
+| … ramble (3 runs) / read aloud, v2 (1 run) | 0.32–0.36 / 0.39 s | 0.34–0.36 / 0.38 s |
+
+- **First words.** A first pass on 0.3 s of speech had nothing to show yet on one short clip in eleven; on 0.4 s and 0.5 s, v2's first pass showed words on all 28 real starts. Parakeet Unified needs more: at 0.5 s its first pass came back empty on 8 of the 28, and with one pass every 1.6 s after it, those first words took 2.2 s. So until the preview shows words, passes come every 0.5 s. That costs v2 and Whisper nothing (their first pass shows words) and brought Unified's slowest start under 1.2 s; with the final 6 dB detection one start, where a breath before the first word counted as speech, took 1.63 s. (The starts are counted from the first 120 ms above -40 dBFS.) The "before" figures depend on where speech starts against the 1.6 s ticks; counted from the key press, they were about 1.7 s at best. Before, on one of the 28 starts (the 2.7 s of room before the read-aloud clip's first word), v2's and Whisper's previews showed a word made up on the room noise.
+- **Energy** is measured as in [Lightness](#lightness) ("energy per minute", the CPU rail taken robustly). The two builds run the same 185 preview passes over the ramble and write the same text; the GPU's power is the same, and the totals differ by the CPU rail's usual noise. Within 5 % of the 39 J a minute measured there. (The energy runs came before passes repeated every 0.5 s until words show; v2's first pass shows words, and the final build ran the same 185 passes over the ramble.)
+- **Final text.** Every model wrote the same read-aloud text as before, and v2 the same ramble in all 7 runs. Over the 13 text-to-speech clips the text was the same in every run of both builds. On `lf_3m_pauses` the Parakeets made no errors either way. Whisper base.en made 3 or 5 errors in 570 words, in both builds: a second run of each flipped them (before 0.87 %, after 0.52 %), and so did starting the passes at other times (0.9, 1.3 and 1.6 s: 0.52, 0.87 and 0.87 %). Chunks are cut at ticks, so where they fall moves with the ticks' timing, and Whisper, decoded without context at cuts, is the model that notices.
+- **Text ready after release** is unchanged within the spread. On `lf_3m_pauses` (one run each) it came 0.38 → 0.42 s for v2, 0.47 → 0.43 s for Unified and 0.42 → 0.40 s for Whisper, in the 0.38–0.49 s seen in earlier sections.
+
+**Silence and room noise**, per model: what the final text held, before and after. The room noise is cut from the two private recordings: their first 1.45 s (1 s of digital silence, then the room), 5 s of the ramble's longest pauses, and the 2.35 s before the first word of the read-aloud clip.
+
+| | Parakeet TDT v2 | Parakeet Unified | Whisper base.en |
+|---|---|---|---|
+| `silence_2s.wav`, before | nothing (one decode) | nothing (one decode) | "you" |
+| Room noise (3 clips), before | 1 made-up word on one; preview passes on two | nothing, but preview passes on two (one showed a word) | 1 made-up word on two; preview passes on two |
+| After | **nothing**; no decode on three, the breaths in the pauses decoded | **nothing**; the same | **nothing**; the same |
+
+- **Short speech still comes through.** The four commands (`cmd_*`) wrote the same text with every model. So did the first word or two of each real recording, cut short (1.3 and 2 s), and copies of them 20 to 30 dB quieter, as from a microphone turned well down: the detector put the start of their speech where it did at full level.
+- **The app** pastes nothing for empty text, leaves the clipboard and History alone, and shows "Didn't catch anything" for 2.5 s. The self-test now checks that with the silent clip, and `silence_and_room_noise_give_empty_text_on_every_offered_model` (an ignored engine test) runs the silent clip and a -50 dBFS noise clip through every offered model.
+- **The levels.** Room noise in the two recordings sits around -50 to -60 dBFS, with peaks up to -40, and their speech around -17. The text-to-speech clips start speaking on their first frame, with no room to measure, which is what the -35 dBFS level is for. The first default asked for 20 dB over the room, which these recordings clear by far; quieter microphones don't (next section), so it's 6 dB. A steady room stays under that: the loudest 120 ms of the silent clip, the two recordings' quiet starts held 0, 3.7 and 5.1 dB over their 10th percentile. The ramble's pauses, with breaths in them, held 13 dB, so they're decoded now: every model wrote nothing.
+
+### Quiet mics and loud rooms
+
+A false "no speech" loses a whole dictation without a word, which is far worse than a stray "you", so the detector was stress-tested on speech much quieter or noisier than the author's recordings. Synthetic cases (scratch only): the read-aloud clip, five short clips (`cmd_*`, `num_rishi`) and the 28 real starts, turned down by 10, 20, 25 and 30 dB over pink noise at -62 dBFS (a laptop's own mic at arm's length); "edge" copies whose loudest 30 ms sits at -45 dBFS, 10 dB over a -55 dBFS room; the same clips under pink noise at -45, -40 and -35 dBFS or four voices babbling at -40; and "OK" and "Yes" from three voices, their loudest 30 ms at -40 or -45 dBFS, over a room at -62 or -55, with and without 0.4 s of room before them. 243 real-time sessions on the final build, v2 and Whisper:
+
+| Case | Speech found, text kept | First words after speech starts (median, slowest) | Word errors, read aloud: v2 / Whisper |
+|---|---|---:|---:|
+| 10–30 dB quieter, over -62 dBFS | all 73 | 0.57–0.70 s, 0.84 s | 1.7–3.8 % / 14.3 % at -30 dB |
+| Edge: loudest -45 dBFS, 10 dB over the room | all 40 | 0.65–0.96 s, 1.94 s | 26 % / 70 % |
+| Pink noise at -45 / -40 / -35, babble at -40 | all 46 | 0.48–0.72 s, 0.72 s | 1.7–4.6 % / 9–11 % |
+| "OK", "Yes" at -40 or -45 dBFS | all 72 | 0.57–0.68 s, 0.86 s | – |
+
+- **At 20 dB** (simulated with the same rule), the detector missed every edge case and every "OK"/"Yes" at -45 dBFS, even 17 dB over a -62 room; at -30 dB it missed 24 of the 28 real starts and all five short clips. At 10 dB it still missed most edge cases, at 8 dB two; at 6 dB none, with 0.8 dB to spare on the weakest ("OK" at -45 over -55, no room before it).
+- **Word errors** grow on the quietest and noisiest cases because the models hear less, not because anything was dropped: the short clips kept their clean word error rate, except Whisper at -25 dB and quieter, and on the edge copies.
+- **Loud rooms** count as speech from the start once the room passes -35 dBFS, so there the preview may run on the noise before you speak (v2 showed a word on the -35 dBFS noise before the read-aloud clip's first word). That errs the safe way.
+- **Energy** on the ramble didn't move: detection only decides when the first pass runs. Two macmon runs of the final build took 33.7 and 44.6 J a minute (mean 39.2; the CPU rail's noise again), with the GPU at 0.51–0.52 W, the same 185 passes and the same text. Speech is now found at 1.50 s instead of 1.53 s, and the first words came at 2.14 s.
+
+```sh
+B=target/release/easyvox-bench      # and a build of 6e59ccc for "before"
+# First words and release latency.
+$B session --model parakeet-tdt-0.6b-v2-q5_k_m-gguf --wav testdata/punct_samantha.wav --quiet --out lat.json
+# A first-pass delay to try: --set preview_first_ms=400; the detection off: --set speech_min_ms=0.
+# Silence: speech_onset_secs is null, partials.passes 0 and final_decode_ms about 0 when nothing was decoded.
+$B session --model whisper-base.en-q8_0-gguf --wav testdata/silence_2s.wav --out silence.json
+```
 
 ## Limits of this bench
 
