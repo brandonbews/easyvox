@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 14 ready · 2 blocked · 16 on hold · 10 inbox · 19 done · 0 cancelled
+0 in progress · 13 ready · 2 blocked · 16 on hold · 10 inbox · 20 done · 0 cancelled
 
 ## In progress
 
@@ -12,7 +12,6 @@ _None._
 |---|---|---:|---|
 | [`tuh-br58`](tasks/tuh-01M4H2EG9QB2ETECD30F9RBR58.md) | Onboarding: Microphone and Accessibility, default model download, shader warm-up | 1 | `onboarding` `app` |
 | [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) | Drop Parakeet Unified from the app (keep it bench-only) | 1 | `models` |
-| [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) | Bench Parakeet TDT v3 on Brandon's voice | 1 | `models` `bench` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) | Settings: click-to-download the alternative models | 2 | `models` `app` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
@@ -91,6 +90,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) Widen the chunk-join slack so soft words at a cut aren't lost
 - [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) Make dictation light: tune the preview until the GPU mostly rests while talking
 - [`tuh-w7y9`](tasks/tuh-01M4JNRW9D3CBNF5X80JPWW7Y9.md) Show first words sooner: run the first preview pass early
+- [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) Bench Parakeet TDT v3 on Brandon's voice
 
 ## Cancelled
 
