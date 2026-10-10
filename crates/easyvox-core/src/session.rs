@@ -4,9 +4,11 @@
 //! engine was unloaded while idle; the audio meanwhile just buffers), then ticks every
 //! `preview_interval_ms` ([`Tuning`](crate::Tuning)) while the key is held. Each tick it
 //! polishes the oldest chunk in `Final` mode if enough audio waits (`chunks.rs`), then
-//! re-decodes the recent audio in `Partial` mode for the preview, confirming words once two
-//! passes agree (`partials.rs`). A tick skips the re-decode when nothing has been said since
-//! the last ones (`pause::SpeechGate`). On release it polishes the rest and sends `Final`.
+//! re-decodes the newest audio in `Partial` mode for the preview, confirming words once two
+//! passes agree (`partials.rs`). That pass starts just before the confirmed words
+//! (`preview_context_ms`), so it only decodes what may still change. A tick skips the re-decode
+//! when nothing has been said since the last ones (`pause::SpeechGate`). On release it polishes
+//! the rest and sends `Final`.
 
 use crate::audio::{MicInfo, SharedAudio};
 use crate::chunks::{self, Chunker, Polished};
@@ -40,6 +42,9 @@ pub struct SessionStats {
     pub partial_skipped: u32,
     pub partial_decode_ms_total: f64,
     pub partial_decode_ms_max: f64,
+    /// Audio the preview passes decoded, in seconds, summed over the passes (divide by
+    /// `partial_passes` for the mean window).
+    pub partial_audio_secs: f64,
     /// `Partial` events sent.
     pub partial_events: u32,
     /// Chunks polished while recording (the eager final pass), and their decode times.
@@ -228,6 +233,7 @@ impl Worker {
         let preview_on = t.preview_interval_ms > 0;
         let interval = Duration::from_millis(if preview_on { t.preview_interval_ms } else { POLISH_TICK_MS } as u64);
         let window = ms_samples(t.preview_window_ms.max(MIN_WINDOW_MS));
+        let context = ms_samples(t.preview_context_ms);
         let min_audio = ms_samples(t.preview_min_audio_ms);
         let min_gap = Duration::from_millis(t.preview_min_gap_ms as u64);
         let mut anchor = 0usize;
@@ -268,12 +274,12 @@ impl Worker {
                 if total < min_audio || total < decoded_len + SR / 10 {
                     continue;
                 }
+                // Words two passes agreed on are settled: the window starts just before them
+                // (never before the last cut), so a pass only re-decodes what may still change.
+                let settled = (la.confirmed_until() * SR as f32) as usize;
+                anchor = anchor.max(settled.saturating_sub(context).min(total));
                 if total - anchor > window {
-                    let frozen = (la.confirmed_until() * SR as f32) as usize;
-                    anchor = anchor.max(frozen.saturating_sub(polished.context()).min(total));
-                    if total - anchor > window {
-                        anchor = total - window;
-                    }
+                    anchor = total - window;
                 }
                 gate.should_decode(&a, anchor).then(|| {
                     decoded_len = total;
@@ -302,6 +308,7 @@ impl Worker {
                 s.partial_passes += 1;
                 s.partial_decode_ms_total += ms;
                 s.partial_decode_ms_max = s.partial_decode_ms_max.max(ms);
+                s.partial_audio_secs += window_pcm.len() as f64 / SR as f64;
             }
             match hyp {
                 Ok(h) => {

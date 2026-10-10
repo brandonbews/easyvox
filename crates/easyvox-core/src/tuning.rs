@@ -107,17 +107,28 @@ tuning! {
     /// [`Tuning::validate`] puts out-of-range values back to their defaults.
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct Tuning {
-        /// How often the preview re-decodes the recent audio while the key is held. 0 turns the
+        /// How often the preview re-decodes the newest audio while the key is held. 0 turns the
         /// preview off (long dictations are still polished in chunks). Lower shows words sooner
-        /// but costs more GPU and CPU, since every pass decodes the whole window again; higher
-        /// is lighter, and the preview lags further behind.
-        preview_interval_ms: u32 = 400, 0..=10_000;
-        /// The most recent audio one preview pass decodes. The window starts at the last chunk
-        /// cut, so it's often shorter; when you talk longer than this without a cut, it starts
-        /// at the confirmed words, and failing that it's cut to this length. Lower makes the
-        /// longest passes cheaper, but words that fall out of the window before two passes
+        /// but wakes the GPU more often; higher is lighter, and the preview lags further behind
+        /// and updates in bigger steps. At 1600, 95 % of words showed up within about 2 s of
+        /// being said; past it the saving flattens while the lag keeps growing
+        /// (`docs/model-bench.md`, "Lightness").
+        preview_interval_ms: u32 = 1_600, 0..=10_000;
+        /// The most recent audio one preview pass decodes, at most. A pass normally starts just
+        /// before the confirmed words (`preview_context_ms`), so it's usually much shorter; this
+        /// only caps it while passes keep disagreeing and nothing gets confirmed. Lower makes
+        /// those passes cheaper, but words that fall out of the window before two passes
         /// agreed on them leave the preview until their chunk is polished. At least 2000.
         preview_window_ms: u32 = 20_000, 2_000..=120_000;
+        /// Audio before the confirmed words (the ones two passes agreed on) that each preview
+        /// pass decodes again, as context for the words after them. A pass starts there, or at
+        /// the last chunk cut if that's later, so confirmed words aren't decoded over and over:
+        /// the preview's GPU energy follows the audio it decodes. Higher gives the newest words
+        /// more of their sentence but makes every pass longer (2000 took about 14 % more GPU
+        /// energy than 1000, for much the same preview); lower is lighter. The final text
+        /// doesn't depend on it. 120000 decodes everything since the last cut, much as the
+        /// preview did before this setting existed.
+        preview_context_ms: u32 = 1_000, 0..=120_000;
         /// Audio needed before the first preview pass. Lower can show the first word a moment
         /// sooner, but spends a pass on too little audio to decode.
         preview_min_audio_ms: u32 = 300, 0..=5_000;
@@ -236,12 +247,14 @@ pub(crate) fn ms_secs(ms: u32) -> f32 {
 mod tests {
     use super::*;
 
-    /// The values the pipeline used before they moved here, in the units it used them in.
+    /// The values the pipeline used before they moved here, in the units it used them in,
+    /// except the preview's interval and context, which the lightness sweep set
+    /// (`docs/model-bench.md`, "Lightness"; the interval was 400 ms).
     #[test]
     fn defaults_equal_the_old_constants() {
         let t = Tuning::default();
         // session.rs and EngineConfig
-        assert_eq!(t.preview_interval_ms, 400);
+        assert_eq!((t.preview_interval_ms, t.preview_context_ms), (1_600, 1_000));
         assert_eq!(ms_samples(t.preview_window_ms), (20.0 * SR as f32) as usize);
         assert_eq!(ms_samples(t.preview_min_audio_ms), SR * 3 / 10);
         assert_eq!(t.preview_min_gap_ms, 50);
@@ -279,7 +292,7 @@ mod tests {
         assert_eq!(t, Tuning { chunk_ms: 15_000, ..Tuning::default() });
         assert_eq!(
             problems[0].to_string(),
-            "preview_interval_ms = 60000 is outside 0..=10000, so it stays at its default, 400"
+            "preview_interval_ms = 60000 is outside 0..=10000, so it stays at its default, 1600"
         );
         // Range ends are allowed.
         let mut t = Tuning { preview_interval_ms: 0, chunk_ms: 0, pause_quiet_ratio: 1.0, ..Tuning::default() };

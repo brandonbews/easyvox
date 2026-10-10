@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview.
 
 ## Results
 
@@ -256,6 +256,82 @@ $B session --model canary-180m-flash-q5_k_m-gguf --models /tmp/m --wav $R/struct
   - the preview's lag: the partial lines on stderr.
 - **Cut times and word timings** came from a scratch copy of the bench with three `eprintln!` lines added, not committed: the pause each cut used (in `Chunker::cut`), each cut (in `polish_chunk`), and every final word with its timing. The same copy ran every session above. Each chunk's span was then decoded on its own with `transcribe --words`, to replay the join rules with other `SLACK_SECS` values.
 - **The loudness checks and the noise replay** read the WAV's 30 ms and 10 ms frame levels. Noise is mixed in by adding its power to each frame.
+
+## Lightness
+
+Run on the night of 9–10 October 2026, same M4 (a Mac mini, on AC), for the requirement "Light on the machine while you dictate" in `DESIGN.md`: make dictation as light as it can be, while the final text stays as accurate and as quick, and the preview's words still show up within about 2 s most of the time.
+
+**What changed** (`Tuning` in `crates/easyvox-core/src/tuning.rs`; the same for every model):
+
+- **Each preview pass starts at the confirmed words**: 1 s before the last word two passes agreed on (`preview_context_ms`, new), never before the last chunk cut. It used to start at the last cut and grow to 20 s, so every pass decoded again up to 20 s of words that were already settled. The preview's GPU energy follows the audio it decodes (about 0.13 J per second of audio here), so this alone cut a dictation's energy by three-quarters, at the same 400 ms.
+- **A pass every 1.6 s instead of 0.4 s** (`preview_interval_ms`).
+- Nothing else. The 20 s cap on a pass (`preview_window_ms`) now rarely matters (8 s changed nothing), and chunks stay at 30 s.
+
+**The runs.** `ramble.wav` (5 minutes of the author rambling, see [Real voice](#real-voice)) replayed in real time through `easyvox-bench session` with Parakeet TDT v2: the app's code path. Each setting ran at least twice, in two rounds (the second in reverse order), each run on a quiet machine. Word errors come from the 81 s read-aloud clip and its reference, one run per setting (two for the new default). Figures are means, with the range over runs where it matters.
+
+| Setting | Energy per minute of dictation | Added power: all / GPU | GPU active | CPU, share of one core | Preview behind the voice: median / 95th pct / max | Text ready after release: ramble / read aloud | Read aloud: word errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **Before:** a pass every 0.4 s, from the last cut (up to 20 s) | 254 J (250–259) | 4.23 / 3.56 W | 31 % | 36 % | 0.23 / 0.73 / 1.4 s | 0.34 / 0.41 s | 1.68 % |
+| Before, a pass every 1.2 s | 98 J (90–105) | 1.62 / 1.38 W | 12 % | 14 % | 0.63 / 1.55 / 3.4 s | 0.34 / 0.39 s | 1.68 % |
+| Before, passes of at most 8 s | 118 J | 1.96 / 1.65 W | 19 % | 26 % | 0.20 / 0.71 / 1.8 s | 0.36 / 0.39 s | 1.68 % |
+| Before, 15 s chunks | 232 J | 3.87 / 3.31 W | 30 % | 36 % | 0.21 / 0.68 / 1.8 s | 0.20 / 0.23 s | 1.68 % |
+| From the confirmed words, every 0.4 s | 58 J | 0.96 / 0.79 W | 13 % | 17 % | 0.11 / 0.72 / 1.9 s | 0.33 / 0.41 s | 1.68 % |
+| … every 0.8 s | 44 J (38–50) | 0.73 / 0.64 W | 8 % | 11 % | 0.34 / 1.07 / 2.0 s | 0.37 / 0.39 s | 1.68 % |
+| … every 1.2 s | 40 J (37–43) | 0.67 / 0.57 W | 7 % | 9 % | 0.61 / 1.55 / 3.9 s | 0.41 / 0.38 s | 1.68 % |
+| **… every 1.6 s (the new default, 4 runs)** | **39 J (35–45)** | **0.65 / 0.52 W** | **6 %** | **8 %** | **0.81 / 1.94 / 4.2 s** | **0.35 / 0.38 s** | **1.68 %** |
+| … every 2 s | 34 J | 0.56 / 0.49 W | 5.5 % | 7 % | 1.00 / 2.15 / 4.0 s | 0.36 / 0.39 s | 1.68 % |
+| No preview at all (chunks only) | 16 J (14–17) | 0.26 / 0.15 W | 1.4 % | 1.3 % | – | 0.36 s / – | – |
+
+Side checks at 1.2 s, two runs each: starting passes 2 s or 3 s before the confirmed words took 47 J and 53 J a minute (GPU 0.65 and 0.78 W); capping passes at 8 s changed nothing (44 J, GPU 0.58 W, the same lag); 20 s chunks took 43 J and made the final text quicker (0.30 / 0.23 s) but less accurate (see below).
+
+- **Energy** is the SoC's (CPU + GPU + Neural Engine + DRAM) on top of the idle Mac, per minute of audio, from `macmon` (see "How it was measured"). The GPU column is the cleanest: the GPU is fully off at idle. The CPU rail swings by ±0.1 W with whatever else this shared Mac is doing (an iOS simulator, other agents, macOS's malware scans), so totals within about 5 J of each other are a tie; the GPU column shows the real order. For scale, this Mac mini draws about 3 W at idle by its own estimate (SMC), and that whole-machine estimate tells the same story: about 460 J a minute before, about 75 now. The fan never left its idle 1,000 rpm, before or after.
+- **The knee is at 1.2–1.6 s.** From 0.4 to 1.2 s the GPU's power fell by more than a quarter. From 1.2 to 1.6 s it fell by a tenth, and on to 2 s by another 6 %, while the median lag grew by 0.2 s at each of those steps and its 95th percentile reached 2 s. Savings shrink because passes get longer as they get rarer (2.4 s of audio each at 0.4 s, 4.8 s at 1.6 s): words wait longer to be confirmed. 1.6 s is the lightest setting that keeps the preview within about 2 s most of the time. What's left is partly fixed: with no preview at all, polishing the chunks still costs about 16 J a minute.
+- **"GPU active"** is macmon's `gpu_active_ratio`. macOS's "Device Utilization %" (`ioreg`), which earlier sections quote, barely moves (91 % before, 74 % now) although the GPU's power fell sevenfold, so it says little about cost.
+- **The preview's lag** is measured per word, as in [Real voice](#real-voice). Its 95th percentile grows with the interval; the maximum (about 4 s from 1.2 s on) comes from one hard stretch 23–28 s into the ramble, where for a few passes the preview's newest words weren't the words of the reference decode: text was on screen, just not yet the right words. With a 1 s run-up the newest words have less of their sentence. Giving them 2 or 3 s instead barely changed the lag (95th percentile 1.65 and 1.49 s against 1.55 s, maximum 3.3 and 3.5 s against 3.9 s) and took 14 % and 37 % more GPU energy. The preview is a little rougher: of the confirmed preview words a polished chunk later replaced, 4.5 % differed (3.8 % before).
+- **The final text is identical**: every preview-only setting wrote, word for word, the same ramble as before, and the same read-aloud text (1.68 %, 4 errors). Chunk length is the one knob that touches it: 15 s chunks changed the ramble in 17–19 places (24–25 joins instead of 13), and 20 s chunks made 6 errors on the read-aloud clip instead of 4, so chunks stay at 30 s.
+- **Text ready after release** holds on long dictations and loses about 25 ms on short ones. Release latency over repeated runs, today's build and defaults against the new ones, alternating:
+
+  | Recording | Before | Now |
+  |---|---:|---:|
+  | 11 s clip (`punct_samantha`, 8 runs each) | 0.18 s (0.15–0.20) | 0.20 s (0.17–0.22) |
+  | 30 s clip (`long_daniel`, 8 runs each) | 0.46 s (0.42–0.50) | 0.46 s (0.45–0.47) |
+  | 81 s read aloud | 0.41 s | 0.37–0.38 s |
+  | 5-minute ramble (2 and 4 runs) | 0.34 s (0.34–0.35) | 0.35 s (0.32–0.37) |
+  | `lf_3m_pauses` / `lf_10m` (one run each) | 0.40–0.49 / 0.37–0.44 s (earlier sections) | 0.38 / 0.38 s |
+
+  The short clip's final decode took 0.21 s instead of 0.16 s. The old preview kept the GPU busy about 40 % of the time, so the final decode started on a GPU at full speed; after a light preview it starts on one that has slowed down. It isn't the windows or the memory: passes every 0.4 s with the new short windows gave 0.20 s, and keeping ggml's residency sets (`EASYVOX_METAL_RESIDENCY=1`) 0.19 s. The old preview paid some of it back in waiting: in 5 of 8 releases on the 11 s clip a pass was still running (up to 49 ms), and in none of the 16 new ones.
+- **Release waiting for a preview pass.** transcribe.cpp checks its cancel flag only before a Parakeet decode starts (`parakeet/model.cpp`, "the single observation point on this path"), so a release can't stop a pass midway. Instead, passes are now rarely running: about 7 % of the time, for 0.11 s on average, against 40 % and 0.17 s before.
+- **Other models:** Parakeet Unified and Whisper base.en wrote the same read-aloud text with the new defaults as before (2.10 % and 6.72 %), and their final text came as fast (Unified 0.40 → 0.41 s, Whisper 0.36 → 0.35 s). Whisper's preview starts its passes 1 s before the confirmed words too, although it only times segments; its preview words were, if anything, closer to its final text than before. Its CPU while talking fell from 52 % to 12 % of a core, and Unified's from 49 % to 10 %.
+- **Long text-to-speech clips** (v2, new defaults): `lf_3m_pauses` 0 % and `lf_10m` 0.40 %, the same as in [Chunk joins](#chunk-joins).
+- **The Neural Engine.** The rule for moving Parakeet's encoder to the Neural Engine is that it at least halves energy per minute against the best GPU setup. That's now about 39 J a minute, so the Neural Engine path would have to come in under about 20 J, while polishing the chunks with no preview at all already costs about 16 J on the GPU, CPU and memory. It could only take over the encoder's part of the remaining 0.65 W, and its encoder has a fixed 15 s shape that a 5 s preview pass would pay for in full. Halving looks unlikely, and the most it could save is about 0.3 W.
+
+**How it was measured.** Each run: `macmon pipe -i 500` (CPU, GPU, Neural Engine and DRAM power, about every 0.55 s; no sudo) for 60 s of idle machine, then the bench (model load, a warm-up decode, 10 s idle, the real-time replay to its final text), then 60 s idle again. Before every run a script waited for a quiet machine: load average under 2.5, nothing building or indexing, a 15 s probe with the GPU off and the CPU under 1 W, and the CPU back near its idle temperature. Energy is each sample's power times its interval, summed over the session (from the replay's start to the final text). The idle level is subtracted: for the GPU, Neural Engine and DRAM, the mean of the idle minutes; for the CPU, whose idle level jumps with other processes, the median of 5 s blocks during the session minus the median during the idle minutes. The runs and scripts stayed in the session's scratch folder, since the bench's output holds the private recording's text.
+
+```sh
+B=target/release/easyvox-bench
+R=recordings      # private, gitignored
+M=parakeet-tdt-0.6b-v2-q5_k_m-gguf
+
+# One energy run.
+macmon pipe -i 500 > run.jsonl & sleep 60
+$B session --model $M --wav $R/ramble.wav --idle-before 10 --out run.json 2> run.err
+sleep 60; kill %1
+
+# "Before" rows: the build from commit da36537, with its defaults or one of
+#   --set preview_interval_ms=1200 | --set preview_window_ms=8000 | --set chunk_ms=15000
+# New rows: this build, with its defaults (a pass every 1.6 s, 1 s of context) or one of
+#   --set preview_interval_ms=400|800|1200|2000 | --set preview_interval_ms=0 (no preview)
+#   --set preview_interval_ms=1200 plus --set preview_context_ms=2000|3000,
+#   --set preview_window_ms=8000 or --set chunk_ms=20000
+
+# Word errors, with any of the settings above.
+$B session --model $M --wav $R/structured.wav --ref $R/structured-reference.txt --out read.json
+# Release latency, alternating the two builds.
+$B session --model $M --wav testdata/punct_samantha.wav --out lat.json
+```
+
+- **Where the numbers come from:** energy and "GPU active" (`gpu_active_ratio`) from `run.jsonl`; CPU from `cpu.cpu_pct_of_one_core`, release latency from `finalize_ms` (and `final_wait_ms`, `final_decode_ms`), passes from `partials.passes`, their mean length from `partials.window_secs_mean` (new), word errors from `wer.wer`.
+- **The preview's lag:** for each word of v2's one-pass decode of the ramble (from [Real voice](#real-voice), with word timings), the time of the first preview update (the partial lines on stderr) whose last three words match the decode at that word, minus the time the word ended.
 
 ## Limits of this bench
 

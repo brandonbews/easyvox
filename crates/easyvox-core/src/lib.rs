@@ -5,8 +5,8 @@
 //! without touching it.
 //!
 //! Every model takes the same path, and all it has to do is turn audio into words with timings
-//! ([`SpeechModel`]). While the key is held, the session re-decodes the recent audio every few
-//! hundred ms for the preview, and polishes finished chunks of a long dictation in the
+//! ([`SpeechModel`]). While the key is held, the session re-decodes the newest audio every
+//! second or two for the preview, and polishes finished chunks of a long dictation in the
 //! background. On release it decodes only what's left, so the final text arrives in well under
 //! a second at any length. The numbers that shape all this, and their defaults, are in
 //! [`Tuning`].

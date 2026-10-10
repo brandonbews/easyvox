@@ -1,6 +1,7 @@
-//! Live partials for offline models: re-decode the recent audio window every few hundred ms
-//! and confirm words once two consecutive passes agree on them ("local agreement", LA-2,
-//! as in Macháček et al. 2023, whisper_streaming).
+//! Live partials for offline models: re-decode the newest audio every second or two and
+//! confirm words once two consecutive passes agree on them ("local agreement", LA-2, as in
+//! Macháček et al. 2023, whisper_streaming). Each pass starts just before the confirmed words,
+//! so the session only re-decodes what may still change.
 //!
 //! Words are aligned across passes by time: a word belongs to the not-yet-confirmed tail if
 //! its midpoint lies after the end of the last confirmed word. Confirmed text only grows, until

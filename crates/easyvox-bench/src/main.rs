@@ -497,6 +497,7 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
             "words_revised": words_revised, "confirmed_rewrites": confirmed_rewrites,
             "passes": stats.partial_passes, "skipped": stats.partial_skipped,
             "pass_ms_mean": pass_ms_mean, "pass_ms_max": stats.partial_decode_ms_max,
+            "window_secs_mean": stats.partial_audio_secs / stats.partial_passes.max(1) as f64,
             "confirmed_words_at_stop": conf_words.len(), "final_words": final_words.len(),
             "confirmed_coverage": confirmed_coverage,
             "confirmed_vs_final_errors": conf_vs_final_err,
@@ -738,7 +739,7 @@ mod tests {
     fn results_record_the_tuning_as_numbers() {
         let v = tuning_json(&Tuning { chunk_ms: 15_000, ..Tuning::default() });
         assert_eq!(v["chunk_ms"], json!(15_000));
-        assert_eq!(v["preview_interval_ms"], json!(400));
+        assert_eq!(v["preview_interval_ms"], json!(1_600));
         assert_eq!(v["gate_silence_level"].as_f64(), Some(0.0018));
         assert_eq!(v.as_object().unwrap().len(), Tuning::KEYS.len());
     }

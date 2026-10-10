@@ -99,6 +99,23 @@ fn replay_session_streams_partials_then_final() {
     assert_eq!(words(&final_text), words(expected), "got {final_text:?}");
 }
 
+/// The preview only re-decodes what may still change: on a 30 s clip with no chunk cut, each
+/// pass starts just before the confirmed words rather than at the start of the clip, and the
+/// preview still shows the whole clip by the end.
+#[test]
+#[ignore = "needs the recommended model (scripts/fetch-model.sh)"]
+fn preview_passes_skip_the_confirmed_words() {
+    let engine = engine_with(|c| c.tuning.chunk_ms = 0);
+    let (partials, final_text, stats) = replay(&engine, "long_daniel.wav");
+    assert!(stats.partial_passes >= 5, "only {} preview passes", stats.partial_passes);
+    let mean_window = stats.partial_audio_secs / stats.partial_passes as f64;
+    assert!(mean_window < 8.0, "preview passes decoded {mean_window:.1} s on average, of a 30 s clip");
+    let (confirmed, provisional) = partials.last().expect("no preview");
+    let shown = format!("{confirmed} {provisional}");
+    let errors = word_errors(&final_text, &shown);
+    assert!(errors * 10 <= words(&final_text).len(), "{errors} word errors in the last preview: {shown:?}");
+}
+
 /// The eager final pass on a real model: 8 s chunks on a 30 s clip cut it at pauses while it
 /// plays, and the joined text must read like the transcript (no lost or doubled words).
 #[test]
