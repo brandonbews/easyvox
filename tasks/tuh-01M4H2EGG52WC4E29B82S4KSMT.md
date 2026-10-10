@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGG52WC4E29B82S4KSMT`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `engine` `perf`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -21,6 +21,9 @@ Constraints: no regression in time to first words.
 
 In progress 2026-10-09: written but UNCOMMITTED in the working tree (app not yet compiled, gates and self-test not run). Backup patch: orchestrator scratchpad idle-wip.patch. Finish per easyvox-handoff-3.md. Approach: each binary sets GGML_METAL_NO_RESIDENCY=1 at the top of main (EASYVOX_METAL_RESIDENCY=1 restores the old behaviour). Measured: idle wake-ups 145/s -> 0.3/s, idle CPU 0.2 % -> 0.002 % of a core, no measurable first-dictation latency cost after 5 min idle.
 
+
+Done 2026-10-09 in d33ab36. Picked: set GGML_METAL_NO_RESIDENCY=1 at the top of each main (easyvox_core::process_env; EASYVOX_METAL_RESIDENCY=1 restores the old behaviour). Idle wake-ups 145/s -> 0.3/s (loaded or unloaded), idle CPU 0.15-0.24 % -> 0.002 % of a core, loaded footprint 687 -> 667 MB. First words and final latency unchanged warm and after 5 min idle. 30 min idle not measured separately (unload at 10 min makes it a reload case). Numbers in docs/model-bench.md. Upstream patch stays a separate held task (tuh-01M4HDR43KDP1NSH6C16DFH2JJ).
+
 ## History
 
 ### 2026-10-09 21:43 UTC — edit by `brandon`
@@ -30,3 +33,7 @@ priority 3→1
 ### 2026-10-09 23:37 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 00:57 UTC — edit by `brandon`
+
+description edited · status open→done

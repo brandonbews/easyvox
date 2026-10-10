@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 20 ready · 4 blocked · 12 on hold · 8 inbox · 7 done · 0 cancelled
+0 in progress · 17 ready · 4 blocked · 12 on hold · 8 inbox · 10 done · 0 cancelled
 
 ## In progress
 
@@ -13,9 +13,6 @@ _None._
 | [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) | Make Parakeet TDT v2 the default model | 0 | `models` |
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) | Core: download a model in the app — download, sha256 verify, activate | 1 | `models` `engine` |
-| [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) | Unload the speech model after a stretch of no use | 1 | `engine` `perf` |
-| [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) | Idle wake-ups from ggml-metal's residency loop | 1 | `engine` `perf` |
-| [`tuh-4p1s`](tasks/tuh-01M4HDR3Z8GQ7132ZNSN5Q4P1S.md) | Skip preview passes when nothing new was heard | 1 | `engine` `perf` `energy` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
 | [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) | Settings file: ~/.config/easyvox/config.toml, applied live | 2 | `settings` `app` |
@@ -79,7 +76,10 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) Hands-on: record a few real-voice clips for benching
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
 - [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
+- [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) Unload the speech model after a stretch of no use
+- [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) Idle wake-ups from ggml-metal's residency loop
 - [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) Decide the default model: Parakeet TDT v2 or Unified
+- [`tuh-4p1s`](tasks/tuh-01M4HDR3Z8GQ7132ZNSN5Q4P1S.md) Skip preview passes when nothing new was heard
 - [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) Add the long-dictation clip generator to testdata/
 
 ## Cancelled
