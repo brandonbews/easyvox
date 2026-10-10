@@ -21,8 +21,8 @@ set -euo pipefail
 # `default` line against easyvox_core::RECOMMENDED_MODEL. The sherpa-onnx archives (bench only)
 # aren't covered here.
 MODELS=(
-  "parakeet-unified-en-0.6b-q5_k_m-gguf default 540795264 f9def6f9b4e83ab7d006df3e1b676dfa1f973a3b6da232a9c99fcaa66bcd2836 gguf/parakeet-unified-en-0.6b-Q5_K_M.gguf https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/d5249700b2382bf5c5024c2421d101b8db54a629/parakeet-unified-en-0.6b-Q5_K_M.gguf"
-  "parakeet-tdt-0.6b-v2-q5_k_m-gguf alternative 539012608 dfa904520b95451599683613fea47766c378c5fdf5d8cddf48151226b6eaec85 gguf/parakeet-tdt-0.6b-v2-Q5_K_M.gguf https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf/resolve/382796e405a9fe37145938dccbabfb25e93e4286/parakeet-tdt-0.6b-v2-Q5_K_M.gguf"
+  "parakeet-tdt-0.6b-v2-q5_k_m-gguf default 539012608 dfa904520b95451599683613fea47766c378c5fdf5d8cddf48151226b6eaec85 gguf/parakeet-tdt-0.6b-v2-Q5_K_M.gguf https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf/resolve/382796e405a9fe37145938dccbabfb25e93e4286/parakeet-tdt-0.6b-v2-Q5_K_M.gguf"
+  "parakeet-unified-en-0.6b-q5_k_m-gguf alternative 540795264 f9def6f9b4e83ab7d006df3e1b676dfa1f973a3b6da232a9c99fcaa66bcd2836 gguf/parakeet-unified-en-0.6b-Q5_K_M.gguf https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/d5249700b2382bf5c5024c2421d101b8db54a629/parakeet-unified-en-0.6b-Q5_K_M.gguf"
   "whisper-base.en-q8_0-gguf alternative 84886208 3b46ca40bccbf7609c68d88a36d96077a04ca7c87f2060ede06f129fac3e7652 gguf/whisper-base.en-Q8_0.gguf https://huggingface.co/handy-computer/whisper-base.en-gguf/resolve/f83d8d187299d4fc06e86a6de5084375ceac34bf/whisper-base.en-Q8_0.gguf"
   "canary-180m-flash-q5_k_m-gguf bench-only 158704416 73c4861a43fe848cc7a64c179c08da04e985efac03f3e4684a3f5e94a1bb33fe gguf/canary-180m-flash-Q5_K_M.gguf https://huggingface.co/handy-computer/canary-180m-flash-gguf/resolve/46b86384d1db59108d6e060a0fc00924cb58499f/canary-180m-flash-Q5_K_M.gguf"
 )

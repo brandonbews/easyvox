@@ -5,7 +5,7 @@
 //! (override with `--models DIR` or `EASYVOX_MODELS_DIR`); clips come from the workspace's
 //! `testdata/` (see `testdata/generate.sh`). Only release builds give meaningful numbers:
 //!
-//!   cargo run --release -p easyvox-bench -- bench --model parakeet-unified-en-0.6b-q5_k_m-gguf
+//!   cargo run --release -p easyvox-bench -- bench --model parakeet-tdt-0.6b-v2-q5_k_m-gguf
 //!
 //! Timings drift when something else is busy on the machine, so the output records the
 //! 1-minute load average next to them.

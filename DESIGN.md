@@ -28,7 +28,7 @@ Working notes. Decisions are recorded as they're made; what's still open is list
 
 ## Keeping it light and fast
 
-- The speech model drives speed and memory far more than the UI framework does. In the spike, the GPUI Kit shell idled at about 22 MB with no model loaded and about 636 MB with the default model loaded.
+- The speech model drives speed and memory far more than the UI framework does. In the spike, the GPUI Kit shell idled at about 22 MB with no model loaded and about 636 MB with a Parakeet model loaded.
 - **Nothing runs while idle.** With nobody dictating, the app wakes up about once every few seconds and uses no measurable CPU, model loaded or not. It used to wake about 145 times a second, from a timer inside ggml's Metal code; see "Engine and macOS gotchas".
 - **The model is freed after 10 minutes without use**, and loaded again when you next press the shortcut. Recording starts on the key press either way: the audio buffers while the model loads (about 0.15 s once the Metal shaders are cached), the preview starts once it's ready, and the final text covers everything you said. The first words show up about 20 ms later than with the model loaded. Unloading takes the idle app from about 670 MB to about 90 MB, and it still wakes only about once every 3 seconds. A "Keep model loaded" setting turns it off.
 - **The preview rests while you pause.** While the key is held, it only re-decodes when something was said since the last pass (see "Live text while speaking"), so a thinking pause costs almost nothing. The short breaths between phrases still get decoded, and real speech is mostly those, so the saving is small in practice (see "Engine").
@@ -102,27 +102,31 @@ The list is tight on purpose: one opinionated default and two alternatives, each
 
 | | Model (GGUF) | Download | Pick this if… | License |
 |---|---|---|---|---|
-| **Default** | Parakeet Unified EN 0.6B, Q5_K_M | 541 MB | You want the best all-round model. | NVIDIA Open Model License |
-| Alternative | Parakeet TDT 0.6B v2, Q5_K_M | 539 MB | Same speed and cost as the default now; fewer errors on long dictations in our bench, and it always ends with a full stop. Being weighed as the default (see below). | CC-BY-4.0 |
+| **Default** | Parakeet TDT 0.6B v2, Q5_K_M | 539 MB | You want the best all-round model. | CC-BY-4.0 |
+| Alternative | Parakeet Unified EN 0.6B, Q5_K_M | 541 MB | You'd rather trust public benchmarks, where it scores a little better than v2. Same speed and cost; in our bench it made more errors on long dictations and sometimes left out the last full stop. | NVIDIA Open Model License |
 | Alternative | Whisper base.en, Q8_0 | 85 MB | You want the smallest model (an 8 GB Mac, or memory matters more than the last bit of accuracy). | Apache-2.0 |
 
-Choices as of 9 October 2026, settled by a local bench the same day ([`docs/model-bench.md`](docs/model-bench.md)). This area moves fast, so re-check before changing the list. Accuracy numbers are average word error rates (WER, lower is better) and only compare within one source.
+Choices as of 9 October 2026, settled by a local bench the same day ([`docs/model-bench.md`](docs/model-bench.md)). Parakeet Unified was the default until then; v2 replaced it once the one-pipeline re-run showed Unified's edge was gone. This area moves fast, so re-check before changing the list. Accuracy numbers are average word error rates (WER, lower is better) and only compare within one source.
 
 In the code, each catalog entry in `crates/easyvox-core/src/models.rs` has an `offering`: `Default` (exactly one), `Alternative`, or `BenchOnly`. Settings lists the default first, then the alternatives, and only the ones that are downloaded and runnable in this build.
 
-### Default: Parakeet Unified EN 0.6B
+### Default: Parakeet TDT 0.6B v2
 
-**Downloaded during onboarding, not bundled.** This keeps the DMG small, app updates don't re-ship 541 MB, and onboarding already has to ask for the Microphone permission and wait out the ~14 s first-launch shader compile, so the download fits there. The catch: the first run needs a network connection.
+**Downloaded during onboarding, not bundled.** This keeps the DMG small, app updates don't re-ship 539 MB, and onboarding already has to ask for the Microphone permission and wait out the ~14 s first-launch shader compile, so the download fits there. The catch: the first run needs a network connection.
 
-Why it's the default:
+Why it's the default (decided 9 October 2026; Parakeet Unified was the default before):
 
-- **Accuracy.** In [transcribe.cpp's own runs](https://github.com/handy-computer/transcribe.cpp/tree/main/docs/models) of each GGUF, it has the lowest FLEURS English error of any model under 1B parameters (3.99 %). NVIDIA's same-pipeline comparison on its [model card](https://huggingface.co/nvidia/parakeet-unified-en-0.6b) puts it ahead of TDT v2 (5.91 vs 6.04). It isn't on the Open ASR Leaderboard itself, which is the main gap in the evidence.
-- **Speed and size.** In the October bench, on the one pipeline: first words after about 0.5 s, final text 0.11–0.48 s after release for 3–30 s of speech and about 0.4 s after 3 or 9 minutes, 14–58 % of one core while you talk, about 690 MB of memory (840 MB at the peak of a 9-minute dictation).
-- **Its edge over v2 is gone.** It was picked as the only model that could both stream the preview and do the full-accuracy final pass from one set of weights. With one pipeline, every model does both by re-decoding, and in the re-run v2 cost the same, showed first words as fast, made fewer errors on long dictations (0.40 % against 0.86 % over 9 minutes) and ended every clip with a full stop, where Unified left it out on 4 of 13. Unified still ranks a little better on public benchmarks, which our text-to-speech clips can't confirm. Whether v2 becomes the default is an open decision; numbers in [`docs/model-bench.md`](docs/model-bench.md).
+- **Fewer errors on long dictations.** In real-time replays of 3- and 9-minute recordings it made 0 % and 0.40 % word errors, against Unified's 0.30 % and 0.86 %. On the short clips the two made the same two errors (unusual names).
+- **It always ends with a full stop.** It ended all 13 speech clips with one, where Unified left it out on 4 of 13, and Unified does the same at chunk cuts. Its word timings are also tidier around a cut: Unified stretches a word with trailing punctuation over the pause after it (see `chunks.rs`).
+- **Speed and size.** In the October bench, on the one pipeline: first words after about 0.45–0.5 s, final text 0.11–0.45 s after release for 3–30 s of speech and about 0.4 s after 3 or 9 minutes, 15–51 % of one core while you talk, about 690 MB of memory (830 MB at the peak of a 9-minute dictation). That's what Unified costs too.
+- **License.** CC-BY-4.0: free for any use, with credit to NVIDIA.
+- **Accuracy elsewhere.** It's one of the best models under 1B parameters on the [Open ASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) (6.43). Unified scores a little better on public benchmarks (see "Alternatives"), and our text-to-speech clips can't settle which is more accurate on a real voice.
+- **Why it wasn't the default at first.** Unified was picked as the only model that could both stream the preview and do the full-accuracy final pass from one set of weights. With one pipeline, every model does both by re-decoding, and that edge went away. Numbers in [`docs/model-bench.md`](docs/model-bench.md).
+- **Quantization: Q5_K_M, not Q8_0.** In the bench, Q5_K_M wrote exactly the same text as Q8_0 on every clip, showed first words just as fast, and finished within 10–20 ms of it (its decodes are about 5 % slower). In exchange it's 191 MB smaller to download and uses about 190 MB less memory (690 vs 880 MB). The Q8_0 entry is gone from the catalog.
 
 ### Alternatives
 
-- **Parakeet TDT 0.6B v2 (Q5_K_M).** It used to be the pick for faster first words, when Unified streamed natively. With one pipeline both re-decode, so they cost about the same (v2 15–51 % of one core while you speak, Unified 14–58 %) and show first words after about 0.45–0.5 s. It's one of the best models under 1B parameters on the [Open ASR Leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard) (6.43). **Quantization: Q5_K_M, not Q8_0.** In the bench, Q5_K_M wrote exactly the same text as Q8_0 on every clip, showed first words just as fast, and finished within 10–20 ms of it (its decodes are about 5 % slower). In exchange it's 191 MB smaller to download and uses about 190 MB less memory (690 vs 880 MB). The Q8_0 entry is gone from the catalog.
+- **Parakeet Unified EN 0.6B (Q5_K_M): best public benchmark scores.** In [transcribe.cpp's own runs](https://github.com/handy-computer/transcribe.cpp/tree/main/docs/models) of each GGUF, it has the lowest FLEURS English error of any model under 1B parameters (3.99 %). NVIDIA's same-pipeline comparison on its [model card](https://huggingface.co/nvidia/parakeet-unified-en-0.6b) puts it ahead of TDT v2 (5.91 vs 6.04). It isn't on the Open ASR Leaderboard itself, which is the main gap in the evidence. On the one pipeline it costs what v2 does (14–58 % of one core while you talk, first words after about 0.5 s, about 690 MB), but see "Default" for where it fell behind in our bench. The app must show its NVIDIA license notice (see "Licenses").
 - **Whisper base.en (Q8_0): smallest.** 85 MB, about 205 MB of memory. On our clips it made as few errors as Canary 180M Flash on ordinary sentences (1.5 %) and wrote numbers as digits. Its known flaw: it makes up words on silence (2 s of silence came out as "you"), and it once added a stray "Mhm." at the end of a long clip. The app should skip the final pass when the recording holds no speech (VAD or a level check), whichever model is active. It also used to lose text past 30 s (16 % word errors on a 3-minute dictation, whole paragraphs missing); its adapter now asks for timestamps on audio over 30 s, and chunking keeps most decodes under 30 s anyway (0.6 %). Its preview flickers more than Parakeet's, since it has no word timings to align passes by.
 - **Canary 180M Flash: benched, not offered.** It was the candidate for the small slot: more accurate than Whisper base.en on the leaderboard (7.48 vs 11.10 on the June 2026 version), and the empty-transcript issue ([transcribe.cpp #140](https://github.com/handy-computer/transcribe.cpp/issues/140)) never showed up (0 empty results in 84 decodes, nothing on silence). But on transcribe-cpp 0.3.1 it writes every number as words ("three hundred and forty two dollars", "five five five zero one four two"): the runtime has no number-formatting (ITN) switch for Canary. That puts it at 7.1 % WER on our clips against Whisper's 1.4 %, which fails the "no worse than Whisper base.en" bar, and digits matter for dictation. Worth re-checking if a later transcribe.cpp adds ITN for Canary.
 
@@ -143,7 +147,7 @@ These stay in the catalog (`offering: BenchOnly`) for `easyvox-bench` and compar
 
 ### Later: French
 
-Parakeet Ultra (Q5_K_M, 550 MB), Moondream's further-trained Parakeet v3, would take v2's slot. Its English is about v2's, and it has the best French of any fast model in transcribe.cpp's runs (4.66 % on FLEURS French). It needs transcribe-cpp 0.4, because its support landed after the pinned 0.3.1 ([PR #192](https://github.com/handy-computer/transcribe.cpp/pull/192)). Parakeet TDT v3 runs on 0.3.1 today as a stopgap.
+Parakeet Ultra (Q5_K_M, 550 MB), Moondream's further-trained Parakeet v3, is the pick for French. Its English is about v2's, and it has the best French of any fast model in transcribe.cpp's runs (4.66 % on FLEURS French). It needs transcribe-cpp 0.4, because its support landed after the pinned 0.3.1 ([PR #192](https://github.com/handy-computer/transcribe.cpp/pull/192)). Parakeet TDT v3 runs on 0.3.1 today as a stopgap.
 
 ### Other models we looked at
 
@@ -284,4 +288,4 @@ To address after the rest of the app is done.
 
 The backlog lives on the tuhdoo ledger, not in this file: run `tuhdoo backlog` in the repo (see `CLAUDE.md`). Open questions are held tasks labelled `decision`, and checks that need a person at an unlocked screen are labelled `hands-on`.
 
-Resolved in October 2026, each recorded in its section: the UI layer (Rust + GPUI Kit), the license (MIT, see `LICENSE`), the minimum macOS (26.0), the bundle id (`dev.easyvox.EasyVox`), the model list (Parakeet Unified default; Parakeet TDT v2 and Whisper base.en as downloads), audio in history (no) and the settings file (TOML, applied live).
+Resolved in October 2026, each recorded in its section: the UI layer (Rust + GPUI Kit), the license (MIT, see `LICENSE`), the minimum macOS (26.0), the bundle id (`dev.easyvox.EasyVox`), the model list (Parakeet TDT v2 default; Parakeet Unified and Whisper base.en as downloads), audio in history (no) and the settings file (TOML, applied live).

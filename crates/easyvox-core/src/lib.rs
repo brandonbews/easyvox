@@ -145,8 +145,8 @@ pub struct EngineConfig {
     pub chunk_secs: f32,
 }
 
-/// The default model: Parakeet Unified EN 0.6B on transcribe.cpp (see `DESIGN.md`, "Models").
-pub const RECOMMENDED_MODEL: &str = "parakeet-unified-en-0.6b-q5_k_m-gguf";
+/// The default model: Parakeet TDT 0.6B v2 on transcribe.cpp (see `DESIGN.md`, "Models").
+pub const RECOMMENDED_MODEL: &str = "parakeet-tdt-0.6b-v2-q5_k_m-gguf";
 
 impl EngineConfig {
     /// [`RECOMMENDED_MODEL`] with the default settings (needs the `transcribe-cpp` feature).

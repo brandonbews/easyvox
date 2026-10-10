@@ -22,7 +22,7 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 1. **Xcode** or the Command Line Tools (`xcode-select --install`). Apple's separate Metal toolchain isn't needed: GPUI and the speech runtime compile their Metal shaders when the app runs, not at build time. The cost moves to the first launch: the first model load takes about 14 s, once.
 2. **cmake**, which builds the speech runtime: `brew install cmake`.
 3. **Rust** through [rustup](https://rustup.rs). `rust-toolchain.toml` pins the version, and rustup installs it on the first build.
-4. **The speech model** (~541 MB). The finished app will download it during onboarding; for development, fetch it yourself:
+4. **The speech model**, Parakeet TDT 0.6B v2 (~539 MB). The finished app will download it during onboarding; for development, fetch it yourself:
 
    ```sh
    scripts/fetch-model.sh              # the default model
@@ -62,7 +62,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy
 
 ```sh
 cargo run -p easyvox-bench --release -- help
-cargo run -p easyvox-bench --release -- session --model parakeet-unified-en-0.6b-q5_k_m-gguf --wav testdata/punct_samantha.wav
+cargo run -p easyvox-bench --release -- session --model parakeet-tdt-0.6b-v2-q5_k_m-gguf --wav testdata/punct_samantha.wav
 ```
 
 ## License
