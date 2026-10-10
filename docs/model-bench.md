@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office.
 
 ## Results
 
@@ -133,9 +133,111 @@ Real-time replays with the key held, before and after the speech gate. "Before" 
 
 To reproduce: `easyvox-bench session … --idle-before 300` and `--unload` for the latency table (`metal_residency`, `model_wait_ms`, `partials.first_partial_ms`, `finalize_ms` in its JSON; `EASYVOX_METAL_RESIDENCY=1` turns the residency sets back on), and `partials.passes` and `partials.skipped` for the gate. For the idle app, any tool that reads a process's wake-ups works (`top -stats pid,cpu,idlew,mem -pid <pid>`, or `proc_pid_rusage`).
 
+## Real voice
+
+Run on the evening of 9 October 2026, same M4, on two recordings of the author's own voice. They're private and not in the repo (`recordings/` is gitignored), so this section gives numbers only, no transcript text. Both are 16 kHz mono WAVs:
+
+- **Read aloud** (`structured.wav`): 81 s, a 238-word script with names, times, sums of money and technical terms, read at a normal pace. Its reference transcript gives the word error rate.
+- **Ramble** (`ramble.wav`): 5:00 of unscripted talking, on cheap AirPods in an office. There's no reference. Room noise sits around −50 dBFS and speech around −17 dBFS (90th percentile of 30 ms frames). The file starts with 1 s of digital silence, and the speech starts at 1.5 s.
+
+Every run is a real-time `session` replay, the app's code path: a preview pass every 400 ms, chunks polished while talking, the rest decoded on release. Each run started only when the 1-minute load average was under 2.5 and nothing was compiling (1.4–2.4 during the runs). Other processes' CPU was logged every second, and no run had to be dropped. The models took turns, in a different order each round. Each model wrote the same final text in every run of the same recording.
+
+### Read aloud, 3 runs each
+
+| Model | Word error rate | First words | Text ready after release | CPU while talking | GPU while talking | Memory, loaded / peak |
+|---|---:|---:|---:|---:|---:|---:|
+| **Parakeet TDT 0.6B v2 Q5_K_M** (default) | **1.68 %** (4 words) | 0.49–0.50 s | 0.37–0.42 s | 39 % | 79–92 % | 706–724 / 754–781 MB |
+| Parakeet Unified EN 0.6B Q5_K_M | 2.10 % (5) | 0.49–0.50 s | 0.38–0.41 s | 43–44 % | 88–91 % | 710 / 761–765 MB |
+| Whisper base.en Q8_0 | 6.72 % (16) | 0.51–0.53 s | 0.23–0.40 s | 43–45 % | 74–76 % | 233–235 / 270–274 MB |
+| Canary 180M Flash Q5_K_M (bench only, see below) | 11.76 % (28) | 3.39–3.41 s | 0.38–0.41 s | 12–14 % | 77–79 % | 272–273 / 326–330 MB |
+
+- **v2 and Unified are one word apart.** Most of their errors are names, or a time or a sum written another way. On this clip that's close to a tie, with v2 ahead.
+- **Whisper base.en is much weaker on a real voice.** It made 1.37 % of errors on the text-to-speech clips, and 6.72 % here.
+- **Chunks didn't cost accuracy.** The same clip decoded in one pass on release (`--chunk 0`, one run each) gave v2 3.36 %, Unified 2.10 % and Whisper 9.24 %. So for v2 and Whisper the chunked text was better here. One pass made the text wait 1.28 / 1.36 / 0.79 s after release.
+- **CPU:** v2 used less than Unified in every run, here and on the ramble.
+- **GPU:** v2's first run read 79 %; its other runs read 91–92 %.
+- **Canary 180M Flash** still writes numbers as words: that's 8 of its 28 errors. Without those it still made more errors than Whisper (20 against 16), and its preview showed nothing for the first 3.4 s. It stays bench only.
+
+### Ramble, 5 minutes
+
+Two runs for v2 and one each for the others. The figures in brackets come from the one-pass decode (`--chunk 0`, one run each):
+
+| Model | Text ready after release (one pass) | CPU while talking | GPU while talking | Peak memory (one pass) | First words | Preview behind the voice: median / 95th pct / max | Words lost / doubled at the 13 joins |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **Parakeet TDT v2** | 0.35 s (7.92 s) | 33–34 % | 89 % | 807–811 MB (1,001) | 1.75–2.13 s | 0.20–0.21 / 0.69–0.73 / 1.41–1.75 s | 1 / 0 |
+| Parakeet Unified | 0.33 s (8.16 s) | 39 % | 90 % | 799 MB (1,004) | 2.61 s | 0.26 / 0.74 / 2.04 s | 2 / 1 |
+| Whisper base.en | 0.19 s (2.64 s) | 40 % | 75 % | 279 MB (308) | 2.20 s | 0.21 / 0.77 / 2.10 s | 1 / 0 |
+
+- **Text ready** stays at about a third of a second, against 8 s for one pass over 5 minutes. Each model polished 13 chunks while talking, each in 0.14–0.45 s.
+- **First words** count from the start of the file; the speech starts at 1.5 s.
+- **The preview keeps up.** It trails the voice by about 0.2 s (median), and every minute looks the same (medians 0.17–0.30 s). No word took longer than 2.1 s to show up. A pass ran about every 0.42 s (709–713 passes), and the speech gate skipped only 6–9. The slowest pass took 0.30–0.31 s (once 0.42 s, for Whisper), inside the 0.4 s interval. How it was measured: for each word of v2's one-pass decode, which has word timings, the time of the first preview update that reached that word, minus the time the word ended.
+- **Words on silence:** in both runs, Whisper's preview showed "you" at 1.4 s, on the room noise before the first word. It never reached the final text. Whisper's real first words came at 2.2 s, which is the figure in the table. Its final text had no words on silence: the few words it has that v2's one pass doesn't all sit in speech or between two close words, and are mostly one word written as two. The Parakeets wrote nothing on silence.
+
+### Where the chunks were cut
+
+The cuts landed at 20.5, 44.7, 71.1, 87.0, 109.4, 126.0, 150.7, 167.8, 193.9, 212.8, 228.3, 246.2 and 275.3 s, the same for every model and run. The cutter only looks at loudness, and the ticks fall inside the same pauses. That makes chunks of 15.5–29 s. The read-aloud clip was cut at 21.1, 39.2 and 55.8 s.
+
+- **Every cut was in a real pause.** The pauses found were 0.72–1.92 s long (0.78–1.11 s on the read-aloud clip). Within 50 ms of each cut, the loudest 10 ms of audio was −40 to −54 dBFS, against −17 dBFS for speech. Around each cut the audio stayed at least 20 dB under the speech (under −37 dBFS) for 0.75–1.9 s on the ramble, and 0.5–1.0 s on the read-aloud clip. No cut was forced (that only happens after 60 s without a pause), and none fell inside a word. The one-pass word timings do put four cuts inside a word, but each of those words runs 0.7–0.9 s into the silence after it: Parakeet stretches a word over the pause that follows it.
+- **The noise margin.** The quiet threshold sits 20 dB under the speech, at −37.6 dBFS here. That's 12 dB above this office's noise. An offline replay of the cutter (`pause.rs` and `Chunker::cut`, which reproduces these 13 cuts) shows how much louder the noise could get, with white noise mixed in:
+  - up to −42 dBFS of added noise: the same cuts;
+  - −40 dBFS: still 13 cuts, some moved, all in pauses;
+  - −38 dBFS: 9 cuts, 1 of them forced;
+  - −35 dBFS and up: every cut forced (6 cuts, chunks up to 60 s).
+
+  Even the forced cuts landed in pauses, since the quietest moment usually is one. So louder rooms would mostly mean longer chunks and a slower release, not broken words.
+
+### Joins
+
+Each model's chunked final text was compared, by reading, with its own one-pass decode, within 2.5 s of each cut:
+
+- **v2 lost one word in 13 joins**, the same in both runs, and doubled none. The word was at 20.5 s: a short, soft word said as the voice trailed off into the pause, at −36 to −47 dBFS. The two decodes placed it on opposite sides of the cut. The first chunk's decode put it after the cut (20.64–20.88 s), so it counted as the next chunk's word. The next chunk's decode put it 0.4 s before the cut (19.94–20.18 s), outside the 0.3 s allowed for a word the first chunk didn't keep (`SLACK_SECS` in `chunks.rs`). The only other difference near a join is a spelling. That's 1 word in 711. Across the 5 minutes, the chunked and one-pass texts differ in 19 places, 16 of them far from any join. There the two decodes heard a few words differently, and with no reference there's no telling which one is right.
+- **Unified lost two words and doubled one**: at 126.0 and 275.3 s, and at 150.7 s. Each was the word just before a pause, which Unified stretches over the pause (as `chunks.rs` notes). In the doubled case, the next chunk's copy started after the first copy ended, and its middle fell past the cut, so `without_repeat` kept it.
+- **Whisper lost one word, at 212.8 s:** the first word after the cut. Whisper's chunks are decoded without context, and this decode started in the pause and dropped it. The other differences near its joins are word forms.
+- **The read-aloud clip:** nothing lost or doubled at its 3 joins, by any model.
+- **A fix to try: widen `SLACK_SECS` from 0.3 to 0.5 s.** An offline replay of the join rules on these chunk decodes reproduces the session's text word for word at 0.3 s. At 0.5 s it recovers all three lost Parakeet words (v2's and both of Unified's), and adds nothing doubled on either recording. Unified's doubled word needs a different rule. The code is unchanged: the long text-to-speech clips should be checked first.
+
+### Pause finder or VAD?
+
+- **What's there.** `vad/silero_vad.onnx` (644 KB) runs only on sherpa-onnx's ONNX runtime, which the app doesn't build in (it would add 18.5 MB). In the bench (`--features sherpa`, then `--vad`), it only trims leading and trailing silence before the final decodes (`EngineConfig::vad_trim`). Nothing uses it for the cuts or the speech gate.
+- **Would a VAD help?** Not for the cuts on this recording. A VAD tells speech from steady noise better than loudness does, but loudness found every pause here with 12 dB to spare. The one word v2 lost (see "Joins") was a soft word at the edge of a real pause. A VAD would still cut in that pause, and the word would still be lost: the fix for that is in the join rules. Voices or typing nearby fool both, since a VAD hears any speech, not just the speaker's.
+- **Recommendation: keep the energy pause finder as it is.** If louder rooms start forcing cuts, the cheap fix is a noise-floor term in `quiet_level`: quiet = the louder of (speech − 20 dB) and (floor + 6 dB), where the floor is the 10th percentile of the window's frames. In the replay this gave the same 13 cuts on the real recording, and kept all 13 in pauses with up to −32 dBFS of added noise, where today's rule forces cuts from −38 dBFS. The speech gate uses the same threshold, so the preview would need checking too.
+- **Whisper's "you" before the first word** comes from the speech gate, which decodes room noise until it has heard speech, so that quiet first words aren't missed. A plain level check would stop it. That's the same check `DESIGN.md` asks for before the final pass, and it needs no VAD.
+
+### What it means for the model list
+
+- **v2 stays the default.** On a real voice it was the most accurate of the three (by one word over Unified), used the least CPU, was as fast as Unified, and had fewer join problems on the ramble. Unified's small edge on public benchmarks didn't show on this voice. One speaker and two recordings can't rank v2 and Unified firmly, but nothing here argues against v2.
+- **Whisper base.en** is the small-memory pick, not an accurate one: 6.7 % of errors on a real voice. Its "pick this if" line in `DESIGN.md` could say so.
+- **The ledger task also asked for Parakeet Unified at 160 ms chunks** (`EASYVOX_PK_CHUNK_MS`). That setting went away with native streaming, so there was nothing to run.
+
+### Commands
+
+```sh
+B=target/release/easyvox-bench
+R=recordings      # private, gitignored
+V2=parakeet-tdt-0.6b-v2-q5_k_m-gguf; UNI=parakeet-unified-en-0.6b-q5_k_m-gguf; WH=whisper-base.en-q8_0-gguf
+
+# Read aloud: 3 rounds over the three models, in a different order each round.
+$B session --model $V2 --wav $R/structured.wav --ref $R/structured-reference.txt --out s1-v2.json 2> s1-v2.err
+# Ramble: 2 runs for v2, 1 for each of the others.
+$B session --model $V2 --wav $R/ramble.wav --out r1-v2.json 2> r1-v2.err
+# One pass on release, to compare joins and latency against.
+$B session --model $V2 --wav $R/ramble.wav --chunk 0 --out r0-v2.json 2> r0-v2.err
+# Canary, from a scratch models folder.
+EASYVOX_MODELS_DIR=/tmp/m scripts/fetch-model.sh canary-180m-flash-q5_k_m-gguf
+$B session --model canary-180m-flash-q5_k_m-gguf --models /tmp/m --wav $R/structured.wav --ref $R/structured-reference.txt
+```
+
+- **Where the numbers come from:**
+  - `wer.wer`, `partials.first_partial_ms`, `finalize_ms`, `cpu.cpu_pct_of_one_core` and `chunks.polished` in the JSON;
+  - memory: `mem_before_session.footprint_mb` (loaded, after the warm-up decode) and `mem_end.peak_footprint_mb`;
+  - GPU: `ioreg -r -d 1 -c IOAccelerator` ("Device Utilization %") every second, leaving out the first 3 s of model load;
+  - the preview's lag: the partial lines on stderr.
+- **Cut times and word timings** came from a scratch copy of the bench with three `eprintln!` lines added, not committed: the pause each cut used (in `Chunker::cut`), each cut (in `polish_chunk`), and every final word with its timing. The same copy ran every session above. Each chunk's span was then decoded on its own with `transcribe --words`, to replay the join rules with other `SLACK_SECS` values.
+- **The loudness checks and the noise replay** read the WAV's 30 ms and 10 ms frame levels. Noise is mixed in by adding its power to each frame.
+
 ## Limits of this bench
 
-- **The clips can't tell the top models apart.** They're 15 short clips made with macOS text-to-speech voices (`testdata/generate.sh`): clean, evenly paced, no background noise. All three Parakeet files made the same two mistakes, both on unusual names ("Priya Rahman", "Syabhan O'Connor"). They're good for speed, memory, empty or invented output, numbers and punctuation, but not for ranking accuracy. **Real-voice recordings are still wanted:** 5–10 clips of a real person, with numbers, names and a long 60–90 s ramble, run through every model.
+- **The clips can't tell the top models apart.** They're 15 short clips made with macOS text-to-speech voices (`testdata/generate.sh`): clean, evenly paced, no background noise. All three Parakeet files made the same two mistakes, both on unusual names ("Priya Rahman", "Syabhan O'Connor"). They're good for speed, memory, empty or invented output, numbers and punctuation, but not for ranking accuracy. [Real voice](#real-voice) adds two recordings of one real speaker; more speakers and rooms would still help.
 - One machine: M4 (16 GB), macOS 26.6.2, transcribe-cpp 0.3.1, 4 threads, `easyvox-bench` release build. Load average 1.6–2.2 while it ran, with nothing else building.
 - Sessions replay a WAV file at real-time speed through the same code path the app uses (live preview, chunks polished while talking, the rest on release). In the first run each model ran one session pass and the two v2 files three each; "One pipeline" and "Long dictation" ran one or two passes per model, load average 1.6–3.3.
 
