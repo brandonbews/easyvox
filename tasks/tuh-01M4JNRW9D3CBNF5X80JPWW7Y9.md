@@ -2,7 +2,7 @@
 
 `tuh-01M4JNRW9D3CBNF5X80JPWW7Y9`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `engine`
 - **Created:** 2026-10-10 10:29 UTC by `brandon`
@@ -13,6 +13,10 @@ After the lightness change (preview every 1600 ms, tuh-01M4HVK6QMYNHCMAGZ57G0Z7D
 
 Acceptance: first words back to ~0.5-0.8 s on the short testdata clips and the ramble; energy per minute on the 5-min ramble within ~5 % of 39 J/min (macmon, quiet machine, as in docs/model-bench.md "Lightness"); final text and WER unchanged; gates and self-test pass.
 
+Done in f424519. No decode until speech (120 ms at 6 dB over the room or over -35 dBFS); silence and room noise give empty text on every model, the overlay says "Didn't catch anything". First preview pass 0.5 s into speech: first words 1.7 s -> 0.6 s (test clips), 1.0 -> 0.6 s (28 real starts). Quiet-mic stress test (243 real-time sessions, v2 + Whisper): all kept their text at 6 dB; 20 dB would have missed 24 of 28 starts at -30 dB. Energy, passes, WER unchanged. Numbers: docs/model-bench.md "First words and silence".
+
 ## History
 
-_No activity yet._
+### 2026-10-10 16:06 UTC — edit by `brandon`
+
+description edited · status open→done

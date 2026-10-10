@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG840VHRYSSV8KJE1WFQ`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `engine`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -22,6 +22,10 @@ Pointers: crates/easyvox-core/src/session.rs (final pass), audio.rs, lib.rs (Tra
 
 Constraints: no new runtime in the app (one ggml and one ONNX Runtime per binary), so an energy or level gate in core is the likely shape. Share the level computation with tuh-01M4H2EG7A8NGQH489P244AEBA (TranscriptEvent::Level) rather than writing two.
 
+Done in f424519. No decode until speech (120 ms at 6 dB over the room or over -35 dBFS); silence and room noise give empty text on every model, the overlay says "Didn't catch anything". First preview pass 0.5 s into speech: first words 1.7 s -> 0.6 s (test clips), 1.0 -> 0.6 s (28 real starts). Quiet-mic stress test (243 real-time sessions, v2 + Whisper): all kept their text at 6 dB; 20 dB would have missed 24 of 28 starts at -30 dB. Energy, passes, WER unchanged. Numbers: docs/model-bench.md "First words and silence".
+
 ## History
 
-_No activity yet._
+### 2026-10-10 16:06 UTC — edit by `brandon`
+
+description edited · status open→done
