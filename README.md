@@ -12,7 +12,7 @@ Website: [easyvox.dev](https://easyvox.dev)
 
 - The speech core (`crates/easyvox-core`) is in place and tested.
 - The app shell (`crates/easyvox-app`, built with [GPUI Kit](https://github.com/longbridge/gpui-kit)) is ported from the prototype: menu bar icon, ⌥Space push-to-talk, the live-text overlay, Settings and History.
-- Model downloads inside the app work underneath (download, sha256 check, then activate, through macOS's own networking, so system proxy settings apply), but nothing in the app starts one yet: the onboarding and Settings screens for that come next. Until then a missing model shows as "Not downloaded yet" in Settings.
+- Settings → Models downloads, switches and deletes the offered models: Parakeet TDT v2 (the default) and Whisper base.en (the small one). A download is checked against its sha256 before it's used, goes through macOS's own networking (so system proxy settings apply), and is saved with a LICENSE.txt that credits the model. Onboarding, which downloads the default on first launch, comes next.
 
 The plan and the decisions behind it are in [DESIGN.md](DESIGN.md).
 
@@ -60,7 +60,7 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 
    It writes `dist/EasyVox.app` and signs it ad hoc, which needs no certificate. macOS ties the Microphone and Accessibility permissions to the signature, so you may have to grant them again after each rebuild.
 
-   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), checks that an edit to the settings file applies live (on a temporary settings file, unless `EASYVOX_CONFIG` names one), downloads a file from a server of its own on 127.0.0.1 into a temporary folder (never the internet), checks that picking a model that isn't downloaded shows it as missing, writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
+   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), checks that an edit to the settings file applies live (on a temporary settings file, unless `EASYVOX_CONFIG` names one), draws the Models page in every state and opens About from the menu, downloads a file from a server of its own on 127.0.0.1 into a temporary folder (never the internet), cancels and deletes it there, switches to a second downloaded model during a dictation and back, checks that picking a model that isn't downloaded shows it as missing, writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits. It never writes to or deletes from the models folder; point `EASYVOX_MODELS_DIR` at a copy to keep it apart from yours.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy, the build and the tests on macOS 26 for pushes to `main` and for pull requests.
 
@@ -79,4 +79,4 @@ EasyVox reads its settings from `~/.config/easyvox/config.toml` (or `$XDG_CONFIG
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The app's third-party notices are in [`packaging/THIRD_PARTY_NOTICES.html`](packaging/THIRD_PARTY_NOTICES.html), generated from `Cargo.lock` by `scripts/notices.sh` (needs `cargo install --locked cargo-about --features cli`); run it after a dependency update, or `cargo test` says so. The speech models keep their own licenses: Settings → About credits each one.

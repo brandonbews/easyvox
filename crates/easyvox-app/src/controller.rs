@@ -15,13 +15,14 @@
 //! Models are downloaded here too (`download_model`), for onboarding and Settings alike. Each
 //! download runs `easyvox_core::download` on its own thread and reports on the same channel;
 //! its state is in `AppStatus::downloads`. Switching models goes through `use_model`, which
-//! frees the old model before loading the new one and waits for a dictation to end first.
+//! waits for a dictation to end, then frees the old model before loading the new one, so only
+//! one is ever in memory (see `MODEL_SWAP`).
 
 use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
 use crate::overlay::Overlay;
-use crate::settings::SettingsView;
+use crate::settings::{Page, SettingsView};
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
 use crate::{platform, tray};
 use easyvox_core::download::{CancelToken, DownloadError, Progress};
@@ -30,7 +31,9 @@ use easyvox_core::{AudioSource, Engine, MicPermission, Session, TranscriptEvent}
 use gpui_kit::component::Theme;
 use gpui_kit::*;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 pub enum UiEvent {
@@ -79,6 +82,19 @@ enum Phase {
 /// one save produces (or an editor writing in steps) make one reload.
 const CONFIG_SETTLE: Duration = Duration::from_millis(150);
 
+/// Held while a model is freed or loaded on the background executor, so two models are never
+/// in memory together: a switch frees the old model before the new one loads, and a load that
+/// a later switch overtook frees its model before the next load starts.
+static MODEL_SWAP: Mutex<()> = Mutex::new(());
+
+/// Frees an engine's model now, even if a clone of the engine is still around. Blocking.
+fn free(engine: Engine) {
+    let id = engine.model_info().id;
+    if engine.unload() {
+        log::info!("engine: freed {id}");
+    }
+}
+
 pub struct ControllerGlobal(pub Entity<Controller>);
 impl Global for ControllerGlobal {}
 
@@ -106,6 +122,7 @@ pub struct Controller {
     phase: Phase,
     seq: u64,
     settings_window: Option<AnyWindowHandle>,
+    settings_view: Option<WeakEntity<SettingsView>>,
     history_window: Option<AnyWindowHandle>,
     hide_task: Option<Task<()>>,
     load_task: Option<Task<()>>,
@@ -126,6 +143,8 @@ pub struct Controller {
     downloads: HashMap<&'static str, DownloadJob>,
     /// A model picked while a dictation was running: switched to once it ends.
     pending_model: Option<String>,
+    /// Counts model loads, so a load can tell that a later one overtook it.
+    load_generation: Arc<AtomicU64>,
     /// Push-to-talk replays this WAV instead of opening the microphone (debug and self-test).
     pub source_override: Option<PathBuf>,
     /// Simulate ⌘V after copying the final text. The self-test turns it off: it must never
@@ -152,6 +171,7 @@ impl Controller {
             phase: Phase::Idle,
             seq: 0,
             settings_window: None,
+            settings_view: None,
             history_window: None,
             hide_task: None,
             load_task: None,
@@ -164,6 +184,7 @@ impl Controller {
             right_option_tap: false,
             downloads: HashMap::new(),
             pending_model: None,
+            load_generation: Arc::default(),
             source_override: None,
             auto_paste: true,
         }
@@ -209,6 +230,7 @@ impl Controller {
             }
             tray::MENU_SETTINGS => self.open_settings(cx),
             tray::MENU_HISTORY => self.open_history(cx),
+            tray::MENU_ABOUT => self.open_settings_at(Page::About, cx),
             tray::MENU_QUIT => {
                 log::info!("quitting");
                 // Best effort: a part file the exit leaves behind goes at the next launch.
@@ -480,9 +502,9 @@ impl Controller {
     }
 
     /// Makes `model_id` the speech model: the one way to switch. During a dictation the switch
-    /// waits for it to end. The old model is freed before the new one loads, so only one is
-    /// ever in memory. A model that isn't downloaded leaves no engine, with
-    /// [`EngineStatus::Missing`]. Doesn't write the settings file.
+    /// waits for it to end, so it applies from the next one. The old model is freed before the
+    /// new one loads, so only one is ever in memory. A model that isn't downloaded leaves no
+    /// engine, with [`EngineStatus::Missing`]. Doesn't write the settings file.
     pub fn use_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
         cx.global_mut::<AppSettings>().model = model_id.to_string();
         if !self.is_idle() {
@@ -494,30 +516,37 @@ impl Controller {
         if self.engine.as_ref().is_some_and(|e| e.model_info().id == model_id) {
             return; // already in use
         }
-        self.drop_engine(cx);
-        self.load_engine(model_id, cx);
-    }
-
-    /// Frees the engine, on the background executor: freeing a model can block.
-    fn drop_engine(&mut self, cx: &mut Context<Self>) {
         self.unload_task = None;
-        if let Some(old) = self.engine.take() {
-            cx.background_spawn(async move { drop(old) }).detach();
-        }
+        let old = self.engine.take();
+        self.load_engine_replacing(model_id, old, cx);
     }
 
-    /// Loads (or reloads) a speech model on the background executor. An engine it replaces is
-    /// dropped there too, since freeing a model can block. If the model isn't downloaded,
-    /// there's no engine and the status says so.
+    /// Loads (or reloads) a speech model on the background executor. If the model isn't
+    /// downloaded, there's no engine and the status says so.
     pub fn load_engine(&mut self, model_id: &str, cx: &mut Context<Self>) {
+        self.load_engine_replacing(model_id, None, cx);
+    }
+
+    /// [`load_engine`](Self::load_engine), freeing `old` first, under [`MODEL_SWAP`]. An engine
+    /// still in `self.engine` is replaced once the new one is ready, and dropped off this
+    /// thread, since freeing a model can block.
+    fn load_engine_replacing(&mut self, model_id: &str, old: Option<Engine>, cx: &mut Context<Self>) {
         cx.global_mut::<AppSettings>().model = model_id.to_string();
+        let generation = self.load_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let latest = self.load_generation.clone();
         let models_dir = easyvox_core::paths::models_dir();
         if let Ok(info) = easyvox_core::models::find(model_id)
             && !info.is_available(&models_dir)
         {
             log::warn!("engine: {model_id} isn't downloaded ({})", info.resolve(&models_dir).display());
             self.load_task = None;
-            self.drop_engine(cx);
+            self.unload_task = None;
+            let replaced = self.engine.take();
+            cx.background_spawn(async move {
+                let _swap = MODEL_SWAP.lock().unwrap_or_else(PoisonError::into_inner);
+                old.into_iter().chain(replaced).for_each(free);
+            })
+            .detach();
             cx.global_mut::<AppStatus>().engine = EngineStatus::Missing;
             cx.refresh_windows();
             return;
@@ -531,7 +560,28 @@ impl Controller {
         let model = model_id.to_string();
         self.load_task = Some(cx.spawn(async move |this, cx| {
             let started = Instant::now();
-            let result = cx.background_spawn(async move { easyvox_core::Engine::load(config) }).await;
+            let result = cx
+                .background_spawn(async move {
+                    let _swap = MODEL_SWAP.lock().unwrap_or_else(PoisonError::into_inner);
+                    old.into_iter().for_each(free);
+                    let overtaken = || latest.load(Ordering::SeqCst) != generation;
+                    if overtaken() {
+                        return None;
+                    }
+                    let result = easyvox_core::Engine::load(config);
+                    match result {
+                        Ok(engine) if overtaken() => {
+                            free(engine); // a later switch wants another model
+                            None
+                        }
+                        result => Some(result),
+                    }
+                })
+                .await;
+            let Some(result) = result else {
+                log::info!("engine: {model} was replaced before it finished loading");
+                return;
+            };
             let wall_ms = started.elapsed().as_millis();
             let _ = this.update(cx, |c, cx| {
                 let status = match result {
@@ -557,7 +607,6 @@ impl Controller {
 
     /// Downloads a catalog model into the models folder, on its own thread; progress and the
     /// result arrive as [`UiEvent::Download`]. Does nothing if it's already downloading.
-    #[allow(dead_code)] // onboarding and Settings call it (their own tasks)
     pub fn download_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
         match easyvox_core::models::find(model_id) {
             Ok(info) => self.start_download(info, easyvox_core::paths::models_dir(), cx),
@@ -567,7 +616,6 @@ impl Controller {
 
     /// [`download_model`](Self::download_model) for any entry, into any folder (the self-test
     /// uses its own).
-    #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
     pub fn start_download(&mut self, info: &'static ModelInfo, models_dir: PathBuf, cx: &mut Context<Self>) {
         let id = info.id;
         if self.downloads.contains_key(id) {
@@ -603,7 +651,6 @@ impl Controller {
 
     /// Stops a running download. Its `Done(Err(Cancelled))` follows and clears its status;
     /// nothing is left on disk.
-    #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
     pub fn cancel_download(&mut self, model_id: &str) {
         if let Some(job) = self.downloads.get(model_id) {
             log::info!("download: cancelling {model_id}");
@@ -617,21 +664,30 @@ impl Controller {
         self.downloads.contains_key(model_id)
     }
 
-    /// Deletes a downloaded model. Refuses the model in use (or picked) and one that's
-    /// downloading.
-    #[allow(dead_code)] // the Settings model list calls it (its own task)
+    /// Deletes a downloaded model and its license notice. Refuses the model in use (or picked)
+    /// and one that's downloading.
     pub fn delete_model(&mut self, model_id: &str, cx: &mut Context<Self>) -> Result<(), String> {
         let info = easyvox_core::models::find(model_id).map_err(|e| e.to_string())?;
+        self.delete_model_at(info, &easyvox_core::paths::models_dir(), cx)
+    }
+
+    /// [`delete_model`](Self::delete_model) for any entry, in any folder (the self-test uses
+    /// its own, never the real models folder).
+    pub fn delete_model_at(
+        &mut self,
+        info: &'static ModelInfo,
+        models_dir: &Path,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
         let in_use = self.engine.as_ref().is_some_and(|e| e.model_info().id == info.id);
         if in_use || cx.global::<AppSettings>().model == info.id || self.pending_model.as_deref() == Some(info.id) {
-            return Err("This is the model in use. Pick another one first.".into());
+            return Err("This is the model in use. Use another one first.".into());
         }
         if self.downloads.contains_key(info.id) {
             return Err("This model is downloading. Cancel the download first.".into());
         }
-        easyvox_core::download::delete(info, &easyvox_core::paths::models_dir())
-            .map_err(|e| format!("Couldn't delete the model: {e}"))?;
-        log::info!("download: deleted {}", info.id);
+        easyvox_core::download::delete(info, models_dir).map_err(|e| format!("Couldn't delete the model: {e}"))?;
+        log::info!("download: deleted {} from {}", info.id, models_dir.display());
         cx.global_mut::<AppStatus>().downloads.remove(info.id);
         cx.refresh_windows();
         Ok(())
@@ -812,13 +868,23 @@ impl Controller {
         if Self::bring_forward(self.settings_window, cx) {
             return;
         }
-        let options = window_options("EasyVox Settings", size(px(880.), px(520.)), cx);
+        let options = window_options("EasyVox Settings", size(px(880.), px(560.)), cx);
         match gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| SettingsView::new(window, cx))) {
-            Ok((handle, _)) => {
+            Ok((handle, view)) => {
                 self.settings_window = Some(handle);
+                self.settings_view = Some(view.downgrade());
                 cx.activate(true); // an accessory app has to bring itself forward
             }
             Err(e) => log::error!("couldn't open Settings: {e:#}"),
+        }
+    }
+
+    /// Opens Settings (or brings it forward) on `page`: the tray's "About EasyVox" opens the
+    /// About page.
+    pub fn open_settings_at(&mut self, page: Page, cx: &mut Context<Self>) {
+        self.open_settings(cx);
+        if let Some(view) = self.settings_view.as_ref().and_then(WeakEntity::upgrade) {
+            view.update(cx, |view, cx| view.show(page, cx));
         }
     }
 
@@ -841,6 +907,12 @@ impl Controller {
     #[cfg(feature = "self-test")]
     pub fn windows(&self) -> [Option<AnyWindowHandle>; 2] {
         [self.settings_window, self.history_window]
+    }
+
+    /// The Settings view, while its window is open.
+    #[cfg(feature = "self-test")]
+    pub fn settings_view(&self) -> Option<Entity<SettingsView>> {
+        self.settings_view.as_ref().and_then(WeakEntity::upgrade)
     }
 
     /// Activates an already open window. False if there's none (or it was closed).

@@ -1,0 +1,36 @@
+# cargo-about's settings for packaging/THIRD_PARTY_NOTICES.html: the licenses of everything
+# compiled into EasyVox.app. Regenerate with scripts/notices.sh.
+
+# The licenses we accept, in order of preference: for a crate under "MIT OR Apache-2.0", the
+# notices quote the first that applies. A crate under none of these fails the run (--fail).
+# There's no GPL, LGPL or AGPL in the app (DESIGN.md, "Licenses").
+accepted = [
+  "MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC",
+  "Zlib", "0BSD", "Unicode-3.0", "Unlicense", "CC0-1.0", "BSL-1.0", "MPL-2.0", "bzip2-1.0.6",
+]
+# The app ships for Apple silicon only. This drops the Windows and Linux crates.
+targets = ["aarch64-apple-darwin"]
+# Build tools (cmake, cc, bindgen…) and test-only crates aren't in the app.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# Our own workspace crates: EasyVox's license is LICENSE, bundled next to the notices.
+private = { ignore = true }
+
+# gpui-kit-assets says Apache-2.0, but the icons it embeds are Lucide's (ISC), and some of those
+# come from Feather (MIT, Cole Bemis). Its LICENSE-LUCIDE holds both texts; each is quoted under
+# its own license. ggml's and miniz's licenses, inside transcribe-cpp-sys, are found on their own.
+[gpui-kit-assets.clarify]
+license = "Apache-2.0 AND ISC AND MIT"
+
+[[gpui-kit-assets.clarify.files]]
+path = "LICENSE-LUCIDE"
+license = "ISC"
+start = "ISC License"
+end = "OF THIS SOFTWARE."
+checksum = "bb4e713d5d93acd16e464fedb99d294f779e6b1bc984357aac96d9524aedcb8c"
+
+[[gpui-kit-assets.clarify.files]]
+path = "LICENSE-LUCIDE"
+license = "MIT"
+start = "The following Lucide icons are derived from the Feather project"
+checksum = "b5e665ef74d9f58eff9140502a615d9438edb7ef96af3bc4ab1fdad7ddc8ad73"

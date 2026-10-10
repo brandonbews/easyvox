@@ -10,9 +10,13 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 pub const MENU_TEST_DICTATION: &str = "test-dictation";
 pub const MENU_SETTINGS: &str = "settings";
 pub const MENU_HISTORY: &str = "history";
+pub const MENU_ABOUT: &str = "about";
 pub const MENU_QUIT: &str = "quit";
 pub const SETTINGS_TITLE: &str = "Settings…";
 pub const HISTORY_TITLE: &str = "History…";
+/// Opens Settings on its About page: the version, the models' credits and the third-party
+/// notices.
+pub const ABOUT_TITLE: &str = "About EasyVox";
 pub const QUIT_TITLE: &str = "Quit EasyVox";
 
 /// Dropping it removes the menu bar icon. The fields are read only by the self-test.
@@ -33,6 +37,7 @@ pub fn create(on_menu: impl Fn(String) + Send + Sync + 'static) -> anyhow::Resul
         &MenuItem::with_id(MENU_SETTINGS, SETTINGS_TITLE, true, None),
         &MenuItem::with_id(MENU_HISTORY, HISTORY_TITLE, true, None),
         &PredefinedMenuItem::separator(),
+        &MenuItem::with_id(MENU_ABOUT, ABOUT_TITLE, true, None),
         &MenuItem::with_id(MENU_QUIT, QUIT_TITLE, true, None),
     ])?;
     MenuEvent::set_event_handler(Some(move |e: MenuEvent| on_menu(e.id.0)));

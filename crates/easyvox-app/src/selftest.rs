@@ -8,11 +8,16 @@
 //! copied), and history goes to a temporary database. The settings file is a temporary one too,
 //! unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then puts
 //! it back as it was. The model download check never touches the internet: it downloads from a
-//! server of its own on 127.0.0.1 into the temporary folder.
+//! server of its own on 127.0.0.1 into the temporary folder, and deletes only from there.
+//!
+//! The speech models come from the models folder (`EASYVOX_MODELS_DIR` moves it). Nothing here
+//! writes to it or deletes from it. Switching models needs a second offered model in it, or that
+//! check is skipped.
 
 use crate::controller::Controller;
 use crate::overlay::Mode;
 use crate::platform::{self, PanelState};
+use crate::settings::Page;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
 use easyvox_core::download::Progress;
 use easyvox_core::models::{self, ModelInfo};
@@ -165,9 +170,15 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
 
     config_live_reload(&controller, &mut report, cx).await;
     windows(&controller, &mut report, cx).await;
+    models_page(&controller, &mut report, cx).await;
+    about_page(&controller, &mut report, cx).await;
     model_download(&controller, &options, &mut report, cx).await;
-    if engine_ready {
-        model_switch(&controller, &mut report, cx).await;
+    match (engine_ready, hotkey_id) {
+        (true, Some(id)) => {
+            model_use(&controller, id, &mut report, cx).await;
+            model_switch(&controller, &mut report, cx).await;
+        }
+        _ => report.check("switching models", false, json!("skipped: needs the model and the shortcut")),
     }
 
     let pass = report.failed == 0;
@@ -477,9 +488,109 @@ async fn windows(controller: &Entity<Controller>, report: &mut Report, cx: &mut 
     );
 }
 
+/// Draws the open Settings window. False if it isn't open or the draw failed.
+fn draw_settings(controller: &Entity<Controller>, cx: &mut App) -> bool {
+    let Some(handle) = controller.read(cx).windows()[0] else { return false };
+    handle.update(cx, |_, window, cx| window.draw(cx).clear(cx)).is_ok()
+}
+
+/// The Models page draws a row for every offered model, in every state a row can be in:
+/// downloaded or not (whatever the models folder holds), downloading, checking, reconnecting
+/// and failed (set in `AppStatus` for the draw only; nothing downloads).
+async fn models_page(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::model_row::DRAWN;
+    use std::sync::atomic::Ordering::Relaxed;
+    let offered = models::offered();
+    let shown = cx.update(|cx| {
+        let view = controller.read(cx).settings_view()?;
+        view.update(cx, |v, cx| v.show(Page::Models, cx));
+        Some(())
+    });
+    let states = [
+        None,
+        Some(DownloadStatus::Running(Progress::Downloading { done: 120_000_000, total: 539_012_608 })),
+        Some(DownloadStatus::Running(Progress::Verifying)),
+        Some(DownloadStatus::Running(Progress::Reconnecting { attempt: 2, max: 5, done: 1, total: 2 })),
+        Some(DownloadStatus::Failed { error: "The downloaded file isn't the expected one.".into() }),
+        None,
+    ];
+    let mut draws = vec![];
+    for state in states {
+        let (drawn, rows) = cx.update(|cx| {
+            let ids: Vec<&'static str> = offered.iter().map(|m| m.id).collect();
+            let downloads = &mut cx.global_mut::<AppStatus>().downloads;
+            for id in &ids {
+                match &state {
+                    Some(status) => downloads.insert(id, status.clone()),
+                    None => downloads.remove(id),
+                };
+            }
+            cx.refresh_windows();
+            let before = DRAWN.load(Relaxed);
+            let drawn = draw_settings(controller, cx);
+            (drawn, DRAWN.load(Relaxed) - before)
+        });
+        draws.push(json!({"state": format!("{state:?}"), "drawn": drawn, "rows": rows}));
+    }
+    let ok = shown.is_some()
+        && draws.iter().all(|d| d["drawn"] == true && d["rows"].as_u64().unwrap_or(0) >= offered.len() as u64);
+    report.check(
+        "the Models page draws every offered model in every state",
+        ok,
+        json!({"offered": offered.iter().map(|m| m.id).collect::<Vec<_>>(), "draws": draws}),
+    );
+}
+
+/// "About EasyVox" in the menu opens Settings on its About page, which draws every offered
+/// model's credits; the third-party notices are in the app bundle and cover the vendored code.
+async fn about_page(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::about::{DRAWN, LICENSE, NOTICES};
+    use std::sync::atomic::Ordering::Relaxed;
+    let before = DRAWN.load(Relaxed);
+    let clicked = cx.update(|cx| {
+        let tray = controller.read(cx).tray.as_ref()?;
+        Some(platform::perform_menu_item(&tray.menu, crate::tray::ABOUT_TITLE))
+    });
+    let opened = wait_for(cx, Duration::from_secs(3), |cx| {
+        controller.read(cx).settings_view().is_some_and(|v| v.read(cx).page() == Page::About)
+    })
+    .await;
+    let drawn = cx.update(|cx| draw_settings(controller, cx));
+    let credits_drawn = DRAWN.load(Relaxed) - before;
+    let resources = std::env::current_exe().ok().and_then(|exe| Some(exe.parent()?.parent()?.join("Resources")));
+    let (notices, license) = (NOTICES.path(), LICENSE.path());
+    let in_bundle =
+        |path: &Option<PathBuf>| path.as_ref().zip(resources.as_ref()).is_some_and(|(p, r)| p.starts_with(r));
+    let text = notices.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    let covers: Vec<&str> = ["The ggml authors", "Rich Geldreich", "Lucide Icons", "option-ext", "SQLite"]
+        .into_iter()
+        .filter(|needle| !text.contains(needle))
+        .collect();
+    report.check(
+        "About opens from the menu, shows the credits, and the notices are in the app",
+        matches!(clicked, Some(Ok(())))
+            && opened.is_some()
+            && drawn
+            && credits_drawn >= models::offered().len()
+            && in_bundle(&notices)
+            && in_bundle(&license)
+            && covers.is_empty(),
+        json!({"menu_action": format!("{clicked:?}"), "opened_ms": opened, "drawn": drawn,
+               "credits_drawn": credits_drawn, "notices": notices, "license": license,
+               "notices_missing": covers}),
+    );
+    cx.update(|cx| {
+        if let Some(view) = controller.read(cx).settings_view() {
+            view.update(cx, |v, cx| v.show(Page::General, cx));
+        }
+    });
+}
+
 /// A model download through the controller, the way onboarding and Settings start one, from a
 /// server on 127.0.0.1 into the temporary folder: progress reaches `AppStatus`, a cancel
-/// leaves nothing behind, and a full download lands verified with its status cleared.
+/// leaves nothing behind, and a full download lands verified with its status cleared and its
+/// license notice next to it. Then the delete: refused while it downloads or is in use, and it
+/// takes both files.
 async fn model_download(controller: &Entity<Controller>, options: &Options, report: &mut Report, cx: &mut AsyncApp) {
     let payload: Vec<u8> = (0..2 * 1024 * 1024u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 11) as u8).collect();
     let server = match LocalServer::start(payload.clone()) {
@@ -511,6 +622,12 @@ async fn model_download(controller: &Entity<Controller>, options: &Options, repo
 
     start(cx);
     let progressed = wait_for(cx, Duration::from_secs(5), |cx| downloaded(cx) > 0).await;
+    let refused_downloading = cx.update(|cx| controller.update(cx, |c, cx| c.delete_model_at(info, &dir, cx)));
+    report.check(
+        "a model can't be deleted while it downloads",
+        refused_downloading.as_ref().is_err_and(|e| e.contains("downloading")),
+        json!({"result": format!("{refused_downloading:?}")}),
+    );
     cx.update(|cx| controller.update(cx, |c, _| c.cancel_download(info.id)));
     let cleared =
         wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).is_downloading(info.id) && status(cx).is_none())
@@ -536,17 +653,107 @@ async fn model_download(controller: &Entity<Controller>, options: &Options, repo
     let path = info.resolve(&dir);
     let size = std::fs::metadata(&path).map(|m| m.len()).ok();
     let files = names_in(&dir.join("gguf"));
+    let notice = std::fs::read_to_string(info.license_notice_path(&dir)).unwrap_or_default();
     report.check(
-        "a model download from a local server shows progress and lands verified",
+        "a model download from a local server shows progress and lands verified, with its license notice",
         !busy
             && after.is_none()
             && !seen.is_empty()
             && seen.windows(2).all(|w| w[0] <= w[1])
             && size == Some(info.download_bytes)
             && info.is_available(&dir)
-            && files == ["self-test.gguf"],
+            && files == ["self-test.gguf", "self-test.gguf.LICENSE.txt"]
+            && notice == info.license_notice(),
         json!({"ms": started.elapsed().as_millis(), "progress_seen": seen, "status_after": format!("{after:?}"),
-               "size": size, "files": files, "requests": server.requests()}),
+               "size": size, "files": files, "requests": server.requests(), "notice_lines": notice.lines().count()}),
+    );
+
+    // As if it were the model in use: refused. (The setting is put back at once; nothing loads.)
+    let refused_in_use = cx.update(|cx| {
+        let chosen = std::mem::replace(&mut cx.global_mut::<AppSettings>().model, info.id.to_string());
+        let result = controller.update(cx, |c, cx| c.delete_model_at(info, &dir, cx));
+        cx.global_mut::<AppSettings>().model = chosen;
+        result
+    });
+    let kept = names_in(&dir.join("gguf"));
+    let deleted = cx.update(|cx| controller.update(cx, |c, cx| c.delete_model_at(info, &dir, cx)));
+    let left = names_in(&dir.join("gguf"));
+    report.check(
+        "deleting a model is refused while it's in use, then takes the model and its notice",
+        refused_in_use.as_ref().is_err_and(|e| e.contains("in use"))
+            && kept.len() == 2
+            && deleted.is_ok()
+            && left.is_empty()
+            && !info.is_available(&dir),
+        json!({"refused_in_use": format!("{refused_in_use:?}"), "deleted": format!("{deleted:?}"),
+               "files_left": left}),
+    );
+}
+
+/// "Use" on another downloaded model during a dictation: that dictation finishes on the model
+/// it started with, then the app switches, frees the old model and loads the new one (memory
+/// drops to the new model's), and a switch back loads the first again. The settings file the
+/// switch writes is put back as it was. Skipped when no second offered model is downloaded.
+async fn model_use(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
+    let name = "Use switches models after the dictation in progress, and frees the old one";
+    let models_dir = easyvox_core::paths::models_dir();
+    let original = cx.update(|cx| cx.global::<AppSettings>().model.clone());
+    let Some(other) = models::offered().into_iter().find(|m| m.id != original && m.is_available(&models_dir)) else {
+        return report.check(name, true, json!("skipped: no second offered model is downloaded"));
+    };
+    let path = cx.update(|cx| cx.global::<AppStatus>().config_path.clone());
+    let saved_text = std::fs::read_to_string(&path).ok();
+    let footprint_mb = || easyvox_core::metrics::proc_stats().footprint_bytes as f64 / 1e6;
+    let before_mb = footprint_mb();
+
+    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let pressed = platform::post_hotkey_event(hotkey_id, true);
+    let started = wait_for(cx, Duration::from_secs(1), |cx| !controller.read(cx).is_idle()).await;
+    sleep(cx, 2500).await;
+    cx.update(|cx| controller.update(cx, |c, cx| c.select_model(other.id, cx)));
+    let during = cx.update(|cx| controller.read(cx).engine.as_ref().map(|e| e.model_info().id));
+    let released = platform::post_hotkey_event(hotkey_id, false);
+    let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
+    let dictated_with = cx.update(|cx| {
+        let entries = &controller.read(cx).history.read(cx).entries;
+        (entries.len() > history_before).then(|| entries[0].model_id.clone())
+    });
+    let switched = wait_for(cx, Duration::from_secs(60), |cx| {
+        matches!(cx.global::<AppStatus>().engine, EngineStatus::Ready { .. })
+            && controller.read(cx).engine.as_ref().is_some_and(|e| e.model_info().id == other.id)
+    })
+    .await;
+    sleep(cx, 500).await; // let the allocator hand the memory back
+    let after_mb = footprint_mb();
+    let saved = std::fs::read_to_string(&path).unwrap_or_default();
+
+    cx.update(|cx| controller.update(cx, |c, cx| c.select_model(&original, cx)));
+    let back = wait_for(cx, Duration::from_secs(60), |cx| {
+        matches!(cx.global::<AppStatus>().engine, EngineStatus::Ready { .. })
+            && controller.read(cx).engine.as_ref().is_some_and(|e| e.model_info().id == original)
+    })
+    .await;
+    let _ = match saved_text {
+        Some(text) => std::fs::write(&path, text),
+        None => std::fs::remove_file(&path),
+    };
+    report.check(
+        name,
+        pressed == 0
+            && released == 0
+            && started.is_some()
+            && during == Some(original.as_str())
+            && finished.is_some()
+            && dictated_with.as_deref() == Some(original.as_str())
+            && switched.is_some()
+            && after_mb < before_mb - 150.
+            && saved.contains(&format!("model = \"{}\"", other.id))
+            && back.is_some(),
+        json!({"from": original, "to": other.id, "engine_during_dictation": during,
+               "dictation_used": dictated_with, "switched_ms": switched,
+               "footprint_mb_before": before_mb.round(), "footprint_mb_after": after_mb.round(),
+               "saved_to_settings_file": saved.contains(&format!("model = \"{}\"", other.id)),
+               "switched_back_ms": back}),
     );
 }
 

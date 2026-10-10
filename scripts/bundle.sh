@@ -72,6 +72,9 @@ rm -rf dist/.staging
 mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources"
 cp "target/$out_dir/easyvox" "$staging/Contents/MacOS/easyvox"
 cp packaging/Info.plist "$staging/Contents/Info.plist"
+# The About page opens these. The notices come from scripts/notices.sh (see the file's top).
+cp packaging/THIRD_PARTY_NOTICES.html "$staging/Contents/Resources/"
+cp LICENSE "$staging/Contents/Resources/LICENSE.txt"
 plutil -replace CFBundleShortVersionString -string "$version" "$staging/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$version" "$staging/Contents/Info.plist"
 plutil -lint "$staging/Contents/Info.plist" >/dev/null

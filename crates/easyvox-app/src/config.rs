@@ -29,8 +29,8 @@ pub const ADVANCED: &str = "advanced";
 const UI_KEYS: [(&str, &str); 4] = [
     (
         "model",
-        "The speech model: an id from `scripts/fetch-model.sh --list` that runs in the app. It has to be\n\
-         downloaded; Settings lists the ones that are.",
+        "The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them\n\
+         default or alternative). Settings → Models downloads it, and the next dictation uses it.",
     ),
     (
         "shortcut",
@@ -71,8 +71,10 @@ pub fn parse(text: &str) -> Result<Loaded, String> {
     for (key, item) in doc.iter() {
         match key {
             "model" => match item.as_str() {
-                Some(id) if model_runs_here(id) => s.model = id.into(),
-                Some(id) => warnings.push(format!("model: {id:?} isn't a model this app can run; using the default")),
+                Some(id) => match model_problem(id) {
+                    None => s.model = id.into(),
+                    Some(problem) => warnings.push(format!("model: {id:?} {problem}; using the default")),
+                },
                 None => warnings.push(wrong_type(key, item, "a model id in quotes")),
             },
             "shortcut" => match item.as_str() {
@@ -135,8 +137,14 @@ fn is_advanced(key: &str) -> bool {
     AppTuning::KEYS.contains(&key) || Tuning::KEYS.contains(&key)
 }
 
-fn model_runs_here(id: &str) -> bool {
-    easyvox_core::models::find(id).is_ok_and(|m| m.runtime.is_compiled())
+/// Why `id` can't be the app's model, or `None` if it can: it must be offered in the app (not
+/// bench only) and run in this build.
+fn model_problem(id: &str) -> Option<&'static str> {
+    match easyvox_core::models::find(id) {
+        Ok(m) if !m.offering.in_app() => Some("is for easyvox-bench only, not offered in the app"),
+        Ok(m) if m.runtime.is_compiled() => None,
+        _ => Some("isn't a model this app can run"),
+    }
 }
 
 fn wrong_type(key: &str, item: &Item, expected: &str) -> String {
@@ -501,6 +509,25 @@ mod tests {
         assert!(joined.contains("shortcut should be a shortcut in quotes"), "{joined}");
         assert!(joined.contains("hold_right_option should be true or false, not string"), "{joined}");
         assert!(joined.contains("chunk_ms should be a number, not string"), "{joined}");
+    }
+
+    /// Parakeet Unified left the app on 10 October 2026 (bench only). A file that still names it
+    /// gets the default model, with a warning, and isn't rewritten for it.
+    #[test]
+    fn a_bench_only_model_falls_back_to_the_default() {
+        let l = loaded("model = \"parakeet-unified-en-0.6b-q5_k_m-gguf\"\nkeep_model_loaded = true\n");
+        assert_eq!(l.settings, AppSettings { keep_model_loaded: true, ..Default::default() });
+        assert_eq!(l.settings.model, easyvox_core::RECOMMENDED_MODEL);
+        assert_eq!(
+            l.warnings,
+            [
+                r#"model: "parakeet-unified-en-0.6b-q5_k_m-gguf" is for easyvox-bench only, not offered in the app; using the default"#
+            ]
+        );
+        // The offered alternative is taken as it is.
+        let l = loaded("model = \"whisper-base.en-q8_0-gguf\"\n");
+        assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+        assert_eq!(l.settings.model, "whisper-base.en-q8_0-gguf");
     }
 
     #[test]

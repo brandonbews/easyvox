@@ -4,7 +4,8 @@
 //! Hugging Face are in `download_live.rs`, and ignored.
 //!
 //! After each test, the shared checks: progress never goes back, a success ends at the
-//! catalog's `download_bytes`, and a failure leaves the model's folder empty.
+//! catalog's `download_bytes` with the model and its license notice in place, and a failure
+//! leaves the model's folder empty.
 
 #![cfg(target_os = "macos")]
 
@@ -270,7 +271,8 @@ fn run(
 }
 
 /// The checks every test makes: `done` never decreases; a success ends at `download_bytes`
-/// with the file in place and nothing else; a failure leaves the folder empty.
+/// with the file and its license notice in place and nothing else; a failure leaves the folder
+/// empty.
 fn check(m: &ModelInfo, dir: &Path, result: &Result<PathBuf, DownloadError>, events: &[Progress]) {
     let done: Vec<u64> = events
         .iter()
@@ -289,7 +291,9 @@ fn check(m: &ModelInfo, dir: &Path, result: &Result<PathBuf, DownloadError>, eve
         Ok(path) => {
             assert_eq!(events.last(), Some(&Progress::Downloading { done: m.download_bytes, total: m.download_bytes }));
             assert_eq!(*path, m.resolve(dir));
-            assert_eq!(listing(dir), ["test.gguf"], "only the model is left");
+            assert_eq!(listing(dir), ["test.gguf", "test.gguf.LICENSE.txt"], "only the model and its notice");
+            let notice = std::fs::read_to_string(m.license_notice_path(dir)).unwrap();
+            assert_eq!(notice, m.license_notice());
         }
         Err(_) => assert!(listing(dir).is_empty(), "a failure left files behind: {:?}", listing(dir)),
     }
@@ -654,7 +658,8 @@ fn connection_refused_is_offline() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// `delete` removes the model and its stale part file, and is fine with neither there.
+/// `delete` removes the model, its license notice and its stale part file, and is fine with
+/// none of them there.
 #[test]
 fn delete_removes_the_model() {
     let bytes = payload(21, 1024);
@@ -662,6 +667,7 @@ fn delete_removes_the_model() {
     let dir = temp_models_dir("delete");
     std::fs::create_dir_all(dir.join("gguf")).unwrap();
     std::fs::write(m.resolve(&dir), &bytes).unwrap();
+    std::fs::write(m.license_notice_path(&dir), m.license_notice()).unwrap();
     std::fs::write(m.partial_path(&dir), b"half").unwrap();
     std::fs::write(dir.join("gguf/other.gguf"), b"not ours").unwrap();
     download::delete(&m, &dir).unwrap();

@@ -1,13 +1,15 @@
 //! The Settings window, built from GPUI Kit's `Settings` component (pages, groups, items), plus a
-//! shortcut recorder and permission rows.
+//! shortcut recorder and permission rows. Its pages: General, Models (every offered model, to
+//! download, use or delete; see `model_row.rs`), Permissions and About (`about.rs`).
 
 use crate::controller;
-use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
+use crate::model_row::{ModelRow, download_words};
+use crate::state::{AppSettings, AppStatus, EngineStatus};
 use easyvox_core::MicPermission;
-use easyvox_core::download::{Progress, format_size};
+use easyvox_core::download::format_size;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings};
+use gpui_kit::component::setting::{SelectIndex, SettingField, SettingGroup, SettingItem, SettingPage, Settings};
 use gpui_kit::component::{ActiveTheme, Sizable, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -20,10 +22,26 @@ const PRIVACY_INPUT_MONITORING: &str = "x-apple.systempreferences:com.apple.pref
 /// How long to wait for an answer to the Microphone prompt.
 const MIC_PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// The window's pages, in sidebar order. The sidebar picks them by position; code names one
+/// only to open it (the tray's About item, the self-test).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum Page {
+    #[default]
+    General,
+    Models,
+    Permissions,
+    About,
+}
+
 pub struct SettingsView {
     recorder: Entity<ShortcutRecorder>,
     /// Set while the system Microphone prompt is up.
     mic_request: Option<Task<()>>,
+    /// The page [`show`](Self::show) asked for, and how many times it was asked. The `Settings`
+    /// component keeps the selected page itself, keyed by its id, so a new id opens it on `page`.
+    page: Page,
+    shown: usize,
     _appearance: Subscription,
 }
 
@@ -32,7 +50,20 @@ impl SettingsView {
         let recorder = cx.new(|cx| ShortcutRecorder::new(window, cx));
         let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
-        Self { recorder, mic_request: None, _appearance }
+        Self { recorder, mic_request: None, page: Page::default(), shown: 0, _appearance }
+    }
+
+    /// Switches to `page`, as if it were clicked in the sidebar.
+    pub fn show(&mut self, page: Page, cx: &mut Context<Self>) {
+        self.page = page;
+        self.shown += 1;
+        cx.notify();
+    }
+
+    /// The page last asked for through [`show`](Self::show).
+    #[cfg(feature = "self-test")]
+    pub fn page(&self) -> Page {
+        self.page
     }
 
     /// Shows the system Microphone prompt. `request_mic_permission` blocks until the user
@@ -63,8 +94,7 @@ impl SettingsView {
             .map(|m| (m.id.into(), m.name.into()))
             .collect();
         let model_field = if models.is_empty() {
-            let message = format!("No models found in {}", models_dir.display());
-            SettingField::render(move |_, _, _| div().text_sm().child(message.clone()))
+            SettingField::render(move |_, _, _| div().text_sm().child("None downloaded yet"))
         } else {
             SettingField::dropdown(
                 models,
@@ -133,7 +163,10 @@ impl SettingsView {
         SettingPage::new("General").default_open(true).group(
             SettingGroup::new()
                 .title("Dictation")
-                .item(SettingItem::new("Model", model_field).description(engine))
+                .item(SettingItem::new("Model", model_field).description(format!(
+                    "{engine}{} Download, switch or delete models under Models.",
+                    if engine.ends_with(['.', '…']) { "" } else { "." }
+                )))
                 .item(
                     SettingItem::new(
                         "Keep model loaded",
@@ -164,6 +197,40 @@ impl SettingsView {
                 )
                 .item(SettingItem::new("Settings file", config_row).description(config_note)),
         )
+    }
+
+    /// Every model the app offers, downloaded or not, with what you can do with each.
+    fn models_page(&self) -> SettingPage {
+        let models_dir = easyvox_core::paths::models_dir();
+        let mut group = SettingGroup::new()
+            .title("Speech models")
+            .description("EasyVox runs one model at a time, on this Mac. A switch applies from your next dictation.");
+        for m in easyvox_core::models::offered() {
+            group = group.item(SettingItem::render(move |_, _, _| ModelRow::new(m)).keywords([
+                m.name,
+                m.license.name,
+                m.creator,
+                "download",
+                "delete",
+                "use",
+                "license",
+            ]));
+        }
+        let folder = SettingField::render(move |_, _, _| {
+            let dir = models_dir.clone();
+            h_flex().gap_2().child(div().text_sm().child(home_relative(&models_dir))).child(
+                Button::new("models-folder").outline().small().label("Show in Finder").on_click(move |_, _, cx| {
+                    // The folder exists once something was downloaded into it.
+                    let target = if dir.exists() { dir.clone() } else { dir.parent().unwrap_or(&dir).into() };
+                    cx.reveal_path(&target);
+                }),
+            )
+        });
+        group = group.item(
+            SettingItem::new("Models folder", folder)
+                .description("Each model is saved here with a LICENSE.txt that credits it."),
+        );
+        SettingPage::new("Models").group(group)
     }
 
     fn permissions_page(&self, cx: &mut Context<Self>) -> SettingPage {
@@ -227,28 +294,14 @@ impl SettingsView {
 
 impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let pages = vec![self.general_page(cx), self.permissions_page(cx)];
+        // In sidebar order: the same as `Page`.
+        let pages = vec![self.general_page(cx), self.models_page(), self.permissions_page(cx), crate::about::page()];
+        let opened_on = SelectIndex { page_ix: self.page as usize, group_ix: None };
         v_flex()
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .child(Settings::new("easyvox-settings").pages(pages))
-    }
-}
-
-/// A download's state in a few words: "Downloading… 120 MB of 539 MB".
-fn download_words(status: &DownloadStatus) -> String {
-    match status {
-        DownloadStatus::Running(Progress::Verifying) => "Checking the copy already downloaded…".into(),
-        DownloadStatus::Running(Progress::Downloading { done, total }) => {
-            format!("Downloading… {} of {}", format_size(*done), format_size(*total))
-        }
-        DownloadStatus::Running(Progress::Reconnecting { attempt, max, done, total }) => format!(
-            "Connection lost at {} of {}. Trying again ({attempt} of {max})…",
-            format_size(*done),
-            format_size(*total)
-        ),
-        DownloadStatus::Failed { error } => format!("Download failed: {error}"),
+            .child(Settings::new(("easyvox-settings", self.shown)).default_selected_index(opened_on).pages(pages))
     }
 }
 

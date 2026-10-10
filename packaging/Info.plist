@@ -23,6 +23,8 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Brandon Bews. MIT License.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>EasyVox listens while you hold the push-to-talk shortcut and turns your speech into text, on this Mac only.</string>
 </dict>

@@ -76,8 +76,17 @@ fn downloads_whisper_base_en() {
     assert_eq!(std::fs::metadata(&path).unwrap().len(), m.download_bytes);
     let total = m.download_bytes;
     assert_eq!(events.last(), Some(&Progress::Downloading { done: total, total }));
-    let names: Vec<_> = std::fs::read_dir(path.parent().unwrap()).unwrap().flatten().map(|e| e.file_name()).collect();
-    assert_eq!(names.len(), 1, "only the model is left: {names:?}");
+    let mut names: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        ["whisper-base.en-Q8_0.gguf", "whisper-base.en-Q8_0.gguf.LICENSE.txt"],
+        "the model and its notice"
+    );
 
     // A second call finds the copy, checks it and makes no request.
     let mut again = vec![];

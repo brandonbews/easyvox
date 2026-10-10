@@ -14,6 +14,9 @@
 //!   [`DownloadOptions::max_failures`] tries in a row without new bytes. That covers Wi-Fi
 //!   dropping out and the Mac sleeping. A cancelled or failed download starts again from zero.
 //! - **No request for a model that's already there.** A copy that checks out is kept as it is.
+//! - **The license travels with the file.** Once a model checks out, its license, credit,
+//!   modification note and disclaimer are written next to it, as `<file>.LICENSE.txt`
+//!   ([`ModelInfo::license_notice`]). [`delete`] removes both.
 //!
 //! On macOS the bytes come through NSURLSession (`download/macos.rs`), so System Settings
 //! proxies apply. The rest of this module is plain Rust. `scripts/fetch-model.sh` does the same
@@ -202,6 +205,7 @@ pub fn download_with(
     if target.exists() {
         reporter.emit(Progress::Verifying);
         if copy_checks_out(&target, total, expected, cancel)? {
+            write_license_notice(model, models_dir);
             reporter.finish(total);
             return Ok(target);
         }
@@ -298,9 +302,26 @@ pub fn download_with(
     out.flush().map_err(|e| write_error(&part.path, e, done, needed))?;
     drop(out);
     part.activate(&target)?;
+    write_license_notice(model, models_dir);
     reporter.finish(total);
     log::info!("download: {} verified and saved to {}", model.id, target.display());
     Ok(target)
+}
+
+/// Writes the model's license notice next to it, replacing any older one in one step (through a
+/// hidden `.part` file, which [`remove_partials`] sweeps if a crash leaves it). The model is
+/// already verified and in place, so a failure here is logged, not returned.
+fn write_license_notice(model: &ModelInfo, models_dir: &Path) {
+    let path = model.license_notice_path(models_dir);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = path.with_file_name(format!(".{name}.part"));
+    let result = fs::write(&tmp, model.license_notice())
+        .and_then(|()| fs::set_permissions(&tmp, fs::Permissions::from_mode(0o644)))
+        .and_then(|()| fs::rename(&tmp, &path));
+    if let Err(e) = result {
+        log::warn!("download: couldn't write {}: {e}", path.display());
+        let _ = fs::remove_file(&tmp);
+    }
 }
 
 /// What a failed attempt was, for the error if it's the last one.
@@ -500,15 +521,16 @@ pub fn remove_partials(models_dir: &Path) {
     }
 }
 
-/// Deletes a downloaded model's file, and its partial file unless a download holds it. A model
-/// that isn't there is fine. Unlinking a model that's loaded is safe: it stays usable until
-/// it's freed.
+/// Deletes a downloaded model's file and its license notice, and its partial file unless a
+/// download holds it. A model that isn't there is fine. Unlinking a model that's loaded is
+/// safe: it stays usable until it's freed.
 pub fn delete(model: &ModelInfo, models_dir: &Path) -> io::Result<()> {
     let ok_if_missing = |r: io::Result<()>| match r {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         r => r,
     };
     ok_if_missing(fs::remove_file(model.resolve(models_dir)))?;
+    ok_if_missing(fs::remove_file(model.license_notice_path(models_dir)))?;
     let part = model.partial_path(models_dir);
     if let Ok(file) = OpenOptions::new().read(true).open(&part)
         && try_lock(&file)?

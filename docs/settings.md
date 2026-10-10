@@ -25,6 +25,7 @@ The file holds no permissions. Microphone, Accessibility and Input Monitoring ar
 EasyVox never stops over a bad setting, and never overwrites your file to fix it:
 
 - **A value out of range, or of the wrong type** (`preview_interval_ms = 60000`, `keep_model_loaded = "yes"`): that key falls back to its default, and the others still apply.
+- **A model the app doesn't offer**: an unknown id, or one that's for `easyvox-bench` only, like Parakeet Unified since 10 October 2026. EasyVox uses the default model (Parakeet TDT v2) and says why.
 - **A key EasyVox doesn't know**, maybe misspelt (`previw_interval_ms`), or in the wrong place (an `[advanced]` key at the top, or a top key after `[advanced]`): it's ignored, and the warning says so (suggesting the key you probably meant, when one is close).
 - **A file that isn't valid TOML:** EasyVox keeps the settings it had (the defaults, if it was just starting) and leaves the file alone until you fix it. Changes you make in the Settings window meanwhile apply, but aren't saved.
 
@@ -94,8 +95,8 @@ Each key, at its default, with its unit, its range and what raising or lowering 
 # save it: the [advanced] numbers for the live preview, the chunks and the pauses from your
 # next dictation, the same for every model.
 
-# The speech model: an id from `scripts/fetch-model.sh --list` that runs in the app. It has to be
-# downloaded; Settings lists the ones that are.
+# The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them
+# default or alternative). Settings → Models downloads it, and the next dictation uses it.
 model = "parakeet-tdt-0.6b-v2-q5_k_m-gguf"
 
 # The push-to-talk shortcut: hold it and speak, let go to paste. Modifiers (ctrl, alt, shift,

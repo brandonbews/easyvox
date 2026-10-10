@@ -10,11 +10,13 @@
 //! Settings come from `~/.config/easyvox/config.toml` (see `config.rs`). Logs go to stderr;
 //! `EASYVOX_LOG=debug` shows more.
 
+mod about;
 mod config;
 mod controller;
 mod history;
 mod hotkey;
 mod logger;
+mod model_row;
 mod overlay;
 mod platform;
 #[cfg(feature = "self-test")]

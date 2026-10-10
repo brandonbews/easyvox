@@ -59,6 +59,7 @@ impl Offering {
 /// be wrong (the Parakeet Unified GGUF repo says CC-BY-4.0); upstream wins.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct License {
+    /// As people write it, for the UI: "CC BY 4.0" is Creative Commons' own spelling.
     pub name: &'static str,
     /// The license text.
     pub url: &'static str,
@@ -70,8 +71,12 @@ pub const NVIDIA_OPEN_MODEL_LICENSE: License = License {
 };
 /// The credit line the NVIDIA Open Model License asks for, word for word.
 pub const NVIDIA_OPEN_MODEL_NOTICE: &str = "Licensed by NVIDIA Corporation under the NVIDIA Open Model License";
-pub const CC_BY_4_0: License = License { name: "CC-BY-4.0", url: "https://creativecommons.org/licenses/by/4.0/" };
-pub const APACHE_2_0: License = License { name: "Apache-2.0", url: "https://www.apache.org/licenses/LICENSE-2.0" };
+pub const CC_BY_4_0: License = License { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" };
+pub const APACHE_2_0: License = License { name: "Apache 2.0", url: "https://www.apache.org/licenses/LICENSE-2.0" };
+
+/// The one-line warranty disclaimer the credits end with (CC BY 4.0 §3(a)(1)(A)(iv) asks for a
+/// notice that refers to it; Apache-2.0 §7 has the same disclaimer).
+pub const DISCLAIMER: &str = "Provided as is, without warranties of any kind.";
 
 #[derive(Clone, Debug)]
 pub struct ModelInfo {
@@ -93,9 +98,18 @@ pub struct ModelInfo {
     pub disk_bytes: u64,
     /// Outputs punctuation and capitalization.
     pub punctuation: bool,
+    /// One line for Settings, after "Pick this if": who this model is for. From `DESIGN.md`
+    /// ("Models"). Empty for bench-only entries.
+    pub pick_if: &'static str,
     pub license: License,
-    /// Credit line to show next to the model (who made it, under which license).
+    /// Who made the model ("NVIDIA"), as the credit names them.
+    pub creator: &'static str,
+    /// Credit line to show next to the model: who made it, under which license. It names
+    /// `creator` and `license.name`.
     pub attribution: &'static str,
+    /// How the file we download differs from the upstream model, and who changed it, ending in
+    /// "by <who>". CC BY 4.0 §3(a)(1)(B) and Apache-2.0 §4(b) ask to keep this note.
+    pub modification: &'static str,
     /// Upstream model card: the source for the license and the credit.
     pub card_url: &'static str,
 }
@@ -120,9 +134,66 @@ impl ModelInfo {
 
     /// Where [`crate::download`] writes the file while it downloads: hidden, next to the model.
     pub fn partial_path(&self, models_dir: &Path) -> PathBuf {
+        self.sibling(models_dir, |name| format!(".{name}.part"))
+    }
+
+    /// The license notice [`crate::download`] writes next to the model: `<file>.LICENSE.txt`.
+    pub fn license_notice_path(&self, models_dir: &Path) -> PathBuf {
+        self.sibling(models_dir, |name| format!("{name}.LICENSE.txt"))
+    }
+
+    /// A file next to the model, named after it.
+    fn sibling(&self, models_dir: &Path, name: impl FnOnce(&str) -> String) -> PathBuf {
         let path = self.resolve(models_dir);
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        path.with_file_name(format!(".{name}.part"))
+        let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        path.with_file_name(name(&file))
+    }
+
+    /// The name without the note in brackets: "Parakeet TDT 0.6B v2".
+    pub fn short_name(&self) -> &'static str {
+        self.name.split_once(" (").map_or(self.name, |(name, _)| name)
+    }
+
+    /// Who made the changes in [`modification`](Self::modification): the words after its last
+    /// " by ".
+    pub fn modified_by(&self) -> &'static str {
+        self.modification.rsplit_once(" by ").map_or("", |(_, who)| who)
+    }
+
+    /// Where the modified files come from: the Hugging Face repository the download URL points
+    /// into, or the GitHub project of a release download.
+    pub fn source_url(&self) -> &'static str {
+        let url = self.download_url;
+        ["/resolve/", "/releases/download/"].iter().find_map(|cut| url.split_once(cut)).map_or(url, |(repo, _)| repo)
+    }
+
+    /// The text of [`license_notice_path`](Self::license_notice_path): the license, the credit,
+    /// the modification note and the disclaimer, so the terms travel with the file.
+    pub fn license_notice(&self) -> String {
+        let title = self.short_name();
+        let file = Path::new(self.path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+        format!(
+            "{title}\n{underline}\n\n\
+             {attribution}.\n\
+             License: {license_url}\n\
+             Original model: {card}\n\
+             \n\
+             {modification}:\n\
+             {source}\n\
+             \n\
+             {DISCLAIMER}\n\
+             \n\
+             EasyVox downloaded {file} from {source}.\n\
+             The model isn't part of EasyVox and keeps its own license. EasyVox isn't affiliated\n\
+             with or endorsed by {creator}.\n",
+            underline = "=".repeat(title.chars().count()),
+            attribution = self.attribution.trim_end_matches('.'),
+            license_url = self.license.url,
+            card = self.card_url,
+            modification = self.modification,
+            source = self.source_url(),
+            creator = self.creator,
+        )
     }
 }
 
@@ -138,24 +209,12 @@ pub static CATALOG: &[ModelInfo] = &[
         download_bytes: 539_012_608,
         disk_bytes: 539_012_608,
         punctuation: true,
+        pick_if: "you want the best all-round model.",
         license: CC_BY_4_0,
+        creator: "NVIDIA",
         attribution: "Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0",
+        modification: "Converted to GGUF and quantized to Q5_K_M by handy-computer",
         card_url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2",
-    },
-    ModelInfo {
-        id: "parakeet-unified-en-0.6b-q5_k_m-gguf",
-        name: "Parakeet Unified 0.6B (best public benchmark scores)",
-        runtime: Runtime::TranscribeCpp,
-        offering: Offering::Alternative,
-        path: "gguf/parakeet-unified-en-0.6b-Q5_K_M.gguf",
-        download_url: "https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/d5249700b2382bf5c5024c2421d101b8db54a629/parakeet-unified-en-0.6b-Q5_K_M.gguf",
-        sha256: Some("f9def6f9b4e83ab7d006df3e1b676dfa1f973a3b6da232a9c99fcaa66bcd2836"),
-        download_bytes: 540_795_264,
-        disk_bytes: 540_795_264,
-        punctuation: true,
-        license: NVIDIA_OPEN_MODEL_LICENSE,
-        attribution: NVIDIA_OPEN_MODEL_NOTICE,
-        card_url: "https://huggingface.co/nvidia/parakeet-unified-en-0.6b",
     },
     ModelInfo {
         id: "whisper-base.en-q8_0-gguf",
@@ -168,9 +227,37 @@ pub static CATALOG: &[ModelInfo] = &[
         download_bytes: 84_886_208,
         disk_bytes: 84_886_208,
         punctuation: true,
+        pick_if: "you want the smallest model (an 8 GB Mac, or memory matters more than the last bit of \
+                  accuracy).",
+        // OpenAI's Hugging Face card and the GGUF's own metadata say Apache-2.0; its GitHub
+        // release says MIT. We follow the Hugging Face release, which the GGUF is made from.
         license: APACHE_2_0,
+        creator: "OpenAI",
         attribution: "Whisper base.en by OpenAI, licensed under Apache 2.0",
+        modification: "Converted to GGUF and quantized to Q8_0 by handy-computer",
         card_url: "https://huggingface.co/openai/whisper-base.en",
+    },
+    // Bench only since 10 October 2026: on the author's voice it was a word behind v2 (2.10 %
+    // against 1.68 % WER), as fast, used a little more CPU and often left out the last full
+    // stop. Its license would also need an "I agree" step in the app. See DESIGN.md ("Bench
+    // only").
+    ModelInfo {
+        id: "parakeet-unified-en-0.6b-q5_k_m-gguf",
+        name: "Parakeet Unified EN 0.6B",
+        runtime: Runtime::TranscribeCpp,
+        offering: Offering::BenchOnly,
+        path: "gguf/parakeet-unified-en-0.6b-Q5_K_M.gguf",
+        download_url: "https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/d5249700b2382bf5c5024c2421d101b8db54a629/parakeet-unified-en-0.6b-Q5_K_M.gguf",
+        sha256: Some("f9def6f9b4e83ab7d006df3e1b676dfa1f973a3b6da232a9c99fcaa66bcd2836"),
+        download_bytes: 540_795_264,
+        disk_bytes: 540_795_264,
+        punctuation: true,
+        pick_if: "",
+        license: NVIDIA_OPEN_MODEL_LICENSE,
+        creator: "NVIDIA",
+        attribution: NVIDIA_OPEN_MODEL_NOTICE,
+        modification: "Converted to GGUF and quantized to Q5_K_M by handy-computer",
+        card_url: "https://huggingface.co/nvidia/parakeet-unified-en-0.6b",
     },
     // Bench only: on transcribe-cpp 0.3.1 it writes numbers as words ("three hundred and forty
     // two dollars"), so its WER on our clips is 7 % against Whisper base.en's 1.4 %. See
@@ -186,8 +273,11 @@ pub static CATALOG: &[ModelInfo] = &[
         download_bytes: 158_704_416,
         disk_bytes: 158_704_416,
         punctuation: true,
+        pick_if: "",
         license: CC_BY_4_0,
+        creator: "NVIDIA",
         attribution: "Canary 180M Flash by NVIDIA, licensed under CC BY 4.0",
+        modification: "Converted to GGUF and quantized to Q5_K_M by handy-computer",
         card_url: "https://huggingface.co/nvidia/canary-180m-flash",
     },
     // Bench only: v2's multilingual successor (25 European languages, picked per recording). On
@@ -204,8 +294,11 @@ pub static CATALOG: &[ModelInfo] = &[
         download_bytes: 548_946_272,
         disk_bytes: 548_946_272,
         punctuation: true,
+        pick_if: "",
         license: CC_BY_4_0,
+        creator: "NVIDIA",
         attribution: "Parakeet TDT 0.6B v3 by NVIDIA, licensed under CC BY 4.0",
+        modification: "Converted to GGUF and quantized to Q5_K_M by handy-computer",
         card_url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
     },
     ModelInfo {
@@ -219,8 +312,11 @@ pub static CATALOG: &[ModelInfo] = &[
         download_bytes: 482_468_385,
         disk_bytes: 661_190_513,
         punctuation: true,
+        pick_if: "",
         license: CC_BY_4_0,
+        creator: "NVIDIA",
         attribution: "Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0",
+        modification: "Converted to ONNX and quantized to int8 by k2-fsa/sherpa-onnx",
         card_url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2",
     },
     ModelInfo {
@@ -234,8 +330,11 @@ pub static CATALOG: &[ModelInfo] = &[
         download_bytes: 463_945_051,
         disk_bytes: 661_919_416,
         punctuation: true,
+        pick_if: "",
         license: NVIDIA_OPEN_MODEL_LICENSE,
+        creator: "NVIDIA",
         attribution: NVIDIA_OPEN_MODEL_NOTICE,
+        modification: "Converted to ONNX and quantized to int8 by k2-fsa/sherpa-onnx",
         card_url: "https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b",
     },
 ];
@@ -282,6 +381,9 @@ mod tests {
         let offered = offered();
         assert_eq!(offered[0].id, crate::RECOMMENDED_MODEL, "the default comes first");
         assert!(offered[1..].iter().all(|m| m.offering == Offering::Alternative));
+        // Parakeet TDT v2, and Whisper base.en as the small option (DESIGN.md, "Models").
+        let ids: Vec<_> = offered.iter().map(|m| m.id).collect();
+        assert_eq!(ids, [crate::RECOMMENDED_MODEL, "whisper-base.en-q8_0-gguf"]);
     }
 
     /// The app compiles in only the runtimes it lists in its manifest, so an offered model on
@@ -360,9 +462,60 @@ mod tests {
         for m in CATALOG {
             assert!(!m.license.name.is_empty() && m.license.url.starts_with("https://"), "{}", m.id);
             assert!(!m.attribution.is_empty() && m.card_url.starts_with("https://huggingface.co/"), "{}", m.id);
+            assert!(!m.creator.is_empty() && !m.modified_by().is_empty(), "{}", m.id);
             if m.license == NVIDIA_OPEN_MODEL_LICENSE {
                 assert_eq!(m.attribution, NVIDIA_OPEN_MODEL_NOTICE, "{}", m.id);
             }
         }
+    }
+
+    /// What the app shows next to each model it offers, in Settings and in the notice it writes
+    /// next to a download: the license (name and link), the credit, and the note that the file
+    /// was converted and by whom (CC BY 4.0 §3(a)(1)(B), Apache-2.0 §4(b)).
+    #[test]
+    fn offered_models_carry_their_credits() {
+        for m in offered() {
+            assert!(!m.license.name.is_empty(), "{}: license name", m.id);
+            assert!(m.license.url.starts_with("https://"), "{}: license URL", m.id);
+            assert!(!m.attribution.is_empty(), "{}: attribution", m.id);
+            assert!(!m.modification.is_empty(), "{}: modification note", m.id);
+            // Settings links these words, so they have to be there.
+            assert!(m.attribution.contains(m.license.name), "{}: the credit names the license", m.id);
+            assert!(m.attribution.contains(m.creator), "{}: the credit names the creator", m.id);
+            assert_eq!(m.modified_by(), "handy-computer", "{}", m.id);
+            assert!(m.source_url().starts_with("https://huggingface.co/handy-computer/"), "{}", m.source_url());
+            assert!(!m.pick_if.is_empty() && m.pick_if.ends_with('.'), "{}: pick this if…", m.id);
+        }
+    }
+
+    /// The NVIDIA Open Model License binds whoever runs the model, so offering one would need an
+    /// "I agree" step the app doesn't have. That's why Parakeet Unified is bench only.
+    #[test]
+    fn no_offered_model_needs_an_agreement() {
+        for m in offered() {
+            assert_ne!(m.license, NVIDIA_OPEN_MODEL_LICENSE, "{}", m.id);
+        }
+        assert!(!find("parakeet-unified-en-0.6b-q5_k_m-gguf").unwrap().offering.in_app());
+    }
+
+    #[test]
+    fn the_license_notice_has_the_credits_and_the_disclaimer() {
+        let m = find(crate::RECOMMENDED_MODEL).unwrap();
+        let notice = m.license_notice();
+        assert!(notice.starts_with("Parakeet TDT 0.6B v2\n====================\n\n"), "{notice}");
+        for line in [
+            "Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0.\n",
+            "License: https://creativecommons.org/licenses/by/4.0/\n",
+            "Original model: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2\n",
+            "Converted to GGUF and quantized to Q5_K_M by handy-computer:\n\
+             https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf\n",
+            "Provided as is, without warranties of any kind.\n",
+            "isn't affiliated\nwith or endorsed by NVIDIA.\n",
+        ] {
+            assert!(notice.contains(line), "missing {line:?} in:\n{notice}");
+        }
+        let dir = Path::new("/m");
+        assert_eq!(m.license_notice_path(dir), dir.join("gguf/parakeet-tdt-0.6b-v2-Q5_K_M.gguf.LICENSE.txt"));
+        assert_eq!(m.short_name(), "Parakeet TDT 0.6B v2");
     }
 }
