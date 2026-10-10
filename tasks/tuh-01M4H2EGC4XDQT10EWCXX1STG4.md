@@ -34,8 +34,15 @@ Added 2026-10-09 (Brandon): every tuning constant goes in the file too, not nece
 - Document every key, its default, its unit and what it trades off, in plain words.
 Priority raised to 1 so it lands right after the lightness task (which picks the defaults).
 
+
+Notes from the Tuning refactor (da36537): the struct is easyvox_core::Tuning (crates/easyvox-core/src/tuning.rs; one macro generates fields, defaults, key list, set() and validate()); AppSettings.tuning holds it. serde is not a core dependency yet. (1) Loudness fields are linear levels (e.g. 0.0018, about -54.9 dBFS) to keep behaviour exact; for a human-edited file, dB is friendlier: switch deliberately, with an equivalence check. (2) Changing Tuning today means reloading the engine; make it apply from the next recording without a reload. App-level knobs to expose too: unload_after_secs, keep_model_loaded, overlay hide delays (600/2500 ms), overlay MAX_CHARS.
+
 ## History
 
 ### 2026-10-10 03:33 UTC — edit by `brandon`
 
 description edited · priority 2→1 · depends_on +tuh-z7dr
+
+### 2026-10-10 04:41 UTC — edit by `brandon`
+
+description edited
