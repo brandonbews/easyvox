@@ -2,7 +2,7 @@
 
 `tuh-01M4HDR400G242K017BJ1HB8RB`
 
-- **Status:** open — blocked on dependencies
+- **Status:** on hold — deliberately paused
 - **Priority:** 2
 - **Labels:** `engine` `perf` `energy` `spike`
 - **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (open)
@@ -14,6 +14,8 @@ Measure energy per minute of dictation on the same 5-min recording (real voice i
 
 
 Decided by Brandon 2026-10-09: (1) "halves" is measured against the best GPU setup of equal accuracy and speed (e.g. the same short windows), not today's settings; (2) uv is installed (Homebrew, uv 0.12.24) for the coremltools conversion; macmon 0.9.0 is installed too.
+
+PARKED 2026-10-10 after the lightness work (tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR): the tuned GPU path uses 0.65 W added / 39 J/min on the 5-min ramble (was 4.23 W / 254 J/min). To halve that the ANE would need < ~20 J/min, but chunk polishing alone costs ~16 J/min and the ANE could only take the encoder's share; its fixed 15 s input would charge every ~5 s preview pass for 15 s. Estimated most it could save: ~0.3 W. Not worth a fork, a model conversion and a 15 s pipeline today. Revisit if: a battery-life complaint, upstream transcribe.cpp gains a drop-in ANE encoder, or a model we ship gets a published Core ML encoder that accepts variable length.
 
 ---
 RUNBOOK (2026-10-09, read-only research agent; scripts are in its appendix)
@@ -1149,3 +1151,7 @@ description edited
 ### 2026-10-10 02:52 UTC — edit by `brandon`
 
 depends_on +tuh-z7dr
+
+### 2026-10-10 10:29 UTC — edit by `brandon`
+
+description edited · status open→held
