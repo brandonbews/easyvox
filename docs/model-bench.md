@@ -194,7 +194,29 @@ Each model's chunked final text was compared, by reading, with its own one-pass 
 - **Unified lost two words and doubled one**: at 126.0 and 275.3 s, and at 150.7 s. Each was the word just before a pause, which Unified stretches over the pause (as `chunks.rs` notes). In the doubled case, the next chunk's copy started after the first copy ended, and its middle fell past the cut, so `without_repeat` kept it.
 - **Whisper lost one word, at 212.8 s:** the first word after the cut. Whisper's chunks are decoded without context, and this decode started in the pause and dropped it. The other differences near its joins are word forms.
 - **The read-aloud clip:** nothing lost or doubled at its 3 joins, by any model.
-- **A fix to try: widen `SLACK_SECS` from 0.3 to 0.5 s.** An offline replay of the join rules on these chunk decodes reproduces the session's text word for word at 0.3 s. At 0.5 s it recovers all three lost Parakeet words (v2's and both of Unified's), and adds nothing doubled on either recording. Unified's doubled word needs a different rule. The code is unchanged: the long text-to-speech clips should be checked first.
+- **A fix to try: widen `SLACK_SECS` from 0.3 to 0.5 s.** An offline replay of the join rules on these chunk decodes reproduces the session's text word for word at 0.3 s. At 0.5 s it recovers all three lost Parakeet words (v2's and both of Unified's), and adds nothing doubled on either recording. Unified's doubled word needs a different rule. Fixed since, with a join that matches the two decodes' words instead: see [Chunk joins](#chunk-joins).
+
+### Chunk joins
+
+The same evening, the join itself changed (`Polished::continuation` in `chunks.rs`). It used to go by timing alone: a word near the cut went to whichever side its middle fell on, with 0.3 s of slack and a check for a repeated first word. Now it first matches the new chunk's words with what the previous decode heard around the cut: the polished words in the new decode's left context, and the words the previous decode heard past the cut, which it used to throw away. Two words match if they have the same text and lie within 1 s of each other (`MATCH_SECS`). Words up to the last match with a polished word are dropped, a word matching the previous decode's words past the cut is kept, whichever side the new decode puts it, and any other word follows the old timing rule. Same rules for every model; Whisper's chunks have no context, so they're still simply joined.
+
+Why not just widen the slack to 0.5 s: it recovers the three lost Parakeet words, but v2's sat 0.40 s before the cut (a 0.1 s margin), and it can't fix Unified's doubled word, since telling that apart from a word said twice needs what the previous decode heard after the cut. Matching works however far apart the two decodes put the word, up to 1 s, and needs no per-model setting.
+
+Before → after, one run each after the change. The "before" ramble and read-aloud figures are the runs above; the text-to-speech clips were run fresh on the old code.
+
+| Model | Ramble: words lost / doubled at the 13 joins | Read aloud: word error rate | `lf_3m` | `lf_3m_pauses` | `lf_10m` (9 min) | Text ready after release: ramble / read aloud |
+|---|---:|---:|---:|---:|---:|---:|
+| **Parakeet TDT v2** | 1 / 0 → **0 / 0** | 1.68 → 1.68 % | 0 → 0 % | 0 → 0 % | 0.40 → 0.40 % | 0.35 → 0.36 s / 0.37–0.42 → 0.42 s |
+| Parakeet Unified | 2 / 1 → **0 / 0** | 2.10 → 2.10 % | 0.30 → 0.30 % | 0 → 0 % | 0.86 → 0.86 % | 0.33 → 0.51 s (0.37 s on a second run) / 0.38–0.41 → 0.41 s |
+| Whisper base.en | 1 / 0 → 1 / 0 | 6.72 → 6.72 % | – | – | – | 0.19 → 0.19 s / 0.23–0.40 → 0.25 s |
+
+- **Ramble:** all four join mistakes are gone, the only change to the text. Nothing else differs within 2.5 s of a cut, apart from one word v2 spells differently (see above). The cuts were the same 13.
+- **Whisper's lost word stays.** It isn't a join mistake: the next chunk's decode, which starts in the pause and has no context, didn't write it. Fixing it needs context for Whisper, and so word timings.
+- **Read aloud:** each model wrote exactly the same text as before.
+- **Text-to-speech clips:** the same word error rates. On `lf_3m` and `lf_10m` each model wrote the same text as before, from the same cuts. On `lf_3m_pauses` a few cuts landed up to 0.11 s elsewhere (the ticks fall at slightly different moments in its 2.5–8 s pauses), which changed a few commas for v2. Replaying the old join on those decodes gives the same text, so that wasn't the join.
+- **Text ready after release** doesn't depend on the join, which takes well under a millisecond. Where an after figure is higher (Unified's ramble at 0.51 s; 0.40–0.49 s on the text-to-speech clips, against 0.35–0.49 s before), most of it is a 68–156 ms wait for a preview pass still running at release: the text-to-speech clips end on their last word, so one often is. The decode after release took as long as before: 0.34–0.42 s on those clips, against 0.35–0.40 s. Run again, Unified's ramble took 0.37 s and v2's `lf_3m` 0.40 s, with no wait.
+- **Cuts through words.** Real cuts land in pauses, so joins are rarely tested hard. An offline replay cut through the middle of a word every 10–20 s instead: 56 cuts per model over the ramble, the read-aloud clip and `lf_3m`, each chunk decoded with 1 s of context as in the app. The old join doubled 17 words for Unified and 1 for v2. The new one doubled 1 (a word Unified's next decode placed 1.3 s from where the previous one had it), and every other word it changed was one of those doubles.
+- **How it was checked:** the join was replayed offline (in Python) on every session's chunk decodes, logged by the scratch bench copy. The replay reproduces each session's text word for word, with the old rules on the old runs and the new rules on the new runs. On the old runs, the new rules changed only the four words above. Any `MATCH_SECS` from 0.5 to 2 s gives the same text on all of it, except the one doubled word in the replay with cuts through words.
 
 ### Pause finder or VAD?
 

@@ -13,8 +13,10 @@
 //!   about one cut in ten). A model with coarser timings (Whisper: per segment) gets none:
 //!   dropping the context's words again needs word timings, and spread-out ones lost words.
 //! - **Joining:** [`Polished::add`] keeps the words whose middle lies in the chunk, by their
-//!   timings. A cut sits in the middle of a pause, so words rarely come near it; when one does
-//!   (a late timing, a forced cut), the rules in [`Polished::continuation`] keep it once.
+//!   timings. A cut sits in the middle of a pause, so words rarely come near it. When one does
+//!   (a soft word trailing into the pause, a word stretched over it, a forced cut), the two
+//!   decodes can put it on different sides of the cut, so [`Polished::continuation`] matches
+//!   their words around the cut and keeps it once.
 
 use crate::partials::norm_word;
 use crate::{SAMPLE_RATE, Word, pause};
@@ -27,10 +29,13 @@ const SR: usize = SAMPLE_RATE as usize;
 pub(crate) const CONTEXT_SECS: f32 = 1.0;
 /// The newest audio is never cut: the speaker may be mid-word.
 const GUARD: usize = SR / 2;
-/// How far before the chunk a word's middle may lie and still be kept, when the previous chunk
-/// didn't have it (word timings in two decodes can disagree by a frame or two).
+/// How far before the chunk a word's middle may lie and still be kept, when the previous
+/// decode didn't hear it at all (word timings in two decodes can disagree by a frame or two).
 const SLACK_SECS: f32 = 0.3;
-/// Longest run of words at the start of a chunk checked against the end of the polished text.
+/// How far apart two decodes may place the same word (the gap between their timings) and still
+/// match. On real speech they disagreed by up to 0.46 s on a soft word before a pause.
+const MATCH_SECS: f32 = 1.0;
+/// Longest run of leading words [`Polished::without_repeat`] checks against the polished text.
 const MAX_REPEAT: usize = 4;
 
 /// Decides when and where to cut the unpolished audio.
@@ -67,10 +72,20 @@ impl Chunker {
     }
 }
 
+/// Where the previous decode had a word of the next one: polished, or in its tail.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Seen {
+    Polished,
+    Tail,
+}
+
 /// The polished (final-quality) words so far, with absolute timings.
 #[derive(Debug, Default)]
 pub(crate) struct Polished {
     words: Vec<Word>,
+    /// The words the last decode heard past its chunk's end, in its context: they belong to the
+    /// next chunk, whose decode is matched against them.
+    tail: Vec<Word>,
     /// First sample not polished yet: the last cut.
     start: usize,
     /// Samples of context decoded on each side of a chunk.
@@ -112,39 +127,73 @@ impl Polished {
     /// Adds the words (absolute timings) of a decode of `span` for the chunk ending at `end`
     /// (`None`: the last chunk, up to the end of the recording); the next chunk starts there.
     /// Where `span` reaches into the neighbours' audio, their words are dropped: the earlier
-    /// side by [`continuation`](Self::continuation), the later side by middle (before `end`).
-    /// A decode without context keeps every word, whatever its timing.
+    /// side by [`continuation`](Self::continuation), the later side by middle (before `end`;
+    /// those are kept aside as the tail). A decode without context keeps every word, whatever
+    /// its timing.
     pub(crate) fn add(&mut self, words: &[Word], span: Range<usize>, end: Option<usize>) {
         let words = if span.start < self.start { self.continuation(words) } else { words.to_vec() };
         let limit = match end {
             Some(end) if span.end > end => secs(end),
             _ => f32::INFINITY,
         };
-        self.words.extend(words.into_iter().filter(|w| mid(w) < limit));
+        let (words, tail): (Vec<_>, Vec<_>) = words.into_iter().partition(|w| mid(w) < limit);
+        self.words.extend(words);
+        self.tail = tail;
         if let Some(end) = end {
             self.start = end;
         }
     }
 
-    /// The words of `words` (absolute timings, in order) that continue the polished text:
+    /// The words of `words` (absolute timings, in order) that continue the polished text.
     ///
-    /// - those whose middle lies in the unpolished audio, or just before it (by up to
-    ///   [`SLACK_SECS`]) if they come after the last polished word, which catches a word on
-    ///   the cut that the previous decode placed on the other side (Parakeet Unified stretches
-    ///   a word with trailing punctuation over the pause after it, so its middle can land past
-    ///   the cut);
-    /// - [`without_repeat`](Self::without_repeat).
+    /// This decode and the previous one both heard the audio around the cut, and they can put
+    /// a word on different sides of it: a soft word trailing into the pause, or one stretched
+    /// over the pause (Parakeet Unified does that to a word with trailing punctuation). So the
+    /// words are first matched, in order, with what the previous decode heard there: the
+    /// polished words in this decode's left context, then the tail. Two words match if they
+    /// have the same text and lie at most [`MATCH_SECS`] apart (the closest wins). Then:
+    ///
+    /// - the words up to the last one matching a polished word are dropped: they're in already;
+    /// - a word matching the tail is kept: the previous decode heard it after the cut;
+    /// - any other word is kept if its middle lies in the unpolished audio, or just before it
+    ///   (by up to [`SLACK_SECS`]) after the last polished word.
+    ///
+    /// A word said again across the cut ("very, very") stays twice: its first copy matches the
+    /// polished word and its second the tail, or nothing.
     pub(crate) fn continuation(&self, words: &[Word]) -> Vec<Word> {
+        let cut = secs(self.start);
+        let matches = self.match_around_cut(words);
+        let first = matches.iter().rposition(|m| *m == Some(Seen::Polished)).map_or(0, |i| i + 1);
         let after = self.words.last().map_or(f32::NEG_INFINITY, |w| w.end);
-        let from = secs(self.start) - SLACK_SECS;
-        let new = words.iter().filter(|w| mid(w) >= secs(self.start) || (mid(w) >= from && mid(w) > after));
-        self.without_repeat(new.cloned().collect())
+        let keep = |w: &Word, m: Option<Seen>| {
+            m == Some(Seen::Tail) || mid(w) >= cut || (mid(w) >= cut - SLACK_SECS && mid(w) > after)
+        };
+        words.iter().zip(matches).skip(first).filter(|(w, m)| keep(w, *m)).map(|(w, _)| w.clone()).collect()
+    }
+
+    /// For each of `words`, in order, where the previous decode had it (see
+    /// [`continuation`](Self::continuation)).
+    fn match_around_cut(&self, words: &[Word]) -> Vec<Option<Seen>> {
+        let heard_from = secs(self.start) - secs(self.context);
+        let polished = self.words.iter().filter(|w| mid(w) >= heard_from).map(|w| (w, Seen::Polished));
+        let old: Vec<_> = polished.chain(self.tail.iter().map(|w| (w, Seen::Tail))).collect();
+        let mut next = 0;
+        let mut matches = Vec::with_capacity(words.len());
+        for w in words {
+            let text = norm_word(&w.text);
+            let best = (next..old.len())
+                .filter(|&i| !text.is_empty() && norm_word(&old[i].0.text) == text && gap(old[i].0, w) <= MATCH_SECS)
+                .min_by(|&a, &b| gap(old[a].0, w).total_cmp(&gap(old[b].0, w)));
+            matches.push(best.map(|i| old[i].1));
+            next = best.map_or(next, |i| i + 1);
+        }
+        matches
     }
 
     /// `new` minus a leading copy of the last polished words: same text, and either before the
-    /// cut (audio the previous decode already covered) or overlapping them in time (the same
-    /// speech, placed on both sides of the cut by two decodes). A word said again after the
-    /// cut ("very, very") does neither, so it stays.
+    /// cut (audio the polished text already covers) or overlapping them in time (the same
+    /// speech). A word said again after the cut ("very, very") does neither, so it stays. The
+    /// preview uses it to start where the polished text ends.
     pub(crate) fn without_repeat(&self, mut new: Vec<Word>) -> Vec<Word> {
         let max = MAX_REPEAT.min(self.words.len()).min(new.len());
         for n in (1..=max).rev() {
@@ -165,6 +214,11 @@ fn secs(sample: usize) -> f32 {
 
 fn mid(w: &Word) -> f32 {
     (w.start + w.end) / 2.0
+}
+
+/// Seconds between two words' timings (negative if they overlap).
+fn gap(a: &Word, b: &Word) -> f32 {
+    a.start.max(b.start) - a.end.min(b.end)
 }
 
 /// Words as text, one space apart.
@@ -256,7 +310,7 @@ mod tests {
         polish(&mut p, &ws(&[("the", 4.4, 4.6), ("kitchen", 4.7, 5.4)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("the", 4.4, 4.6), ("kitchen", 4.6, 5.3), ("sink", 5.5, 5.8)]), None, 9.0);
         assert_eq!(p.text(), "the kitchen sink");
-        // Left decode puts it before the cut, right decode after: the copy overlaps it, so it goes.
+        // Left decode puts it before the cut, right decode after: the copy matches it, so it goes.
         let mut p = Polished::new(true);
         polish(&mut p, &ws(&[("the", 4.4, 4.6), ("kitchen", 4.6, 5.3)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("kitchen", 4.75, 5.4), ("sink", 5.5, 5.8)]), None, 9.0);
@@ -265,8 +319,8 @@ mod tests {
 
     #[test]
     fn a_short_word_placed_a_little_later_by_the_next_decode_is_not_doubled() {
-        // One-frame words: the two decodes' copies of "the" don't overlap, but the second lies
-        // before the cut, in audio the first decode already covered.
+        // One-frame words: the two decodes' copies of "the" don't overlap, but they're close, so
+        // the second matches the polished one.
         let mut p = Polished::new(true);
         polish(
             &mut p,
@@ -285,11 +339,62 @@ mod tests {
     }
 
     #[test]
+    fn a_soft_word_each_decode_puts_on_the_other_side_of_the_cut_is_kept() {
+        // A soft "a" trailing into the pause, with the cut at 5.0 s. The left decode puts it after
+        // the cut, so it belongs to the next chunk. The right decode puts it 0.45 s before the
+        // cut, beyond the slack. It matches the left decode's tail, so it's kept.
+        let mut p = Polished::new(true);
+        polish(
+            &mut p,
+            &ws(&[("to", 3.9, 4.2), ("fill", 4.2, 4.5), ("a", 5.2, 5.4), ("kettle.", 5.4, 5.9)]),
+            Some(5.0),
+            9.0,
+        );
+        assert_eq!(p.text(), "to fill");
+        polish(
+            &mut p,
+            &ws(&[("fill", 4.1, 4.4), ("a", 4.45, 4.65), ("kettle", 5.5, 5.9), ("first", 5.9, 6.3)]),
+            None,
+            9.0,
+        );
+        assert_eq!(p.text(), "to fill a kettle first");
+        // A word the left decode stretches over the pause, past the cut, and the right decode
+        // puts 0.45 s before it, without the polished word before it.
+        let mut p = Polished::new(true);
+        polish(&mut p, &ws(&[("the", 3.4, 3.6), ("old", 3.8, 3.9), ("bridge,", 4.1, 6.0)]), Some(5.0), 9.0);
+        assert_eq!(p.text(), "the old");
+        polish(&mut p, &ws(&[("Bridge", 4.5, 4.6), ("and", 6.0, 6.1), ("then", 6.2, 6.3)]), None, 9.0);
+        assert_eq!(p.text(), "the old Bridge and then");
+    }
+
+    #[test]
+    fn a_word_the_next_decode_stretches_past_the_cut_is_not_doubled() {
+        // The left decode keeps "tea" before the cut at 5.0 s. The right decode stretches it
+        // over the pause: its middle lies past the cut, and it starts after the first copy ends.
+        let mut p = Polished::new(true);
+        polish(&mut p, &ws(&[("some", 4.0, 4.1), ("tea", 4.2, 4.3), ("scone", 5.8, 6.0)]), Some(5.0), 9.0);
+        assert_eq!(p.text(), "some tea");
+        polish(&mut p, &ws(&[("Tea.", 4.65, 6.0), ("Scones", 6.1, 6.4), ("too", 7.0, 7.1)]), None, 9.0);
+        assert_eq!(p.text(), "some tea Scones too");
+    }
+
+    #[test]
     fn a_word_said_twice_across_the_cut_stays_twice() {
         let mut p = Polished::new(true);
         polish(&mut p, &ws(&[("very", 4.3, 4.6)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("very", 4.3, 4.6), ("very", 5.2, 5.5), ("good", 5.6, 5.9)]), None, 9.0);
         assert_eq!(p.text(), "very very good");
+        // Both decodes hear both copies; the right decode misses the first, but its "very" is
+        // closer to the left decode's second copy (its tail) than to the polished one.
+        for right in [
+            &[("very", 4.3, 4.6), ("very", 5.2, 5.5), ("good", 5.6, 5.9)][..],
+            &[("very", 5.25, 5.5), ("good", 5.6, 5.9)],
+        ] {
+            let mut p = Polished::new(true);
+            polish(&mut p, &ws(&[("very", 4.3, 4.6), ("very", 5.2, 5.5)]), Some(5.0), 9.0);
+            polish(&mut p, &ws(right), None, 9.0);
+            assert_eq!(p.text(), "very very good");
+        }
     }
 
     #[test]
