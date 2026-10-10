@@ -2,27 +2,35 @@
 //! preview re-decodes and how much, how long dictations are cut into chunks and joined again,
 //! and what counts as a pause.
 //!
-//! The defaults here are the single source of truth: a settings file or a benchmark overrides
-//! single fields and leaves the rest alone, so a default can change in a release. Every model
-//! gets the same values (one pipeline, no per-model cases).
+//! The defaults here are the single source of truth: the settings file (`[advanced]`) or a
+//! benchmark overrides single fields and leaves the rest alone, so a default can change in a
+//! release. Every model gets the same values (one pipeline, no per-model cases), and a session
+//! takes the values in force when it starts ([`Engine::start_with`](crate::Engine::start_with)),
+//! so a change applies from the next recording without reloading the model.
 //!
-//! Units, the same for every field:
+//! Units, the same for every field, and named by the key's ending:
 //! - durations are whole milliseconds (`_ms`);
-//! - loudness is a linear RMS level: a `_ratio` is a fraction of another level (0.1 is 20 dB
-//!   under it), a `_level` a fraction of full scale (1.0 is the loudest a sample can be);
-//! - counts are whole numbers.
+//! - loudness is in decibels of RMS level: a `_db` is relative to another level (-20 is a
+//!   tenth of it, 0 the same), a `_dbfs` relative to full scale (0 is the loudest a sample can
+//!   be; -55 is about 0.0018). [`db_to_linear`] turns them into the levels the code compares;
+//! - counts are whole numbers (`_words`, `_passes`).
 
 use crate::SAMPLE_RATE;
 use std::fmt;
 
 const SR: usize = SAMPLE_RATE as usize;
 
-/// Declares [`Tuning`] with each field's default and allowed range, so the struct, its
-/// defaults, its key list and its checks can't drift apart.
-macro_rules! tuning {
+/// Declares a struct of numeric settings with each field's default and allowed range, so the
+/// struct, its defaults, its key list and its checks can't drift apart. [`Tuning`] is one; the
+/// app declares its own (when the model is freed, how long the overlay stays up) the same way,
+/// so the settings file treats them alike.
+///
+/// Generates `Default`, `KEYS`, `fields()`, `set(key, text)` and `validate()`.
+#[macro_export]
+macro_rules! tunables {
     (
         $(#[$meta:meta])*
-        pub struct Tuning {
+        $vis:vis struct $name:ident {
             $(
                 $(#[doc = $doc:literal])*
                 $field:ident: $ty:ty = $default:expr, $min:literal..=$max:literal;
@@ -30,25 +38,25 @@ macro_rules! tuning {
         }
     ) => {
         $(#[$meta])*
-        pub struct Tuning {
+        $vis struct $name {
             $( $(#[doc = $doc])* pub $field: $ty, )*
         }
 
-        impl Default for Tuning {
+        impl Default for $name {
             fn default() -> Self {
                 Self { $( $field: $default, )* }
             }
         }
 
-        impl Tuning {
-            /// Every field's name, as a settings file or `easyvox-bench --set` spells it.
+        impl $name {
+            /// Every field's name, as the settings file or `easyvox-bench --set` spells it.
             pub const KEYS: &'static [&'static str] = &[$( stringify!($field) ),*];
 
             /// Every field with its value, default, range and documentation, in declaration order.
-            pub fn fields(&self) -> Vec<Field> {
+            pub fn fields(&self) -> Vec<$crate::tuning::Field> {
                 let default = Self::default();
                 vec![$(
-                    Field {
+                    $crate::tuning::Field {
                         key: stringify!($field),
                         value: self.$field.to_string(),
                         default: default.$field.to_string(),
@@ -59,31 +67,31 @@ macro_rules! tuning {
                 )*]
             }
 
-            /// Sets the field named `key` from its text form (`"800"`, `"0.25"`). It doesn't check
-            /// the range: call [`validate`](Self::validate) once every field is set.
+            /// Sets the field named `key` from its text form (`"800"`, `"-20.5"`). It doesn't
+            /// check the range: call [`validate`](Self::validate) once every field is set.
             pub fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
                 match key {
                     $(
                         stringify!($field) => {
                             self.$field = value.trim().parse::<$ty>().map_err(|_| {
-                                format!("{key}: can't read {value:?} as {}", stringify!($ty))
+                                format!("{key}: can't read {value:?} as {}", $crate::tuning::type_name(stringify!($ty)))
                             })?;
                             Ok(())
                         }
                     )*
-                    _ => Err(format!("unknown tuning key {key:?}; the keys are: {}", Self::KEYS.join(", "))),
+                    _ => Err(format!("unknown key {key:?}; the keys are: {}", Self::KEYS.join(", "))),
                 }
             }
 
             /// Puts every field outside its range (or not a number) back to its default, leaving the
             /// others alone, and returns what it changed.
-            pub fn validate(&mut self) -> Vec<OutOfRange> {
+            pub fn validate(&mut self) -> Vec<$crate::tuning::OutOfRange> {
                 let default = Self::default();
                 let mut out = Vec::new();
                 $(
                     let (min, max): ($ty, $ty) = ($min, $max);
                     if !(min <= self.$field && self.$field <= max) {
-                        out.push(OutOfRange {
+                        out.push($crate::tuning::OutOfRange {
                             key: stringify!($field),
                             value: self.$field.to_string(),
                             min: min.to_string(),
@@ -99,7 +107,7 @@ macro_rules! tuning {
     };
 }
 
-tuning! {
+tunables! {
     /// The pipeline's tuning: the live preview, the chunks polished while you talk, how they're
     /// joined, and how pauses are found. See the module docs for the units.
     ///
@@ -149,15 +157,15 @@ tuning! {
         /// provisional until release; higher spends more passes on every pause.
         gate_settle_passes: u32 = 2, 0..=1_000;
         /// Speech gate: new audio counts as speech (worth a preview pass) when a 30 ms frame of
-        /// it is louder than this fraction of the loudest speech so far (0.1 is 20 dB under).
-        /// Higher lets the preview rest in more pauses over room noise, but may skip soft words
-        /// until a louder one comes; lower errs towards decoding. The final text decodes
-        /// everything either way.
-        gate_quiet_ratio: f32 = 0.1, 0.0..=1.0;
-        /// Speech gate: ...and louder than this level (0.0018 is about -55 dBFS), so that before
-        /// any speech only near-silence lets the preview rest. Higher ignores more background
-        /// noise; lower counts fainter sounds as speech.
-        gate_silence_level: f32 = 0.0018, 0.0..=1.0;
+        /// it is louder than this, relative to the loudest speech so far (-20 is 20 dB under:
+        /// a tenth of its level). Higher (nearer 0) lets the preview rest in more pauses over
+        /// room noise, but may skip soft words until a louder one comes; lower errs towards
+        /// decoding. The final text decodes everything either way.
+        gate_quiet_db: f32 = -20.0, -60.0..=0.0;
+        /// Speech gate: ...and louder than this, so that before any speech only near-silence
+        /// lets the preview rest. Higher ignores more background noise; lower counts fainter
+        /// sounds as speech.
+        gate_silence_dbfs: f32 = -55.0, -120.0..=0.0;
         /// Once this much audio waits unpolished, the oldest stretch is cut at a pause and
         /// decoded in final mode while you keep talking; release then only waits for the rest.
         /// Chunks come out 0.5 to 2 times this long: the cut goes in the longest pause in the
@@ -190,18 +198,19 @@ tuning! {
         /// between words are mostly shorter. Higher cuts only in clear pauses, but more chunks
         /// end up cut at the quietest moment instead; lower may cut between words.
         pause_min_ms: u32 = 150, 30..=10_000;
-        /// Pause finder: a 30 ms frame is quiet when its level is at most this fraction of the
-        /// loud frames around it (their 90th percentile; 0.1 is 20 dB under). Higher still finds
-        /// pauses over loud room noise, but may cut in a soft syllable; lower counts only clear
-        /// silence.
-        pause_quiet_ratio: f32 = 0.1, 0.0..=1.0;
-        /// Pause finder: ...or at most this level (0.0018 is about -55 dBFS), so a stretch of
-        /// pure silence counts even with no loud frames around it.
-        pause_silence_level: f32 = 0.0018, 0.0..=1.0;
+        /// Pause finder: a 30 ms frame is quiet when its level is at most this, relative to the
+        /// loud frames around it (their 90th percentile; -20 is a tenth of their level). Higher
+        /// (nearer 0) still finds pauses over loud room noise, but may cut in a soft syllable;
+        /// lower counts only clear silence.
+        pause_quiet_db: f32 = -20.0, -60.0..=0.0;
+        /// Pause finder: ...or at most this, so a stretch of pure silence counts even with no
+        /// loud frames around it.
+        pause_silence_dbfs: f32 = -55.0, -120.0..=0.0;
     }
 }
 
-/// One field of [`Tuning`], as text (see [`Tuning::fields`]).
+/// One field of [`Tuning`] (or another [`tunables!`](crate::tunables) struct), as text (see
+/// [`Tuning::fields`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Field {
     pub key: &'static str,
@@ -212,6 +221,43 @@ pub struct Field {
     pub max: String,
     /// The field's doc comment, one line per source line.
     pub doc: &'static str,
+}
+
+impl Field {
+    /// The unit, from the key's ending (`_ms`, `_db`, ...); empty for an unknown ending.
+    pub fn unit(&self) -> &'static str {
+        unit_of(self.key)
+    }
+}
+
+/// The unit a key's ending names: `preview_interval_ms` is in milliseconds.
+pub fn unit_of(key: &str) -> &'static str {
+    const UNITS: &[(&str, &str)] = &[
+        ("_ms", "milliseconds"),
+        ("_secs", "seconds"),
+        ("_dbfs", "dBFS (decibels relative to full scale)"),
+        ("_db", "dB (relative to another level)"),
+        ("_words", "words"),
+        ("_passes", "passes"),
+        ("_chars", "characters"),
+    ];
+    UNITS.iter().find(|(end, _)| key.ends_with(end)).map_or("", |(_, unit)| unit)
+}
+
+/// What a field's Rust type means to someone writing a settings file, for error messages.
+#[doc(hidden)]
+pub fn type_name(ty: &str) -> &'static str {
+    match ty {
+        "u32" | "u64" | "usize" => "a whole number, 0 or more",
+        "f32" | "f64" => "a number",
+        _ => "this setting's type",
+    }
+}
+
+/// Decibels to a linear level: 0 is 1.0, -20 is 0.1, -55 about 0.00178. For comparing RMS
+/// levels against a `_db` or `_dbfs` field.
+pub fn db_to_linear(db: f32) -> f32 {
+    10f64.powf(db as f64 / 20.0) as f32
 }
 
 /// A field [`Tuning::validate`] put back to its default.
@@ -264,8 +310,13 @@ mod tests {
         assert_eq!(t.agreement_max_repeat_words, 5);
         // pause.rs (SETTLE_PASSES, QUIET_RATIO, SILENCE_RMS, MIN_PAUSE_FRAMES of 30 ms)
         assert_eq!(t.gate_settle_passes, 2);
-        assert_eq!((t.gate_quiet_ratio, t.pause_quiet_ratio), (0.1, 0.1));
-        assert_eq!((t.gate_silence_level, t.pause_silence_level), (0.0018, 0.0018));
+        // The levels moved to dB: -20 dB is exactly the old 0.1, and -55 dBFS (0.00178) is
+        // within 1.2 % of the old 0.0018. `pause::tests::db_defaults_decide_like_the_old_levels`
+        // checks that the gate and the pause finder decide the same on the test clips.
+        assert_eq!((db_to_linear(t.gate_quiet_db), db_to_linear(t.pause_quiet_db)), (0.1, 0.1));
+        for level in [t.gate_silence_dbfs, t.pause_silence_dbfs] {
+            assert!((db_to_linear(level) / 0.0018 - 1.0).abs() < 0.013, "{level} dBFS");
+        }
         assert_eq!((t.pause_min_ms as usize).div_ceil(30), 5);
         // chunks.rs (CONTEXT_SECS, GUARD, SLACK_SECS, MATCH_SECS, MAX_REPEAT)
         assert_eq!(ms_samples(t.chunk_context_ms), (1.0 * SR as f32) as usize);
@@ -281,21 +332,27 @@ mod tests {
         let mut t = Tuning {
             preview_interval_ms: 60_000,
             preview_window_ms: 500,
-            gate_quiet_ratio: f32::NAN,
-            pause_silence_level: -0.5,
+            gate_quiet_db: f32::NAN,
+            pause_silence_dbfs: 0.5,
             chunk_ms: 15_000,
             ..Tuning::default()
         };
         let problems = t.validate();
         let keys: Vec<_> = problems.iter().map(|p| p.key).collect();
-        assert_eq!(keys, ["preview_interval_ms", "preview_window_ms", "gate_quiet_ratio", "pause_silence_level"]);
+        assert_eq!(keys, ["preview_interval_ms", "preview_window_ms", "gate_quiet_db", "pause_silence_dbfs"]);
         assert_eq!(t, Tuning { chunk_ms: 15_000, ..Tuning::default() });
         assert_eq!(
             problems[0].to_string(),
             "preview_interval_ms = 60000 is outside 0..=10000, so it stays at its default, 1600"
         );
         // Range ends are allowed.
-        let mut t = Tuning { preview_interval_ms: 0, chunk_ms: 0, pause_quiet_ratio: 1.0, ..Tuning::default() };
+        let mut t = Tuning {
+            preview_interval_ms: 0,
+            chunk_ms: 0,
+            pause_quiet_db: 0.0,
+            gate_silence_dbfs: -120.0,
+            ..Tuning::default()
+        };
         assert!(t.validate().is_empty());
     }
 
@@ -303,13 +360,14 @@ mod tests {
     fn set_reads_any_field_by_name_and_rejects_unknown_keys() {
         let mut t = Tuning::default();
         t.set("preview_interval_ms", "800").unwrap();
-        t.set("pause_quiet_ratio", " 0.25 ").unwrap();
-        assert_eq!(t, Tuning { preview_interval_ms: 800, pause_quiet_ratio: 0.25, ..Tuning::default() });
+        t.set("pause_quiet_db", " -25.5 ").unwrap();
+        assert_eq!(t, Tuning { preview_interval_ms: 800, pause_quiet_db: -25.5, ..Tuning::default() });
         let err = t.set("preview_interval", "800").unwrap_err();
-        assert!(err.contains("unknown tuning key") && err.contains("preview_interval_ms"), "{err}");
+        assert!(err.contains("unknown key") && err.contains("preview_interval_ms"), "{err}");
         assert!(t.set("preview_interval_ms", "-1").is_err());
         assert!(t.set("preview_interval_ms", "1.5").is_err());
-        assert!(t.set("gate_quiet_ratio", "loud").is_err());
+        let err = t.set("gate_quiet_db", "loud").unwrap_err();
+        assert_eq!(err, r#"gate_quiet_db: can't read "loud" as a number"#);
         assert_eq!(t.preview_interval_ms, 800, "a failed set leaves the field alone");
     }
 
@@ -331,7 +389,25 @@ mod tests {
         }
         let chunk = fields.iter().find(|f| f.key == "chunk_ms").unwrap();
         assert_eq!((chunk.value.as_str(), chunk.default.as_str()), ("15000", "30000"));
-        let level = fields.iter().find(|f| f.key == "gate_silence_level").unwrap();
-        assert_eq!((level.value.as_str(), level.min.as_str(), level.max.as_str()), ("0.0018", "0", "1"));
+        let level = fields.iter().find(|f| f.key == "gate_silence_dbfs").unwrap();
+        assert_eq!((level.value.as_str(), level.min.as_str(), level.max.as_str()), ("-55", "-120", "0"));
+    }
+
+    #[test]
+    fn every_key_names_its_unit() {
+        for f in Tuning::default().fields() {
+            assert!(!f.unit().is_empty(), "{}: end the key in a unit (_ms, _db, _dbfs, _words, ...)", f.key);
+        }
+        assert_eq!(unit_of("gate_silence_dbfs"), "dBFS (decibels relative to full scale)");
+        assert_eq!(unit_of("gate_quiet_db"), "dB (relative to another level)");
+    }
+
+    #[test]
+    fn decibels_convert_to_levels() {
+        assert_eq!(db_to_linear(0.0), 1.0);
+        assert_eq!(db_to_linear(-20.0), 0.1);
+        assert_eq!(db_to_linear(-40.0), 0.01);
+        assert!((db_to_linear(-55.0) - 0.001_778_28).abs() < 1e-8);
+        assert!((db_to_linear(-6.0) - 0.501_19).abs() < 1e-5);
     }
 }

@@ -69,12 +69,12 @@ impl SettingsView {
                 models,
                 |cx: &App| cx.global::<AppSettings>().model.clone().into(),
                 |id: SharedString, cx: &mut App| {
-                    controller::with(cx, |c, cx| c.load_engine(&id, cx));
+                    controller::with(cx, |c, cx| c.select_model(&id, cx));
                 },
             )
         };
         let status = cx.global::<AppStatus>();
-        let unload_after_mins = cx.global::<AppSettings>().unload_after_secs.div_ceil(60);
+        let unload_after = duration_words(cx.global::<AppSettings>().app.unload_after_secs);
         let engine = match &status.engine {
             EngineStatus::NotLoaded => "Not loaded.".to_string(),
             EngineStatus::Loading => "Loading… The first load after installing takes about 15 s.".into(),
@@ -84,20 +84,42 @@ impl SettingsView {
                     *load_ms as f32 / 1000.
                 )
             }
-            EngineStatus::Unloaded => format!(
-                "Freed after {unload_after_mins} minutes without use. It loads again as you start your next dictation."
-            ),
+            EngineStatus::Unloaded => {
+                format!("Freed after {unload_after} without use. It loads again as you start your next dictation.")
+            }
             EngineStatus::Failed { error } => format!("Couldn't load: {error}"),
         };
         let keep_loaded = format!(
-            "Off: after {unload_after_mins} minutes without dictation, EasyVox frees the model's ~600 MB. Your next \
-             dictation records at once while it loads again (about 0.15 s), so nothing you say is lost. On: it \
-             stays in memory."
+            "Off: after {unload_after} without dictation, EasyVox frees the model's ~600 MB. Your next dictation \
+             records at once while it loads again (about 0.15 s), so nothing you say is lost. On: it stays in \
+             memory."
         );
         let right_option = status
             .right_option_error
             .clone()
             .unwrap_or_else(|| "Works alongside the shortcut. Needs Input Monitoring.".into());
+
+        let config_path = status.config_path.clone();
+        let config_note = match (&status.config_error, status.config_warnings.as_slice()) {
+            (Some(e), _) => {
+                format!("⚠ {e}. Changes made here apply until EasyVox quits, but aren't saved until the file is fixed.")
+            }
+            (None, []) => "Every setting is in this file, including advanced ones this window doesn't show \
+                           (docs/settings.md lists them). Edits to it apply as soon as you save, and changes \
+                           here are written to it."
+                .into(),
+            (None, warnings) => format!("⚠ Some of this file was ignored: {}", warnings.join(" · ")),
+        };
+        let config_row = SettingField::render(move |_, _, _| {
+            let path = config_path.clone();
+            h_flex().gap_2().child(div().text_sm().child(home_relative(&config_path))).child(
+                Button::new("config-file").outline().small().label("Show in Finder").on_click(move |_, _, cx| {
+                    // The folder always exists (the watcher makes it); the file only once written.
+                    let target = if path.exists() { path.clone() } else { path.parent().unwrap_or(&path).into() };
+                    cx.reveal_path(&target);
+                }),
+            )
+        });
 
         SettingPage::new("General").default_open(true).group(
             SettingGroup::new()
@@ -130,7 +152,8 @@ impl SettingsView {
                         ),
                     )
                     .description(right_option),
-                ),
+                )
+                .item(SettingItem::new("Settings file", config_row).description(config_note)),
         )
     }
 
@@ -201,6 +224,24 @@ impl Render for SettingsView {
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .child(Settings::new("easyvox-settings").pages(pages))
+    }
+}
+
+/// "10 minutes", "45 seconds".
+fn duration_words(secs: u64) -> String {
+    match secs {
+        1 => "1 second".into(),
+        s if s < 120 => format!("{s} seconds"),
+        s => format!("{} minutes", s.div_ceil(60)),
+    }
+}
+
+/// `path` with the home folder shown as `~`.
+fn home_relative(path: &std::path::Path) -> String {
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    match home.as_deref().and_then(|h| path.strip_prefix(h).ok()) {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
     }
 }
 

@@ -5,7 +5,7 @@
 
 #![cfg(feature = "transcribe-cpp")]
 
-use easyvox_core::{AudioSource, Engine, EngineConfig, RECOMMENDED_MODEL, TranscriptEvent, models, paths};
+use easyvox_core::{AudioSource, Engine, EngineConfig, RECOMMENDED_MODEL, TranscriptEvent, Tuning, models, paths};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -28,7 +28,15 @@ fn engine_with(tweak: impl FnOnce(&mut EngineConfig)) -> Engine {
 
 /// Replays `name` to its end; returns the `Partial` events and the final text.
 fn replay(engine: &Engine, name: &str) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
-    let (session, events) = engine.start(AudioSource::WavReplay(clip(name))).unwrap();
+    replay_with(engine, name, engine.config().tuning)
+}
+
+fn replay_with(
+    engine: &Engine,
+    name: &str,
+    tuning: Tuning,
+) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
+    let (session, events) = engine.start_with(AudioSource::WavReplay(clip(name)), tuning).unwrap();
     let mut partials = vec![];
     let final_text = loop {
         match events.recv_timeout(Duration::from_secs(30)).expect("session stalled") {
@@ -135,4 +143,21 @@ fn chunked_final_pass_joins_cleanly() {
     // The preview swaps polished text in at most once per chunk.
     let rewrites = partials.windows(2).filter(|w| !w[1].0.starts_with(&w[0].0)).count();
     assert!(rewrites <= stats.chunks as usize, "{rewrites} rewrites of confirmed text for {} chunks", stats.chunks);
+}
+
+/// A session runs with the tuning it was started with, so a settings change applies from the
+/// next recording, on the model already loaded.
+#[test]
+#[ignore = "needs the recommended model (scripts/fetch-model.sh)"]
+fn each_session_takes_its_own_tuning_without_a_reload() {
+    let engine = engine();
+    let load_ms = engine.load_ms();
+    let no_preview = Tuning { preview_interval_ms: 0, chunk_ms: 4_000, ..Tuning::default() };
+    let (partials, _, stats) = replay_with(&engine, "punct_samantha.wav", no_preview);
+    assert_eq!((partials.len(), stats.partial_passes), (0, 0), "the preview was off");
+    assert!(stats.chunks >= 1, "4 s chunks on an 11 s clip, but {} polished while playing", stats.chunks);
+    let (partials, _, stats) = replay(&engine, "punct_samantha.wav");
+    assert!(partials.len() >= 3 && stats.chunks == 0, "{} partials, {} chunks", partials.len(), stats.chunks);
+    assert!(stats.model_wait_ms < 50.0, "the session waited {:.0} ms for the model: it reloaded", stats.model_wait_ms);
+    assert_eq!(engine.load_ms(), load_ms, "the model loaded again");
 }

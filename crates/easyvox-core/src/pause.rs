@@ -8,7 +8,7 @@
 //! breath or room noise from speech. A VAD (e.g. Silero) can replace it behind these functions.
 
 use crate::SAMPLE_RATE;
-use crate::tuning::Tuning;
+use crate::tuning::{Tuning, db_to_linear};
 use std::ops::Range;
 
 /// Frame length, in ms: the resolution levels are measured at.
@@ -26,7 +26,8 @@ fn loud_level(levels: &[f32]) -> f32 {
     sorted.get(sorted.len().saturating_sub(1) * 9 / 10).copied().unwrap_or(0.0)
 }
 
-/// Where quiet ends, relative to the loud frames around.
+/// Where quiet ends, relative to the loud frames around (linear levels, from [`Tuning`]'s
+/// decibels).
 #[derive(Clone, Copy, Debug)]
 struct Quiet {
     /// Quiet: at most this fraction of the loud frames' level...
@@ -36,6 +37,10 @@ struct Quiet {
 }
 
 impl Quiet {
+    fn from_db(quiet_db: f32, silence_dbfs: f32) -> Self {
+        Self { ratio: db_to_linear(quiet_db), silence: db_to_linear(silence_dbfs) }
+    }
+
     /// Frames at or under this level are quiet, next to loud frames at `loud`.
     fn level(self, loud: f32) -> f32 {
         (loud * self.ratio).max(self.silence)
@@ -65,13 +70,11 @@ pub(crate) struct SpeechGate {
 
 impl SpeechGate {
     pub(crate) fn new(t: &Tuning) -> Self {
-        Self {
-            quiet: Quiet { ratio: t.gate_quiet_ratio, silence: t.gate_silence_level },
-            settle_passes: t.gate_settle_passes,
-            loud: 0.0,
-            checked: 0,
-            since_speech: t.gate_settle_passes,
-        }
+        Self::with(Quiet::from_db(t.gate_quiet_db, t.gate_silence_dbfs), t.gate_settle_passes)
+    }
+
+    fn with(quiet: Quiet, settle_passes: u32) -> Self {
+        Self { quiet, settle_passes, loud: 0.0, checked: 0, since_speech: settle_passes }
     }
 
     /// Whether to re-decode now. `pcm` is the recording so far, and the pass would decode
@@ -103,7 +106,7 @@ pub(crate) struct PauseFinder {
 impl PauseFinder {
     pub(crate) fn new(t: &Tuning) -> Self {
         Self {
-            quiet: Quiet { ratio: t.pause_quiet_ratio, silence: t.pause_silence_level },
+            quiet: Quiet::from_db(t.pause_quiet_db, t.pause_silence_dbfs),
             min_frames: (t.pause_min_ms as usize).div_ceil(FRAME_MS).max(1),
         }
     }
@@ -190,12 +193,57 @@ pub(crate) mod tests {
     /// Feeds `pcm` to a gate the way the session does: a check every 400 ms, over a window of
     /// the last 20 s. Returns the times (s) of the checks that decode.
     fn decoding_ticks(pcm: &[f32]) -> Vec<f32> {
-        let mut gate = SpeechGate::new(&Tuning::default());
+        gate_ticks(SpeechGate::new(&Tuning::default()), pcm)
+    }
+
+    fn gate_ticks(mut gate: SpeechGate, pcm: &[f32]) -> Vec<f32> {
         (1..=pcm.len() / (SR * 4 / 10))
             .map(|i| i * SR * 4 / 10)
             .filter(|&end| gate.should_decode(&pcm[..end], end.saturating_sub(20 * SR)))
             .map(|end| end as f32 / SR as f32)
             .collect()
+    }
+
+    /// The loudness settings moved from linear levels (0.1 and 0.0018) to decibels (-20 dB and
+    /// -55 dBFS, which is 0.00178). On every test clip, the speech gate and the pause finder
+    /// make exactly the decisions they made with the old levels: the same preview passes, and
+    /// the same longest pause in every stretch a chunk cut would search. Set `EASYVOX_CLIPS` to
+    /// a space-separated list of WAV files (relative to the workspace) to check others too, e.g.
+    /// the long-dictation clips: `EASYVOX_CLIPS="$(ls testdata/longform/clips/*.wav)"`.
+    #[test]
+    fn db_defaults_decide_like_the_old_levels() {
+        let t = Tuning::default();
+        let old_gate = Quiet { ratio: 0.1, silence: 0.0018 };
+        let old_pause = PauseFinder { quiet: old_gate, min_frames: PauseFinder::new(&t).min_frames };
+        let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+        let testdata = root.join("testdata");
+        let mut clips: Vec<std::path::PathBuf> = std::fs::read_dir(&testdata)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "wav"))
+            .collect();
+        if let Some(extra) = std::env::var_os("EASYVOX_CLIPS") {
+            clips.extend(extra.to_string_lossy().split_whitespace().map(|p| root.join(p)));
+        }
+        clips.sort();
+        assert!(clips.len() >= 10, "expected the test clips in {}", testdata.display());
+        let mut stretches = 0;
+        for clip in &clips {
+            let pcm = crate::audio::load_wav_16k_mono(clip).unwrap();
+            let name = clip.display();
+            let new_ticks = gate_ticks(SpeechGate::new(&t), &pcm);
+            assert_eq!(new_ticks, gate_ticks(SpeechGate::with(old_gate, t.gate_settle_passes), &pcm), "{name}");
+            // Every stretch of 2-60 s ending on a 0.5 s step, as the chunker searches them.
+            let new_pause = PauseFinder::new(&t);
+            for end in (SR / 2..=pcm.len()).step_by(SR / 2) {
+                for len in [2, 5, 10, 30, 60] {
+                    let stretch = &pcm[end.saturating_sub(len * SR)..end];
+                    assert_eq!(new_pause.longest(stretch), old_pause.longest(stretch), "{name} at {end}");
+                    stretches += 1;
+                }
+            }
+        }
+        assert!(stretches > 1000, "{stretches}");
     }
 
     #[test]

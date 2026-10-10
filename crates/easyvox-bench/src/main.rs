@@ -715,14 +715,13 @@ mod tests {
 
     #[test]
     fn set_changes_any_tuning_field_and_rejects_unknown_keys() {
-        let t =
-            tuning(&args(&["session", "--set", "preview_interval_ms=800", "--set", "pause_quiet_ratio=0.2"])).unwrap();
-        assert_eq!(t, Tuning { preview_interval_ms: 800, pause_quiet_ratio: 0.2, ..Tuning::default() });
+        let t = tuning(&args(&["session", "--set", "preview_interval_ms=800", "--set", "pause_quiet_db=-14"])).unwrap();
+        assert_eq!(t, Tuning { preview_interval_ms: 800, pause_quiet_db: -14.0, ..Tuning::default() });
         for bad in ["no_such_key=1", "preview_interval_ms", "preview_interval_ms=fast", "preview_interval_ms=99999"] {
             assert!(tuning(&args(&["session", "--set", bad])).is_err(), "--set {bad} was accepted");
         }
         let err = tuning(&args(&["--set", "chunk=15"])).unwrap_err().to_string();
-        assert!(err.contains("unknown tuning key") && err.contains("chunk_ms"), "{err}");
+        assert!(err.contains("unknown key") && err.contains("chunk_ms"), "{err}");
     }
 
     #[test]
@@ -740,7 +739,7 @@ mod tests {
         let v = tuning_json(&Tuning { chunk_ms: 15_000, ..Tuning::default() });
         assert_eq!(v["chunk_ms"], json!(15_000));
         assert_eq!(v["preview_interval_ms"], json!(1_600));
-        assert_eq!(v["gate_silence_level"].as_f64(), Some(0.0018));
+        assert_eq!(v["gate_silence_dbfs"].as_f64(), Some(-55.0));
         assert_eq!(v.as_object().unwrap().len(), Tuning::KEYS.len());
     }
 

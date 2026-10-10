@@ -96,6 +96,7 @@ Three changes for the time EasyVox spends waiting, measured the same day on the 
 - **The wake-ups** came from a ggml-metal thread that wakes every 5 ms to keep its "residency sets" (GPU memory held ready between decodes) alive. It runs for as long as the Metal device exists, so unloading the model alone wouldn't have stopped it. "Before" stayed at 145 a second for minutes after its last decode.
 - **Memory:** unloading frees about 575 MB (630 MB right after a dictation, in the self-test). It takes 25–35 ms, off the UI thread. What's left is the app itself plus ggml's Metal device and compiled shaders, which live until the app quits.
 - **Quitting** left no crash report, with the model loaded or unloaded.
+- **The settings file** (2026-10-10) is watched with FSEvents, which wakes the app only when its folder changes. Measured the same way, 60 s each, with the file watched: 0.3 wake-ups a second with the model loaded, after the unload, and after an outside edit to the file (one reload, then nothing); 0.002 % of a core; 665 MB loaded, as before.
 
 ### Dictation after idling
 

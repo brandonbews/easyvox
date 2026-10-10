@@ -5,7 +5,9 @@
 //! or 1 otherwise.
 //!
 //! The microphone is never opened (a test clip is replayed), ⌘V is never sent (the text is only
-//! copied), and history goes to a temporary database.
+//! copied), and history goes to a temporary database. The settings file is a temporary one too,
+//! unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then puts
+//! it back as it was.
 
 use crate::controller::Controller;
 use crate::overlay::Mode;
@@ -53,6 +55,13 @@ impl Options {
 
     pub fn history_db(&self) -> PathBuf {
         self.dir.join("history.sqlite3")
+    }
+
+    /// `EASYVOX_CONFIG` if set, else a file in the temporary folder: never your own settings.
+    pub fn config_file(&self) -> PathBuf {
+        std::env::var_os("EASYVOX_CONFIG")
+            .filter(|v| !v.is_empty())
+            .map_or_else(|| self.dir.join("config.toml"), PathBuf::from)
     }
 }
 
@@ -146,6 +155,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
 
+    config_live_reload(&controller, &mut report, cx).await;
     windows(&controller, &mut report, cx).await;
 
     let pass = report.failed == 0;
@@ -278,13 +288,13 @@ async fn dictation_after_unload(
     let footprint_mb = || easyvox_core::metrics::proc_stats().footprint_bytes as f64 / 1e6;
     let loaded_mb = footprint_mb();
     cx.update(|cx| {
-        cx.global_mut::<AppSettings>().unload_after_secs = 1;
+        cx.global_mut::<AppSettings>().app.unload_after_secs = 1;
         controller.update(cx, |c, cx| c.schedule_unload(cx));
     });
     let freed =
         wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).engine.as_ref().is_some_and(|e| !e.is_loaded()))
             .await;
-    cx.update(|cx| cx.global_mut::<AppSettings>().unload_after_secs = AppSettings::default().unload_after_secs);
+    cx.update(|cx| cx.global_mut::<AppSettings>().app.unload_after_secs = AppSettings::default().app.unload_after_secs);
     sleep(cx, 500).await; // let the allocator hand the memory back
     let unloaded_mb = footprint_mb();
     let status = cx.update(|cx| cx.global::<AppStatus>().engine.clone());
@@ -337,6 +347,50 @@ async fn dictation_after_unload(
                "first_words_ms": first_words_ms, "status_after": format!("{status_after:?}"),
                "release_to_idle_ms": finished, "text": final_text, "wer": wer}),
     );
+}
+
+/// An outside edit to the settings file applies without a restart; the app's own write (a
+/// Settings switch) is saved without being reloaded, so the two can't loop. Then the file is
+/// put back as it was.
+async fn config_live_reload(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    let path = cx.update(|cx| cx.global::<AppStatus>().config_path.clone());
+    let original = std::fs::read_to_string(&path).ok();
+    let (watching, reloads_before) = cx.update(|cx| {
+        let c = controller.read(cx);
+        (c.config_watcher.is_some(), c.config_reloads)
+    });
+    // The overlay's text length: nothing else in the self-test depends on it.
+    let mut doc: toml_edit::DocumentMut = original.as_deref().unwrap_or("").parse().unwrap_or_default();
+    doc["advanced"]["overlay_max_chars"] = toml_edit::value(41);
+    let written = std::fs::write(&path, doc.to_string());
+    let applied = wait_for(cx, Duration::from_secs(5), |cx| {
+        cx.global::<AppSettings>().app.overlay_max_chars == 41 && controller.read(cx).config_reloads > reloads_before
+    })
+    .await;
+    report.check(
+        "an outside edit to the settings file applies live",
+        watching && written.is_ok() && applied.is_some(),
+        json!({"file": path, "watching": watching, "write_error": written.err().map(|e| e.to_string()),
+               "applied_ms": applied}),
+    );
+
+    let (keep_before, reloads_before) =
+        cx.update(|cx| (cx.global::<AppSettings>().keep_model_loaded, controller.read(cx).config_reloads));
+    cx.update(|cx| controller.update(cx, |c, cx| c.set_keep_model_loaded(!keep_before, cx)));
+    sleep(cx, 1500).await; // the watcher reports the write; the reload must find nothing new
+    let saved = std::fs::read_to_string(&path).unwrap_or_default();
+    let reloads_after = cx.update(|cx| controller.read(cx).config_reloads);
+    report.check(
+        "a change in Settings is saved to the file without reloading it",
+        saved.contains(&format!("keep_model_loaded = {}", !keep_before)) && reloads_after == reloads_before,
+        json!({"reloads_before": reloads_before, "reloads_after": reloads_after,
+               "saved_keep_model_loaded": saved.contains(&format!("keep_model_loaded = {}", !keep_before))}),
+    );
+    cx.update(|cx| controller.update(cx, |c, cx| c.set_keep_model_loaded(keep_before, cx)));
+    let _ = match original {
+        Some(text) => std::fs::write(&path, text),
+        None => std::fs::remove_file(&path),
+    };
 }
 
 /// Opens Settings and History through their menu items and draws each once. GPUI doesn't

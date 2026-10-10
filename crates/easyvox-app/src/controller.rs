@@ -3,10 +3,16 @@
 //! every transcript event arrives on one `async_channel` that a GPUI task drains on the UI
 //! thread (see `main.rs`), so all state changes happen here, on one thread.
 //!
-//! The speech model is freed after a stretch of no use (`AppSettings::unload_after_secs`,
-//! unless "Keep model loaded" is on). The next key press starts recording at once, and the
-//! session reloads the model meanwhile (`Engine::start`).
+//! The speech model is freed after a stretch of no use (`unload_after_secs`, unless "Keep
+//! model loaded" is on). The next key press starts recording at once, and the session reloads
+//! the model meanwhile (`Engine::start_with`).
+//!
+//! Settings come from the settings file (`config.rs`). Changes made in the Settings window are
+//! applied here and written to the file; outside edits to the file reach here through its
+//! watcher and are applied the same way, without writing anything back, so the two can't feed
+//! each other in a loop. Each dictation takes the pipeline's tuning in force when it starts.
 
+use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
 use crate::overlay::Overlay;
@@ -24,6 +30,8 @@ pub enum UiEvent {
     HotKey { id: u32, pressed: bool },
     RightOption { pressed: bool },
     Transcript { seq: u64, event: TranscriptEvent },
+    // The settings file may have changed (from its watcher, on a background thread).
+    ConfigChanged,
 }
 
 enum Phase {
@@ -44,9 +52,9 @@ enum Phase {
     },
 }
 
-/// How long the pill stays up after the final text, and after a notice.
-const HIDE_AFTER_FINAL: Duration = Duration::from_millis(600);
-const HIDE_AFTER_NOTICE: Duration = Duration::from_millis(2500);
+/// How long to wait after the settings file changes before reading it, so the several events
+/// one save produces (or an editor writing in steps) make one reload.
+const CONFIG_SETTLE: Duration = Duration::from_millis(150);
 
 pub struct ControllerGlobal(pub Entity<Controller>);
 impl Global for ControllerGlobal {}
@@ -82,6 +90,14 @@ pub struct Controller {
     unload_task: Option<Task<()>>,
     /// The current session started with the model unloaded, so it's reloading it.
     reloading: bool,
+    /// The settings file, and its watcher (`None` if it couldn't be watched).
+    config: ConfigFile,
+    pub config_watcher: Option<crate::config::Watcher>,
+    /// Reads the file once its changes settle; replaced by every new change event.
+    config_task: Option<Task<()>>,
+    /// Outside edits to the settings file that were applied (read by the self-test).
+    #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
+    pub config_reloads: u32,
     right_option_tap: bool,
     /// Push-to-talk replays this WAV instead of opening the microphone (debug and self-test).
     pub source_override: Option<PathBuf>,
@@ -96,6 +112,7 @@ impl Controller {
         tray: Option<tray::Tray>,
         overlay: Overlay,
         history: Entity<HistoryStore>,
+        config: ConfigFile,
         tx: async_channel::Sender<UiEvent>,
     ) -> Self {
         Self {
@@ -113,6 +130,10 @@ impl Controller {
             load_task: None,
             unload_task: None,
             reloading: false,
+            config,
+            config_watcher: None,
+            config_task: None,
+            config_reloads: 0,
             right_option_tap: false,
             source_override: None,
             auto_paste: true,
@@ -139,6 +160,12 @@ impl Controller {
                 }
             }
             UiEvent::Transcript { seq, event } => self.on_transcript(seq, event, cx),
+            UiEvent::ConfigChanged => {
+                self.config_task = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(CONFIG_SETTLE).await;
+                    let _ = this.update(cx, |c, cx| c.reload_settings(cx));
+                }));
+            }
         }
     }
 
@@ -204,7 +231,9 @@ impl Controller {
         };
         // Recording starts now either way; an unloaded model reloads while it records.
         let reloading = !engine.is_loaded();
-        let (session, events) = match engine.start(audio) {
+        // The session keeps the tuning in force now; a change applies from the next one.
+        let tuning = cx.global::<AppSettings>().tuning;
+        let (session, events) = match engine.start_with(audio, tuning) {
             Ok(v) => v,
             Err(e) => {
                 log::error!("couldn't start a session: {e:#}");
@@ -304,7 +333,10 @@ impl Controller {
         let model = self.engine.as_ref().map(|e| e.model_info().id).unwrap_or_default();
         self.history.update(cx, |h, cx| h.push(text, audio_secs, model, cx));
         match result {
-            Ok(()) => self.schedule_hide(HIDE_AFTER_FINAL, cx),
+            Ok(()) => {
+                let after = cx.global::<AppSettings>().app.overlay_hide_after_final_ms;
+                self.schedule_hide(Duration::from_millis(after.into()), cx);
+            }
             Err(e) => {
                 let e = e.to_string();
                 log::warn!("paste: {e}");
@@ -321,7 +353,8 @@ impl Controller {
     fn show_notice(&mut self, message: String, cx: &mut Context<Self>) {
         self.overlay.view.update(cx, |v, cx| v.set_notice(message, cx));
         self.overlay.show();
-        self.schedule_hide(HIDE_AFTER_NOTICE, cx);
+        let after = cx.global::<AppSettings>().app.overlay_hide_after_notice_ms;
+        self.schedule_hide(Duration::from_millis(after.into()), cx);
     }
 
     fn schedule_hide(&mut self, after: Duration, cx: &mut Context<Self>) {
@@ -358,7 +391,7 @@ impl Controller {
             self.unload_task = None;
             return;
         }
-        let after = Duration::from_secs(settings.unload_after_secs);
+        let after = Duration::from_secs(settings.app.unload_after_secs);
         self.unload_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(after).await;
             let _ = this.update(cx, |c, cx| c.unload_engine(after, cx));
@@ -382,12 +415,18 @@ impl Controller {
         .detach();
     }
 
-    /// "Keep model loaded": on, stops the unload timer and loads the model back if it was
-    /// freed; off, starts the timer.
+    /// "Keep model loaded" (from Settings): on, stops the unload timer and loads the model
+    /// back if it was freed; off, starts the timer.
     pub fn set_keep_model_loaded(&mut self, on: bool, cx: &mut Context<Self>) {
         cx.global_mut::<AppSettings>().keep_model_loaded = on;
+        self.apply_keep_model_loaded(cx);
+        self.save_settings(cx);
+    }
+
+    /// Acts on "Keep model loaded" and `unload_after_secs` as they are now.
+    fn apply_keep_model_loaded(&mut self, cx: &mut Context<Self>) {
         let unloaded = self.engine.as_ref().is_some_and(|e| !e.is_loaded());
-        if on && unloaded && self.is_idle() {
+        if cx.global::<AppSettings>().keep_model_loaded && unloaded && self.is_idle() {
             let model = cx.global::<AppSettings>().model.clone();
             self.load_engine(&model, cx);
         } else {
@@ -396,12 +435,18 @@ impl Controller {
         cx.refresh_windows();
     }
 
+    /// Picks the speech model (from Settings).
+    pub fn select_model(&mut self, model_id: &str, cx: &mut Context<Self>) {
+        self.load_engine(model_id, cx);
+        self.save_settings(cx);
+    }
+
     /// Loads (or switches to) a speech model on the background executor. The engine it
     /// replaces is dropped there too, since freeing a model can block.
     pub fn load_engine(&mut self, model_id: &str, cx: &mut Context<Self>) {
+        // No tuning here: each session takes the one in force when it starts.
         let mut config = easyvox_core::EngineConfig::recommended(easyvox_core::paths::models_dir());
         config.model_id = model_id.to_string();
-        config.tuning = cx.global::<AppSettings>().tuning;
         cx.global_mut::<AppSettings>().model = model_id.to_string();
         cx.global_mut::<AppStatus>().engine = EngineStatus::Loading;
         cx.refresh_windows();
@@ -435,6 +480,15 @@ impl Controller {
 
     /// Changes the push-to-talk shortcut (from the Settings recorder).
     pub fn rebind(&mut self, keystroke: &str, cx: &mut Context<Self>) -> Result<(), String> {
+        let result = self.bind_shortcut(keystroke, cx);
+        if result.is_ok() {
+            self.save_settings(cx);
+        }
+        result
+    }
+
+    /// Registers `keystroke` as the push-to-talk shortcut. If it can't be, the old one stays.
+    fn bind_shortcut(&mut self, keystroke: &str, cx: &mut Context<Self>) -> Result<(), String> {
         let result = self.hotkeys.bind(keystroke).map_err(|e| e.to_string());
         match &result {
             Ok(()) => {
@@ -448,27 +502,119 @@ impl Controller {
         result
     }
 
-    /// Turns "hold right ⌥ to talk" on or off. The event tap is installed the first time.
+    /// Turns "hold right ⌥ to talk" on or off (from Settings). If the event tap can't be
+    /// installed, it stays off and Settings shows why.
     pub fn set_hold_right_option(&mut self, on: bool, cx: &mut Context<Self>) {
-        if on && !self.right_option_tap {
-            let tx = self.tx.clone();
-            match platform::modifier_tap::install(move |pressed| {
-                let _ = tx.send_blocking(UiEvent::RightOption { pressed });
-            }) {
-                Ok(()) => {
-                    log::info!("right ⌥ tap installed");
-                    self.right_option_tap = true;
-                }
-                Err(e) => {
-                    log::warn!("right ⌥ tap: {e:#}");
-                    cx.global_mut::<AppStatus>().right_option_error = Some(e.to_string());
-                    cx.refresh_windows();
-                    return;
-                }
-            }
+        if on && !self.ensure_right_option_tap(cx) {
+            return;
         }
         cx.global_mut::<AppSettings>().hold_right_option = on;
         cx.global_mut::<AppStatus>().right_option_error = None;
+        cx.refresh_windows();
+        self.save_settings(cx);
+    }
+
+    /// Installs the right-⌥ event tap the first time it's needed. False, with the reason in
+    /// `AppStatus`, if it couldn't be.
+    pub fn ensure_right_option_tap(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.right_option_tap {
+            return true;
+        }
+        let tx = self.tx.clone();
+        let result = platform::modifier_tap::install(move |pressed| {
+            let _ = tx.send_blocking(UiEvent::RightOption { pressed });
+        });
+        match result {
+            Ok(()) => {
+                log::info!("right ⌥ tap installed");
+                self.right_option_tap = true;
+                cx.global_mut::<AppStatus>().right_option_error = None;
+            }
+            Err(e) => {
+                log::warn!("right ⌥ tap: {e:#}");
+                cx.global_mut::<AppStatus>().right_option_error = Some(e.to_string());
+            }
+        }
+        cx.refresh_windows();
+        self.right_option_tap
+    }
+
+    /// Writes what the Settings window changed to the settings file (see
+    /// `ConfigFile::save`). If the file has an error, the change still applies until EasyVox
+    /// quits, the file is left alone, and Settings says why.
+    fn save_settings(&mut self, cx: &mut Context<Self>) {
+        let settings = cx.global::<AppSettings>().clone();
+        match self.config.save(&settings) {
+            Ok(true) => {
+                log::info!("settings file: saved {}", self.config.path().display());
+                cx.global_mut::<AppStatus>().config_error = None;
+            }
+            Ok(false) => {}
+            Err(e) => {
+                log::error!("settings file: {e}");
+                cx.global_mut::<AppStatus>().config_error = Some(e);
+            }
+        }
+        cx.refresh_windows();
+    }
+
+    /// Reads the settings file after its watcher saw a change, and applies what changed. A
+    /// file that isn't valid TOML leaves the settings in force as they are. Never writes the
+    /// file, so the app's own saves (which the watcher reports too) can't cause a loop: their
+    /// text is what `ConfigFile` last wrote, so it reports them unchanged.
+    fn reload_settings(&mut self, cx: &mut Context<Self>) {
+        match self.config.reload() {
+            Reload::Unchanged => log::debug!("settings file: unchanged"),
+            Reload::Invalid(e) => {
+                log::error!("settings file: {e}; keeping the settings in force");
+                cx.global_mut::<AppStatus>().config_error = Some(e);
+            }
+            Reload::Changed(loaded) => {
+                for warning in &loaded.warnings {
+                    log::warn!("settings file: {warning}");
+                }
+                log::info!("settings file: applying changes from {}", self.config.path().display());
+                let status = cx.global_mut::<AppStatus>();
+                status.config_error = None;
+                status.config_warnings = loaded.warnings;
+                self.config_reloads += 1;
+                self.apply_settings(loaded.settings, cx);
+            }
+        }
+        cx.refresh_windows();
+    }
+
+    /// Puts `new` in force, acting on whatever differs from the settings now. The pipeline's
+    /// tuning needs nothing more: the next dictation takes it. Neither do the overlay's
+    /// numbers, which it reads as it draws and hides.
+    fn apply_settings(&mut self, new: AppSettings, cx: &mut Context<Self>) {
+        let old = cx.global::<AppSettings>().clone();
+        {
+            let s = cx.global_mut::<AppSettings>();
+            s.keep_model_loaded = new.keep_model_loaded;
+            s.app = new.app;
+            s.tuning = new.tuning;
+            s.hold_right_option = new.hold_right_option;
+        }
+        if new.shortcut != old.shortcut
+            && let Err(e) = self.bind_shortcut(&new.shortcut, cx)
+        {
+            // The old shortcut still works. Keep the file's choice on show, with the reason it
+            // isn't in force, so a later save from the window doesn't write the old one back.
+            cx.global_mut::<AppSettings>().shortcut = new.shortcut.clone();
+            cx.global_mut::<AppStatus>().shortcut_error = Some(e);
+        }
+        if new.hold_right_option && !old.hold_right_option {
+            self.ensure_right_option_tap(cx);
+        }
+        if new.model != old.model {
+            self.load_engine(&new.model, cx);
+        } else if new.keep_model_loaded != old.keep_model_loaded
+            || new.app.unload_after_secs != old.app.unload_after_secs
+        {
+            self.apply_keep_model_loaded(cx);
+        }
+        self.overlay.view.update(cx, |_, cx| cx.notify());
         cx.refresh_windows();
     }
 

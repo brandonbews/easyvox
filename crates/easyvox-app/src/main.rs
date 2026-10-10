@@ -3,11 +3,14 @@
 //!
 //! ```text
 //! easyvox                              run normally (⌥Space push-to-talk)
+//! easyvox --print-default-config       print every settings-file key at its default, and quit
 //! easyvox --self-test [--out <file>]   feature `self-test`: scripted check, JSON report, exit code
 //! ```
 //!
-//! Logs go to stderr; `EASYVOX_LOG=debug` shows more.
+//! Settings come from `~/.config/easyvox/config.toml` (see `config.rs`). Logs go to stderr;
+//! `EASYVOX_LOG=debug` shows more.
 
+mod config;
 mod controller;
 mod history;
 mod hotkey;
@@ -42,6 +45,10 @@ fn fatal(what: &str, error: anyhow::Error) -> ! {
 }
 
 fn main() {
+    if std::env::args().skip(1).any(|a| a == "--print-default-config") {
+        print!("{}", config::default_config_text());
+        return;
+    }
     // `GGML_METAL_NO_RESIDENCY=1`: stops ggml-metal waking the app ~150 times a second for as
     // long as it runs, loaded or not (see `easyvox_core::process_env`). Set here rather than in
     // Info.plist's LSEnvironment so it also holds for `cargo run` and the bare binary.
@@ -57,6 +64,21 @@ fn main() {
     let history_db = self_test.as_ref().map_or_else(easyvox_core::paths::history_db, |o| o.history_db());
     #[cfg(not(feature = "self-test"))]
     let history_db = easyvox_core::paths::history_db();
+    // The self-test never reads or writes your settings: it uses its own file unless
+    // EASYVOX_CONFIG names one.
+    #[cfg(feature = "self-test")]
+    let config_path = self_test.as_ref().map_or_else(easyvox_core::paths::config_file, |o| o.config_file());
+    #[cfg(not(feature = "self-test"))]
+    let config_path = easyvox_core::paths::config_file();
+    let mut config = config::ConfigFile::new(config_path);
+    let (loaded, config_error) = config.load();
+    log::info!("settings file: {}", config.path().display());
+    for warning in &loaded.warnings {
+        log::warn!("settings file: {warning}");
+    }
+    if let Some(e) = &config_error {
+        log::error!("settings file: {e}; using the defaults");
+    }
 
     application().with_assets(assets::Assets).run(move |cx: &mut App| {
         gpui_kit::init(cx);
@@ -65,8 +87,13 @@ fn main() {
         Theme::sync_system_appearance(None, cx);
         // A menu bar app: no Dock icon and no app menu (Info.plist sets LSUIElement too).
         cx.set_activation_policy(ActivationPolicy::Accessory);
-        cx.set_global(AppSettings::default());
-        cx.set_global(AppStatus::default());
+        cx.set_global(loaded.settings);
+        cx.set_global(AppStatus {
+            config_path: config.path().to_path_buf(),
+            config_error,
+            config_warnings: loaded.warnings,
+            ..Default::default()
+        });
 
         // One channel carries every OS callback and transcript event to the UI thread.
         let (tx, rx) = async_channel::unbounded::<UiEvent>();
@@ -101,8 +128,24 @@ fn main() {
 
         let overlay = overlay::create(cx).unwrap_or_else(|e| fatal("couldn't create the overlay", e));
         let history = cx.new(|_| history::HistoryStore::open(&history_db));
-        let controller = cx.new(|_| Controller::new(hotkeys, tray, overlay, history, tx));
+        let watch_path = config.path().to_path_buf();
+        let controller = cx.new(|_| Controller::new(hotkeys, tray, overlay, history, config, tx.clone()));
         cx.set_global(ControllerGlobal(controller.clone()));
+
+        // Outside edits to the settings file apply live. FSEvents: nothing runs until it changes.
+        let config_tx = tx.clone();
+        match config::watch(&watch_path, move || {
+            let _ = config_tx.try_send(UiEvent::ConfigChanged);
+        }) {
+            Ok(watcher) => controller.update(cx, |c, _| c.config_watcher = Some(watcher)),
+            Err(e) => log::warn!(
+                "settings file: can't watch {} ({e:#}); edits apply at the next launch",
+                watch_path.display()
+            ),
+        }
+        if cx.global::<AppSettings>().hold_right_option {
+            controller.update(cx, |c, cx| c.ensure_right_option_tap(cx));
+        }
 
         let target = controller.clone();
         cx.spawn(async move |cx| {

@@ -28,6 +28,11 @@ async-channel = "2"
 # Menu bar icon and global shortcuts: Tauri-team crates, used without Tauri.
 tray-icon = { version = "0.26.1", default-features = false }
 global-hotkey = "0.8.0"
+# The settings file. Both come with GPUI Kit already: toml_edit (as a build-time dependency)
+# keeps the user's comments and layout when Settings writes a key, and notify (FSEvents on
+# macOS) watches the file without a polling timer.
+toml_edit = "0.25.17"
+notify = "8.2.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Default features, like the spike: GPUI already enables nearly all of objc2-app-kit anyway.

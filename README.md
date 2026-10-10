@@ -52,7 +52,7 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 
    It writes `dist/EasyVox.app` and signs it ad hoc, which needs no certificate. macOS ties the Microphone and Accessibility permissions to the signature, so you may have to grant them again after each rebuild.
 
-   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
+   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), checks that an edit to the settings file applies live (on a temporary settings file, unless `EASYVOX_CONFIG` names one), writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy, the build and the tests on macOS 26 for pushes to `main` and for pull requests.
 
@@ -64,6 +64,10 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy
 cargo run -p easyvox-bench --release -- help
 cargo run -p easyvox-bench --release -- session --model parakeet-tdt-0.6b-v2-q5_k_m-gguf --wav testdata/punct_samantha.wav
 ```
+
+## Settings
+
+EasyVox reads its settings from `~/.config/easyvox/config.toml` (or `$XDG_CONFIG_HOME/easyvox/config.toml`; `EASYVOX_CONFIG` points at another file) and applies edits as soon as you save. The Settings window writes the same file. The file only needs the keys you change; [`docs/settings.md`](docs/settings.md) lists every key with its default, its unit and what it trades off, including the advanced ones for the live preview, the chunks and the pauses. `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config` prints the same list.
 
 ## License
 

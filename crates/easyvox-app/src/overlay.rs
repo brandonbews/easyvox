@@ -14,8 +14,6 @@ const WIDTH: f32 = 640.;
 const HEIGHT: f32 = 56.;
 /// Distance from the bottom of the screen.
 const BOTTOM_MARGIN: f32 = 140.;
-/// Longer text keeps only its tail, so the newest words stay in view.
-const MAX_CHARS: usize = 72;
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
@@ -79,9 +77,9 @@ impl OverlayView {
         format!("{}{}{}", self.confirmed, if joined { "" } else { " " }, self.provisional)
     }
 
-    /// The text in the pill (the tail of [`text`](Self::text)), and the byte range of the
-    /// provisional part.
-    fn display_text(&self) -> (String, std::ops::Range<usize>) {
+    /// The text in the pill (the last `max_chars` of [`text`](Self::text), so the newest words
+    /// stay in view), and the byte range of the provisional part.
+    fn display_text(&self, max_chars: usize) -> (String, std::ops::Range<usize>) {
         match self.mode {
             Mode::Listening => return ("Listening…".into(), 0..0),
             Mode::Notice => return (self.confirmed.clone(), 0..0),
@@ -89,7 +87,7 @@ impl OverlayView {
         }
         let full = self.text();
         let total = full.chars().count();
-        let (prefix, skip) = if total > MAX_CHARS { ("…", total - MAX_CHARS) } else { ("", 0) };
+        let (prefix, skip) = if total > max_chars { ("…", total - max_chars) } else { ("", 0) };
         let text: String = prefix.chars().chain(full.chars().skip(skip)).collect();
         // The provisional part is the last `n` characters (fewer if the cut reached into it).
         let n = self.provisional.chars().count().min(total - skip);
@@ -103,8 +101,9 @@ impl OverlayView {
 }
 
 impl Render for OverlayView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let (text, provisional) = self.display_text();
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let max_chars = cx.global::<crate::state::AppSettings>().app.overlay_max_chars;
+        let (text, provisional) = self.display_text(max_chars as usize);
         // `HighlightStyle::color` blends over the base colour (white over white stays white),
         // so dimming needs `fade_out`.
         let dim = HighlightStyle { fade_out: Some(0.55), ..Default::default() };
@@ -193,41 +192,51 @@ pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
 #[cfg(test)]
 mod tests {
     // Not `super::*`: that brings in GPUI's own `test` macro, which shadows `#[test]`.
-    use super::{MAX_CHARS, Mode, OverlayView};
+    use super::{Mode, OverlayView};
+
+    const MAX_CHARS: usize = 72;
 
     fn view(confirmed: &str, provisional: &str) -> OverlayView {
         OverlayView { confirmed: confirmed.into(), provisional: provisional.into(), mode: Mode::Live }
     }
 
+    impl OverlayView {
+        fn shown(&self) -> (String, std::ops::Range<usize>) {
+            self.display_text(MAX_CHARS)
+        }
+    }
+
     #[test]
     fn short_text_is_shown_whole_with_the_provisional_tail_marked() {
-        let (text, prov) = view("Hello,", "world").display_text();
+        let (text, prov) = view("Hello,", "world").shown();
         assert_eq!(text, "Hello, world");
         assert_eq!(&text[prov], "world");
-        let (text, prov) = view("Hello", "").display_text();
+        let (text, prov) = view("Hello", "").shown();
         assert_eq!(text, "Hello");
         assert!(prov.is_empty());
-        let (text, prov) = view("", "Hello").display_text();
+        let (text, prov) = view("", "Hello").shown();
         assert_eq!((text.as_str(), &text[prov]), ("Hello", "Hello"));
         // Error notes come with their own leading space.
-        assert_eq!(view("Hello", "  ⚠ oops").display_text().0, "Hello  ⚠ oops");
+        assert_eq!(view("Hello", "  ⚠ oops").shown().0, "Hello  ⚠ oops");
     }
 
     #[test]
     fn long_text_keeps_the_newest_words() {
         let confirmed = "é".repeat(100);
-        let (text, prov) = view(&confirmed, " naïve").display_text();
+        let (text, prov) = view(&confirmed, " naïve").shown();
         assert_eq!(text.chars().count(), MAX_CHARS + 1);
         assert!(text.starts_with('…'));
         assert_eq!(&text[prov], " naïve");
+        let (text, _) = view(&confirmed, " naïve").display_text(10);
+        assert_eq!(text, "…éééé naïve");
     }
 
     #[test]
     fn listening_and_notices_show_no_provisional_text() {
         let mut v = view("Allow the microphone", "");
         v.mode = Mode::Notice;
-        assert_eq!(v.display_text(), ("Allow the microphone".to_string(), 0..0));
+        assert_eq!(v.shown(), ("Allow the microphone".to_string(), 0..0));
         v.mode = Mode::Listening;
-        assert_eq!(v.display_text().0, "Listening…");
+        assert_eq!(v.shown().0, "Listening…");
     }
 }

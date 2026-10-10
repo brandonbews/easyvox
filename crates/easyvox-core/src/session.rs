@@ -2,19 +2,19 @@
 //!
 //! Capture starts at once. The worker first makes sure the model is loaded (reloading it if the
 //! engine was unloaded while idle; the audio meanwhile just buffers), then ticks every
-//! `preview_interval_ms` ([`Tuning`](crate::Tuning)) while the key is held. Each tick it
-//! polishes the oldest chunk in `Final` mode if enough audio waits (`chunks.rs`), then
-//! re-decodes the newest audio in `Partial` mode for the preview, confirming words once two
-//! passes agree (`partials.rs`). That pass starts just before the confirmed words
-//! (`preview_context_ms`), so it only decodes what may still change. A tick skips the re-decode
-//! when nothing has been said since the last ones (`pause::SpeechGate`). On release it polishes
-//! the rest and sends `Final`.
+//! `preview_interval_ms` ([`Tuning`], the session's own copy, taken when it started) while the
+//! key is held. Each tick it polishes the oldest chunk in `Final` mode if enough audio waits
+//! (`chunks.rs`), then re-decodes the newest audio in `Partial` mode for the preview,
+//! confirming words once two passes agree (`partials.rs`). That pass starts just before the
+//! confirmed words (`preview_context_ms`), so it only decodes what may still change. A tick
+//! skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
+//! On release it polishes the rest and sends `Final`.
 
 use crate::audio::{MicInfo, SharedAudio};
 use crate::chunks::{self, Chunker, Polished};
 use crate::partials::LocalAgreement;
 use crate::pause::SpeechGate;
-use crate::tuning::ms_samples;
+use crate::tuning::{Tuning, ms_samples};
 use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -117,6 +117,7 @@ impl Drop for Session {
 pub(crate) fn start(
     engine: Arc<EngineInner>,
     source: AudioSource,
+    tuning: Tuning,
 ) -> anyhow::Result<(Session, Receiver<TranscriptEvent>)> {
     let audio = Arc::new(SharedAudio::default());
     let stop_flag = Arc::new(AtomicBool::new(false));
@@ -141,7 +142,7 @@ pub(crate) fn start(
     let worker = {
         let (ctl, audio) = (ctl.clone(), audio.clone());
         std::thread::Builder::new().name("easyvox-decode".into()).spawn(move || {
-            let w = Worker { engine, audio, ctl, tx, is_mic };
+            let w = Worker { engine, tuning, audio, ctl, tx, is_mic };
             w.run();
         })?
     };
@@ -151,6 +152,7 @@ pub(crate) fn start(
 
 struct Worker {
     engine: Arc<EngineInner>,
+    tuning: Tuning,
     audio: Arc<SharedAudio>,
     ctl: Arc<Control>,
     tx: Sender<TranscriptEvent>,
@@ -225,7 +227,7 @@ impl Worker {
 
     fn record(&self, model: &dyn SpeechModel, started: Instant) {
         let mut warned = false;
-        let t = &self.engine.config.tuning;
+        let t = &self.tuning;
         let chunker = Chunker::new(t);
         let mut polished = Polished::new(model.word_timings(), t);
         let mut la = LocalAgreement::new(t);

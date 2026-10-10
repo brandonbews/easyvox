@@ -135,8 +135,9 @@ pub struct EngineConfig {
     /// Trim leading/trailing silence with Silero VAD before the final pass
     /// (needs `models_dir/vad/silero_vad.onnx` and the `sherpa` feature).
     pub vad_trim: bool,
-    /// How sessions run the preview, the chunks and the joins, the same for every model. Values
-    /// out of range fall back to their defaults when the engine loads (see [`Tuning::validate`]).
+    /// How sessions run the preview, the chunks and the joins, the same for every model: what
+    /// [`Engine::start`] uses ([`Engine::start_with`] takes its own). Values out of range fall
+    /// back to their defaults (see [`Tuning::validate`]).
     pub tuning: Tuning,
 }
 
@@ -324,13 +325,28 @@ impl Engine {
         self.inner.model.lock().unwrap().is_some()
     }
 
-    /// Start a push-to-talk session. Events arrive on the returned receiver.
+    /// Start a push-to-talk session with the engine's [`EngineConfig::tuning`]. Events arrive
+    /// on the returned receiver.
     ///
     /// Capture starts at once. If the model was unloaded, the session loads it while it
     /// records (about 0.15 s once the Metal shaders are cached), so no audio is lost: the
     /// preview starts once the model is ready, and `Final` covers the whole recording.
     pub fn start(&self, source: AudioSource) -> anyhow::Result<(Session, std::sync::mpsc::Receiver<TranscriptEvent>)> {
-        session::start(self.inner.clone(), source)
+        self.start_with(source, self.inner.config.tuning)
+    }
+
+    /// [`start`](Self::start) with its own tuning, which the session keeps until it ends. So a
+    /// settings change applies from the next recording, without reloading the model. Values out
+    /// of range fall back to their defaults, with a warning in the log.
+    pub fn start_with(
+        &self,
+        source: AudioSource,
+        mut tuning: Tuning,
+    ) -> anyhow::Result<(Session, std::sync::mpsc::Receiver<TranscriptEvent>)> {
+        for problem in tuning.validate() {
+            log::warn!("tuning: {problem}");
+        }
+        session::start(self.inner.clone(), source, tuning)
     }
 
     /// One-shot decode of 16 kHz mono samples (benchmarks, re-transcribing history). Word
