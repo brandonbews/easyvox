@@ -14,11 +14,9 @@
 # (`--options runtime`) and the `com.apple.security.device.audio-input` entitlement, or the
 # microphone stays off.
 #
-# MACOSX_DEPLOYMENT_TARGET is left unset on purpose. Info.plist's LSMinimumSystemVersion (26.0)
-# already stops the app from opening on older macOS. Setting the variable here would also change
-# the compiler flags that ggml (cmake) and the other C code build with, so the app would ship a
-# build that `cargo build`, the tests, CI and the model bench never ran. If we want it, it
-# belongs in .cargo/config.toml, so every build agrees.
+# MACOSX_DEPLOYMENT_TARGET (26.0, matching Info.plist's LSMinimumSystemVersion) is set in
+# .cargo/config.toml, not here, so `cargo build`, the tests, CI and the model bench build the
+# same code this script ships.
 set -euo pipefail
 
 usage() {

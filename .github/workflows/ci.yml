@@ -60,8 +60,8 @@ jobs:
           cmake --version
           xcodebuild -version
       # Caches ~/.cargo and the dependencies in target/ (GPUI and ggml are the slow part).
-      # The key covers rustc, Cargo.lock and rust-toolchain.toml. Only main saves; pull
-      # requests restore main's cache, which keeps the 10 GB repository quota for main.
+      # The key covers rustc, Cargo.lock, rust-toolchain.toml and .cargo/config.toml. Only main
+      # saves; pull requests restore main's cache, which keeps the 10 GB repository quota for main.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
