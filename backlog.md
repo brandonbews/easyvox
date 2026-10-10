@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 14 ready · 4 blocked · 15 on hold · 9 inbox · 15 done · 0 cancelled
+0 in progress · 13 ready · 4 blocked · 15 on hold · 9 inbox · 16 done · 0 cancelled
 
 ## In progress
 
@@ -12,7 +12,6 @@ _None._
 |---|---|---:|---|
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) | Core: download a model in the app — download, sha256 verify, activate | 1 | `models` `engine` |
-| [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) | Settings file: ~/.config/easyvox/config.toml, applied live | 1 | `settings` `app` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
 | [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) | Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified) | 2 | `models` `app` |
@@ -77,6 +76,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) Hands-on: record a few real-voice clips for benching
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
 - [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
+- [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) Settings file: ~/.config/easyvox/config.toml, applied live
 - [`tuh-bdnm`](tasks/tuh-01M4H2EGDR663G3XGTBA14BDNM.md) Bench the model list on the real-voice clips
 - [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) Unload the speech model after a stretch of no use
 - [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) Idle wake-ups from ggml-metal's residency loop

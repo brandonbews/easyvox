@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGC4XDQT10EWCXX1STG4`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `settings` `app`
 - **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (done)
@@ -37,6 +37,9 @@ Priority raised to 1 so it lands right after the lightness task (which picks the
 
 Notes from the Tuning refactor (da36537): the struct is easyvox_core::Tuning (crates/easyvox-core/src/tuning.rs; one macro generates fields, defaults, key list, set() and validate()); AppSettings.tuning holds it. serde is not a core dependency yet. (1) Loudness fields are linear levels (e.g. 0.0018, about -54.9 dBFS) to keep behaviour exact; for a human-edited file, dB is friendlier: switch deliberately, with an equivalence check. (2) Changing Tuning today means reloading the engine; make it apply from the next recording without a reload. App-level knobs to expose too: unload_after_secs, keep_model_loaded, overlay hide delays (600/2500 ms), overlay MAX_CHARS.
 
+
+Done 2026-10-10 in 8f3f0b3. 27 keys: top level = what the Settings window shows (model, shortcut, hold_right_option, keep_model_loaded); [advanced] = 4 app knobs + 19 Tuning fields. Window writes only changed top-level keys (toml_edit, comments kept), never [advanced]. Per-key fallback with warnings and near-key suggestions; invalid TOML never overwritten; FSEvents watch (notify), 150 ms debounce, no reload loop; idle wake-ups still 0.3/s. Loudness in dB; decisions identical to the old linear levels on all test clips and the real recordings. Sessions take Tuning at start (no model reload). Reference: easyvox --print-default-config and docs/settings.md (test-checked). Bench --set keys renamed for dB (gate_quiet_db etc.). The app creates ~/.config/easyvox/ at launch to watch it. Thread count stays out of the file (load-time only). Self-test 17/17.
+
 ## History
 
 ### 2026-10-10 03:33 UTC — edit by `brandon`
@@ -46,3 +49,7 @@ description edited · priority 2→1 · depends_on +tuh-z7dr
 ### 2026-10-10 04:41 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 11:08 UTC — edit by `brandon`
+
+description edited · status open→done
