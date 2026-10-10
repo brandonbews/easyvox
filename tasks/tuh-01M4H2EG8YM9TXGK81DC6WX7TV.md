@@ -20,8 +20,10 @@ Pointers: crates/easyvox-core/src/models.rs (download_url, sha256, download_byte
 Constraints: model downloads are the only network use EasyVox makes (DESIGN.md "Requirements"). Use the pinned Hugging Face commit URLs as they are. Keep the HTTP dependency light: idle memory matters.
 
 
+Decided by Brandon 2026-10-09 (plan section 5): (1) NSURLSession via objc2, not /usr/bin/curl, for System Settings proxy support; (2) keep scripts/fetch-model.sh and its drift-guard test; (3) allow the Mac to sleep during a download; it resumes after wake.
+
 ---
-IMPLEMENTATION PLAN (2026-10-09, read-only research agent; Brandon's answers to section 5 get recorded above this line once decided)
+IMPLEMENTATION PLAN (2026-10-09, read-only research agent)
 
 # Plan: download a model in the app (download → sha256 verify → activate)
 
@@ -757,5 +759,9 @@ in tests). Everything else in this plan stays the same.
 ## History
 
 ### 2026-10-10 00:07 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-10 00:22 UTC — edit by `brandon`
 
 description edited
