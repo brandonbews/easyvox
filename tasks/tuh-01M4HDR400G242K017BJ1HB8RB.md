@@ -5,7 +5,7 @@
 - **Status:** on hold — deliberately paused
 - **Priority:** 2
 - **Labels:** `engine` `perf` `energy` `spike`
-- **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (open)
+- **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (done)
 - **Created:** 2026-10-09 22:50 UTC by `brandon`
 
 ## Description

@@ -2,7 +2,7 @@
 
 `tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `engine` `perf` `energy`
 - **Created:** 2026-10-10 02:52 UTC by `brandon`
@@ -25,6 +25,9 @@ Then: decide whether the Neural Engine half is still worth running, against the 
 
 Added 2026-10-09: first gather every tuning constant that shapes feel or cost (preview interval and window, chunk length, join slack, SpeechGate threshold and settle passes, pause-finder levels and durations, ...) into one core struct with documented defaults (units, what each trades off), so the bench flags and the settings file (tuh-01M4H2EGC4XDQT10EWCXX1STG4, which exposes it under an advanced table) share one source of truth. The bench should be able to set any field (e.g. a generic --set key=value), which also makes the sweep easy.
 
+
+Done 2026-10-10: step 1 (Tuning struct, --set) in da36537; step 2 in ffa49a5. New defaults: preview_interval_ms 1600 (was 400), new preview_context_ms 1000 (each pass starts 1 s before the confirmed words, not at the last chunk cut); window 20 s and chunk 30 s unchanged. Ramble (v2, macmon, idle-subtracted, 2-4 runs): added power 4.23 -> 0.65 W (GPU 3.56 -> 0.52 W), 254 -> 39 J/min (~6.5x), GPU active 31 -> 6 % (ioreg Device Utilization 91 -> 74 %: a poor cost measure), CPU 36 -> 8 %. Preview lag median/p95/max 0.23/0.73/1.4 -> 0.81/1.94/~4.2 s; first words ~0.5 -> ~1.7 s (follow-up: tuh-01M4JNRW9D3CBNF5X80JPWW7Y9). Final text identical; WER v2 1.68 %, Unified 2.10 %, Whisper 6.72 %, lf_3m_pauses 0 %, lf_10m 0.40 %. Release latency same or better on long dictations; an 11 s clip +25 ms (GPU clocks). Knee 1.2-1.6 s; 20/15 s chunks hurt accuracy; 2-3 s context costs more for no gain. Not built: release cancelling an in-flight pass (transcribe.cpp only checks cancel before a decode; now in flight at release 7 % of the time vs 40 %), adaptive interval. ANE spike parked (see its task).
+
 ## History
 
 ### 2026-10-10 02:59 UTC — edit by `brandon`
@@ -34,3 +37,7 @@ description edited
 ### 2026-10-10 03:33 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 10:30 UTC — edit by `brandon`
+
+description edited · status open→done

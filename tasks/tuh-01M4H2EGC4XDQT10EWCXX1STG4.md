@@ -2,10 +2,10 @@
 
 `tuh-01M4H2EGC4XDQT10EWCXX1STG4`
 
-- **Status:** open — blocked on dependencies
+- **Status:** open — ready
 - **Priority:** 1
 - **Labels:** `settings` `app`
-- **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (open)
+- **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (done)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description
