@@ -1,0 +1,14 @@
+# Keeps the GitHub Actions pins in .github/workflows current. Each action is pinned to a commit
+# SHA with its release in a comment (`@<sha> # v7.0.1`); Dependabot updates the two together.
+#
+# Monthly, and grouped into one pull request per run: every Dependabot PR runs CI on macOS,
+# which bills at 10x while the repository is private. Revisit if it goes public.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
