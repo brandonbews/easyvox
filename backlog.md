@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 17 ready · 4 blocked · 13 on hold · 8 inbox · 10 done · 0 cancelled
+0 in progress · 16 ready · 4 blocked · 13 on hold · 8 inbox · 11 done · 0 cancelled
 
 ## In progress
 
@@ -10,7 +10,6 @@ _None._
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
-| [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) | Make Parakeet TDT v2 the default model | 0 | `models` |
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) | Core: download a model in the app — download, sha256 verify, activate | 1 | `models` `engine` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
@@ -82,6 +81,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) Decide the default model: Parakeet TDT v2 or Unified
 - [`tuh-4p1s`](tasks/tuh-01M4HDR3Z8GQ7132ZNSN5Q4P1S.md) Skip preview passes when nothing new was heard
 - [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) Add the long-dictation clip generator to testdata/
+- [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) Make Parakeet TDT v2 the default model
 
 ## Cancelled
 
