@@ -7,6 +7,10 @@ use easyvox_core::{AudioSource, Engine, EngineConfig, TranscriptEvent, paths};
 use std::path::PathBuf;
 
 fn main() -> anyhow::Result<()> {
+    for (key, value) in easyvox_core::process_env() {
+        // SAFETY: the first thing `main` does, before any thread exists.
+        unsafe { std::env::set_var(key, value) };
+    }
     let mut args = std::env::args().skip(1);
     let model = args.next().unwrap_or_else(|| easyvox_core::RECOMMENDED_MODEL.into());
     let wav = args

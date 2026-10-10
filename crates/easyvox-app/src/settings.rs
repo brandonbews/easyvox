@@ -74,6 +74,7 @@ impl SettingsView {
             )
         };
         let status = cx.global::<AppStatus>();
+        let unload_after_mins = cx.global::<AppSettings>().unload_after_secs.div_ceil(60);
         let engine = match &status.engine {
             EngineStatus::NotLoaded => "Not loaded.".to_string(),
             EngineStatus::Loading => "Loading… The first load after installing takes about 15 s.".into(),
@@ -83,8 +84,16 @@ impl SettingsView {
                     *load_ms as f32 / 1000.
                 )
             }
+            EngineStatus::Unloaded => format!(
+                "Freed after {unload_after_mins} minutes without use. It loads again as you start your next dictation."
+            ),
             EngineStatus::Failed { error } => format!("Couldn't load: {error}"),
         };
+        let keep_loaded = format!(
+            "Off: after {unload_after_mins} minutes without dictation, EasyVox frees the model's ~600 MB. Your next \
+             dictation records at once while it loads again (about 0.15 s), so nothing you say is lost. On: it \
+             stays in memory."
+        );
         let right_option = status
             .right_option_error
             .clone()
@@ -94,6 +103,18 @@ impl SettingsView {
             SettingGroup::new()
                 .title("Dictation")
                 .item(SettingItem::new("Model", model_field).description(engine))
+                .item(
+                    SettingItem::new(
+                        "Keep model loaded",
+                        SettingField::switch(
+                            |cx: &App| cx.global::<AppSettings>().keep_model_loaded,
+                            |on: bool, cx: &mut App| {
+                                controller::with(cx, |c, cx| c.set_keep_model_loaded(on, cx));
+                            },
+                        ),
+                    )
+                    .description(keep_loaded),
+                )
                 .item(
                     SettingItem::new("Push-to-talk shortcut", SettingField::render(move |_, _, _| recorder.clone()))
                         .description("Hold it and speak; let go to paste. Click, then press a new combination."),

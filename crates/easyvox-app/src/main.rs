@@ -42,6 +42,14 @@ fn fatal(what: &str, error: anyhow::Error) -> ! {
 }
 
 fn main() {
+    // `GGML_METAL_NO_RESIDENCY=1`: stops ggml-metal waking the app ~150 times a second for as
+    // long as it runs, loaded or not (see `easyvox_core::process_env`). Set here rather than in
+    // Info.plist's LSEnvironment so it also holds for `cargo run` and the bare binary.
+    for (key, value) in easyvox_core::process_env() {
+        // SAFETY: the first thing `main` does, before GPUI, the logger or anything else starts
+        // a thread, so nothing can read the environment while it changes.
+        unsafe { std::env::set_var(key, value) };
+    }
     logger::init();
     #[cfg(feature = "self-test")]
     let self_test = selftest::Options::from_args();

@@ -1,9 +1,10 @@
-//! Pause detection, for cutting a long recording into chunks (see `chunks.rs`).
+//! Pause detection: where to cut a long recording into chunks (see `chunks.rs`), and whether
+//! anything was said since the last preview pass ([`SpeechGate`]).
 //!
 //! Energy-based for now: a pause is a run of quiet 30 ms frames, and a frame is quiet when its
 //! level is at least 20 dB under the loud frames around it (their 90th percentile), or under
 //! -55 dBFS whatever the level around. It needs no model, but it can't tell a breath or room
-//! noise from speech. A VAD (e.g. Silero) can replace it behind these two functions.
+//! noise from speech. A VAD (e.g. Silero) can replace it behind these functions.
 
 use crate::SAMPLE_RATE;
 use std::ops::Range;
@@ -16,8 +17,65 @@ const QUIET_RATIO: f32 = 0.1;
 /// ...or under -55 dBFS, so a stretch of pure silence (no loud frames at all) still counts.
 const SILENCE_RMS: f32 = 0.0018;
 
+/// Preview passes still run after the speech stops, so its last words are decoded with the
+/// silence after them and confirmed by two passes that agree (`partials.rs`).
+const SETTLE_PASSES: u32 = 2;
+
 fn frame_levels(pcm: &[f32]) -> Vec<f32> {
     pcm.chunks(FRAME).map(|c| (c.iter().map(|x| x * x).sum::<f32>() / c.len() as f32).sqrt()).collect()
+}
+
+/// The level of the loud frames: their 90th percentile (0 if there are none).
+fn loud_level(levels: &[f32]) -> f32 {
+    let mut sorted = levels.to_vec();
+    sorted.sort_by(f32::total_cmp);
+    sorted.get(sorted.len().saturating_sub(1) * 9 / 10).copied().unwrap_or(0.0)
+}
+
+/// Frames at or under this level are quiet, next to loud frames at `loud`.
+fn quiet_level(loud: f32) -> f32 {
+    (loud * QUIET_RATIO).max(SILENCE_RMS)
+}
+
+/// Decides whether a preview pass is worth running: only when something was said since the
+/// last check, plus [`SETTLE_PASSES`] more after the speech stops. While you pause to think,
+/// the preview stops re-decoding, which saves most of the GPU and CPU it would spend.
+///
+/// "Something was said" means a frame louder than [`quiet_level`] of the loudest speech so
+/// far (the 90th percentile of a preview window), the same measure the pause finder uses. So
+/// it errs towards decoding: before any speech, or in a noisy room, room noise counts. It only
+/// affects the preview; the final text decodes everything either way.
+pub(crate) struct SpeechGate {
+    /// The loudest level of a preview window so far.
+    loud: f32,
+    /// Samples already checked for speech.
+    checked: usize,
+    /// Passes since speech was last heard. Starts full: nothing to decode before any speech.
+    since_speech: u32,
+}
+
+impl SpeechGate {
+    pub(crate) fn new() -> Self {
+        Self { loud: 0.0, checked: 0, since_speech: SETTLE_PASSES }
+    }
+
+    /// Whether to re-decode now. `pcm` is the recording so far, and the pass would decode
+    /// `pcm[window_start..]`.
+    pub(crate) fn should_decode(&mut self, pcm: &[f32], window_start: usize) -> bool {
+        self.loud = self.loud.max(loud_level(&frame_levels(&pcm[window_start.min(pcm.len())..])));
+        let new = &pcm[self.checked.min(pcm.len())..];
+        self.checked = pcm.len();
+        let quiet = quiet_level(self.loud);
+        if frame_levels(new).iter().any(|level| *level > quiet) {
+            self.since_speech = 0;
+            return true;
+        }
+        if self.since_speech < SETTLE_PASSES {
+            self.since_speech += 1;
+            return true;
+        }
+        false
+    }
 }
 
 /// The longest pause in `pcm` (a sample range, whole 30 ms frames), if one lasts at least
@@ -27,10 +85,7 @@ pub(crate) fn longest_pause(pcm: &[f32]) -> Option<Range<usize>> {
     if levels.is_empty() {
         return None;
     }
-    let mut sorted = levels.clone();
-    sorted.sort_by(f32::total_cmp);
-    let loud = sorted[(sorted.len() - 1) * 9 / 10];
-    let quiet = (loud * QUIET_RATIO).max(SILENCE_RMS);
+    let quiet = quiet_level(loud_level(&levels));
     let (mut best, mut run) = (None::<Range<usize>>, 0);
     for (i, level) in levels.iter().enumerate() {
         run = if *level <= quiet { run + 1 } else { 0 };
@@ -95,6 +150,40 @@ pub(crate) mod tests {
     fn long_silence_is_a_pause_even_without_loud_frames() {
         let pcm = audio(&[(5.0, 0.0005)]);
         assert_eq!(longest_pause(&pcm).map(|r| r.len()), Some(pcm.len()));
+    }
+
+    /// Feeds `pcm` to a gate the way the session does: a check every 400 ms, over a window of
+    /// the last 20 s. Returns the times (s) of the checks that decode.
+    fn decoding_ticks(pcm: &[f32]) -> Vec<f32> {
+        let mut gate = SpeechGate::new();
+        (1..=pcm.len() / (SR * 4 / 10))
+            .map(|i| i * SR * 4 / 10)
+            .filter(|&end| gate.should_decode(&pcm[..end], end.saturating_sub(20 * SR)))
+            .map(|end| end as f32 / SR as f32)
+            .collect()
+    }
+
+    #[test]
+    fn the_gate_decodes_speech_and_settles_in_pauses() {
+        // 1 s of silence, 2 s of speech, a 3 s pause over room noise (-46 dBFS), 1 s of speech.
+        let pcm = audio(&[(1.0, 0.0), (2.0, 0.3), (3.0, 0.007), (1.0, 0.3)]);
+        let ticks = decoding_ticks(&pcm);
+        // Nothing before the speech; every check during it; two more into the pause; then the
+        // speech that follows.
+        assert!(ticks.first().is_some_and(|t| (1.15..1.25).contains(t)), "{ticks:?}");
+        assert!(ticks.iter().any(|t| (3.2..3.25).contains(t)), "no pass just after the speech: {ticks:?}");
+        let in_pause = ticks.iter().filter(|t| (3.25..6.0).contains(*t)).count();
+        assert_eq!(in_pause, SETTLE_PASSES as usize, "{ticks:?}");
+        assert!(ticks.iter().any(|t| *t > 6.0), "the speech after the pause wasn't decoded: {ticks:?}");
+    }
+
+    #[test]
+    fn the_gate_decodes_noise_until_it_has_heard_speech() {
+        // Room noise alone above the -55 dBFS floor: it can't be told from quiet speech yet.
+        let noise = audio(&[(2.0, 0.007)]);
+        assert_eq!(decoding_ticks(&noise).len(), 5);
+        // Digital silence never decodes.
+        assert!(decoding_ticks(&audio(&[(2.0, 0.0)])).is_empty());
     }
 
     #[test]

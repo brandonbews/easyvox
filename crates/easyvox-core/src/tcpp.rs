@@ -6,10 +6,13 @@
 //!   `atexit` hook below fixes it.
 //! - **First load per app identity** compiles the Metal shaders into a per-bundle cache
 //!   (~14 s once, ~0.2 s afterwards). The app should warm this up during onboarding.
-//! - **Idle wake-ups.** ggml-metal's residency-set loop wakes the process ~210 times a second
-//!   for as long as its Metal device exists, even after every model is unloaded.
-//!   `GGML_METAL_NO_RESIDENCY=1` stops it (3.5 wake-ups/s measured); its effect on the first
-//!   decode after a long idle is unmeasured. See `ggml-metal-device.m` ~lines 954–1003.
+//! - **Idle wake-ups.** ggml-metal's residency-set loop (`ggml-metal-device.m` ~lines 954–1003)
+//!   sleeps 5 ms at a time for as long as its Metal device exists, even after every model is
+//!   unloaded: about 145 wake-ups a second in the idle app. `GGML_METAL_NO_RESIDENCY=1` means
+//!   the loop is never started (0.3 a second), and costs nothing measurable on the first decode
+//!   after a long idle (`docs/model-bench.md`, "Idle and energy"). The variable has to be set
+//!   before the Metal device is created, which happens on the first model load, and only a
+//!   binary's `main` can set it safely, so the binaries apply [`crate::process_env`].
 
 use crate::models::ModelInfo;
 use crate::{DecodeMode, EngineConfig, Hypothesis, SpeechModel, Word, spread_words};

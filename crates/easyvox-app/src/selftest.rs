@@ -1,5 +1,6 @@
-//! `--self-test` (feature `self-test`): runs the real app through one scripted dictation and
-//! checks it from the inside, for a Mac nobody is looking at (screen locked, no key presses).
+//! `--self-test` (feature `self-test`): runs the real app through scripted dictations and
+//! checks it from the inside, for a Mac nobody is looking at (screen locked, no key presses):
+//! one with the model loaded, then one right after the idle timeout freed it.
 //! It writes a JSON report and exits 0 through the tray's Quit item when every check passes,
 //! or 1 otherwise.
 //!
@@ -138,7 +139,10 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
     );
 
     match (engine_ready, hotkey_id) {
-        (true, Some(id)) => dictation(&controller, id, &options, &mut report, cx).await,
+        (true, Some(id)) => {
+            dictation(&controller, id, &options, &mut report, cx).await;
+            dictation_after_unload(&controller, id, &mut report, cx).await;
+        }
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
 
@@ -261,6 +265,78 @@ async fn dictation(
 
     let hidden = wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).overlay.panel.state().visible).await;
     report.check("overlay hides after the final text", hidden.is_some(), json!({"ms": hidden}));
+}
+
+/// The idle timeout (shortened to 1 s) frees the model; the next press records at once while
+/// the session reloads it, and the final text still has the first words.
+async fn dictation_after_unload(
+    controller: &Entity<Controller>,
+    hotkey_id: u32,
+    report: &mut Report,
+    cx: &mut AsyncApp,
+) {
+    let footprint_mb = || easyvox_core::metrics::proc_stats().footprint_bytes as f64 / 1e6;
+    let loaded_mb = footprint_mb();
+    cx.update(|cx| {
+        cx.global_mut::<AppSettings>().unload_after_secs = 1;
+        controller.update(cx, |c, cx| c.schedule_unload(cx));
+    });
+    let freed =
+        wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).engine.as_ref().is_some_and(|e| !e.is_loaded()))
+            .await;
+    cx.update(|cx| cx.global_mut::<AppSettings>().unload_after_secs = AppSettings::default().unload_after_secs);
+    sleep(cx, 500).await; // let the allocator hand the memory back
+    let unloaded_mb = footprint_mb();
+    let status = cx.update(|cx| cx.global::<AppStatus>().engine.clone());
+    report.check(
+        "model unloads after the idle timeout",
+        freed.is_some() && matches!(status, EngineStatus::Unloaded) && unloaded_mb < loaded_mb / 2.,
+        json!({"ms_after_1s_timeout": freed, "status": format!("{status:?}"),
+               "footprint_mb_loaded": loaded_mb.round(), "footprint_mb_unloaded": unloaded_mb.round()}),
+    );
+    if freed.is_none() {
+        return;
+    }
+
+    let clip = crate::testdata_dir().join(format!("{CLIP}.wav"));
+    let clip_secs = easyvox_core::audio::load_wav_16k_mono(&clip)
+        .map_or(0., |pcm| pcm.len() as f64 / easyvox_core::SAMPLE_RATE as f64);
+    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let pressed_status = platform::post_hotkey_event(hotkey_id, true);
+    let pressed = Instant::now();
+    let started = wait_for(cx, Duration::from_secs(1), |cx| !controller.read(cx).is_idle()).await;
+    // `start_session` marks the model as loading when it had to reload it.
+    let status_at_start = cx.update(|cx| cx.global::<AppStatus>().engine.clone());
+    let mut first_words_ms = None;
+    let release_at = Duration::from_secs_f64((clip_secs - RELEASE_BEFORE_END).max(0.5));
+    while started.is_some() && pressed.elapsed() < release_at {
+        sleep(cx, 20).await;
+        let live = cx.update(|cx| controller.read(cx).overlay.view.read(cx).mode == Mode::Live);
+        if live && first_words_ms.is_none() {
+            first_words_ms = Some(pressed.elapsed().as_millis());
+        }
+    }
+    let released_status = platform::post_hotkey_event(hotkey_id, false);
+    let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
+    let (final_text, status_after) = cx.update(|cx| {
+        let entries = &controller.read(cx).history.read(cx).entries;
+        let text = (entries.len() > history_before).then(|| entries[0].text.clone());
+        (text, cx.global::<AppStatus>().engine.clone())
+    });
+    let wer = final_text.as_deref().map(|t| word_error_rate(&ground_truth(CLIP).unwrap_or_default(), t));
+    report.check(
+        "a press after an unload records at once, reloads the model and keeps every word",
+        pressed_status == 0
+            && released_status == 0
+            && started.is_some()
+            && matches!(status_at_start, EngineStatus::Loading)
+            && matches!(status_after, EngineStatus::Ready { .. })
+            && finished.is_some()
+            && wer.is_some_and(|w| w <= MAX_WER),
+        json!({"start_ms": started, "status_at_start": format!("{status_at_start:?}"),
+               "first_words_ms": first_words_ms, "status_after": format!("{status_after:?}"),
+               "release_to_idle_ms": finished, "text": final_text, "wer": wer}),
+    );
 }
 
 /// Opens Settings and History through their menu items and draws each once. GPUI doesn't

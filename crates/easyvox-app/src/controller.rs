@@ -2,6 +2,10 @@
 //! push-to-talk state machine. Every OS callback (tray menu, Carbon hot key, event tap) and
 //! every transcript event arrives on one `async_channel` that a GPUI task drains on the UI
 //! thread (see `main.rs`), so all state changes happen here, on one thread.
+//!
+//! The speech model is freed after a stretch of no use (`AppSettings::unload_after_secs`,
+//! unless "Keep model loaded" is on). The next key press starts recording at once, and the
+//! session reloads the model meanwhile (`Engine::start`).
 
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
@@ -74,6 +78,10 @@ pub struct Controller {
     history_window: Option<AnyWindowHandle>,
     hide_task: Option<Task<()>>,
     load_task: Option<Task<()>>,
+    /// Frees the model when it fires; replaced (cancelled) by every dictation.
+    unload_task: Option<Task<()>>,
+    /// The current session started with the model unloaded, so it's reloading it.
+    reloading: bool,
     right_option_tap: bool,
     /// Push-to-talk replays this WAV instead of opening the microphone (debug and self-test).
     pub source_override: Option<PathBuf>,
@@ -103,6 +111,8 @@ impl Controller {
             history_window: None,
             hide_task: None,
             load_task: None,
+            unload_task: None,
+            reloading: false,
             right_option_tap: false,
             source_override: None,
             auto_paste: true,
@@ -192,6 +202,8 @@ impl Controller {
             self.show_notice(msg.into(), cx);
             return;
         };
+        // Recording starts now either way; an unloaded model reloads while it records.
+        let reloading = !engine.is_loaded();
         let (session, events) = match engine.start(audio) {
             Ok(v) => v,
             Err(e) => {
@@ -220,9 +232,15 @@ impl Controller {
         let no_app_nap = cx.background_executor().prevent_app_nap("EasyVox dictation");
         self.phase = Phase::Recording { seq, session, started: Instant::now(), _no_app_nap: no_app_nap };
         self.hide_task = None;
+        self.unload_task = None;
+        self.reloading = reloading;
+        if reloading {
+            cx.global_mut::<AppStatus>().engine = EngineStatus::Loading;
+            cx.refresh_windows();
+        }
         self.overlay.view.update(cx, |v, cx| v.reset(cx));
         self.overlay.show();
-        log::info!("session {seq}: started ({source})");
+        log::info!("session {seq}: started ({source}){}", if reloading { ", reloading the model" } else { "" });
     }
 
     fn on_transcript(&mut self, seq: u64, event: TranscriptEvent, cx: &mut Context<Self>) {
@@ -235,6 +253,7 @@ impl Controller {
         }
         match event {
             TranscriptEvent::Partial { confirmed, provisional } => {
+                self.sync_engine_status(cx); // a preview means the model is back
                 self.overlay.view.update(cx, |v, cx| v.set_partial(confirmed, provisional, cx));
             }
             TranscriptEvent::Final { text, audio_secs, finalize_ms } => {
@@ -253,6 +272,8 @@ impl Controller {
                      release → final {since_release})",
                     text.chars().count()
                 );
+                self.sync_engine_status(cx);
+                self.schedule_unload(cx);
                 self.deliver(text, audio_secs, cx);
             }
             TranscriptEvent::Error(e) => {
@@ -314,6 +335,67 @@ impl Controller {
         }));
     }
 
+    /// After a session that reloaded the model (or raced an unload), shows whether it's in
+    /// memory now.
+    fn sync_engine_status(&mut self, cx: &mut Context<Self>) {
+        let unloaded = matches!(cx.global::<AppStatus>().engine, EngineStatus::Unloaded);
+        let Some(engine) = &self.engine else { return };
+        if !self.reloading && !unloaded {
+            return;
+        }
+        self.reloading = false;
+        cx.global_mut::<AppStatus>().engine =
+            if engine.is_loaded() { EngineStatus::Ready { load_ms: engine.load_ms() } } else { EngineStatus::Unloaded };
+        cx.refresh_windows();
+    }
+
+    /// Frees the model after `unload_after_secs` without a dictation, unless "Keep model
+    /// loaded" is on. Replaces any earlier timer; a dictation cancels it and starts it again
+    /// when it ends.
+    pub fn schedule_unload(&mut self, cx: &mut Context<Self>) {
+        let settings = cx.global::<AppSettings>();
+        if settings.keep_model_loaded || self.engine.is_none() || !self.is_idle() {
+            self.unload_task = None;
+            return;
+        }
+        let after = Duration::from_secs(settings.unload_after_secs);
+        self.unload_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(after).await;
+            let _ = this.update(cx, |c, cx| c.unload_engine(after, cx));
+        }));
+    }
+
+    /// Frees the model, on the background executor: freeing ~600 MB blocks for a moment (25–35 ms).
+    fn unload_engine(&mut self, unused_for: Duration, cx: &mut Context<Self>) {
+        let Some(engine) = self.engine.clone() else { return };
+        if !self.is_idle() || !engine.is_loaded() {
+            return; // a dictation starts the timer again when it ends
+        }
+        log::info!("engine: unloading {} after {} s without use", engine.model_info().id, unused_for.as_secs());
+        cx.global_mut::<AppStatus>().engine = EngineStatus::Unloaded;
+        cx.refresh_windows();
+        cx.background_spawn(async move {
+            let started = Instant::now();
+            engine.unload();
+            log::info!("engine: unloaded in {} ms", started.elapsed().as_millis());
+        })
+        .detach();
+    }
+
+    /// "Keep model loaded": on, stops the unload timer and loads the model back if it was
+    /// freed; off, starts the timer.
+    pub fn set_keep_model_loaded(&mut self, on: bool, cx: &mut Context<Self>) {
+        cx.global_mut::<AppSettings>().keep_model_loaded = on;
+        let unloaded = self.engine.as_ref().is_some_and(|e| !e.is_loaded());
+        if on && unloaded && self.is_idle() {
+            let model = cx.global::<AppSettings>().model.clone();
+            self.load_engine(&model, cx);
+        } else {
+            self.schedule_unload(cx);
+        }
+        cx.refresh_windows();
+    }
+
     /// Loads (or switches to) a speech model on the background executor. The engine it
     /// replaces is dropped there too, since freeing a model can block.
     pub fn load_engine(&mut self, model_id: &str, cx: &mut Context<Self>) {
@@ -336,6 +418,7 @@ impl Controller {
                         if let Some(old) = c.engine.replace(engine) {
                             cx.background_spawn(async move { drop(old) }).detach();
                         }
+                        c.schedule_unload(cx);
                         EngineStatus::Ready { load_ms }
                     }
                     Err(e) => {

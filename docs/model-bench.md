@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause.
 
 ## Results
 
@@ -66,12 +66,70 @@ Holding the key for minutes is normal use (`DESIGN.md`, "Requirements"). The old
 | Parakeet TDT v2 | 9 min | 21.24 → **0.38 s** | 0.75 → **0.40 %** | 1133 → 833 MB | 47–51 % (37 %) | ~89 % | ≤ 0.5 / ≤ 1.6 s |
 | Whisper base.en | 3 min | 1.66 → **0.37 s** | 16.3 → **0.61 %** | 286 → 287 MB | 40–56 % (41 %) | ~71 % | ≤ 0.6 / ≤ 1.4 s |
 
-- **The recordings** are macOS `say` (Samantha) reading 32 paragraphs of rambling notes (a renovation, work, groceries, a book, a trip) with 0.5 s between paragraphs: 3 min is 195 s and 656 words, 9 min is 530 s and 1,735 words. "Long pauses" is Daniel with 2.5–8 s thinking pauses between and inside paragraphs (207 s). They're not in the repo (17 MB for 9 minutes); any long WAV and its transcript work with the commands below. Text-to-speech pauses are clean silence, so real speech will test the pause finder harder.
+- **The recordings** are macOS `say` (Samantha) reading 22 paragraphs of rambling notes (a renovation, work, groceries, a book, a trip) with 0.5 s between paragraphs: 3 min is 195 s and 656 words, 9 min is 530 s and 1,735 words. "Long pauses" is Daniel with 2.5–8 s thinking pauses between and inside paragraphs (207 s). The WAVs aren't committed: `testdata/longform/generate.py` regenerates them in about 25 s, and the reference transcripts are committed in `testdata/longform/manifest.tsv` (see `testdata/longform/README.md`). Any long WAV and its transcript work with the commands below. Text-to-speech pauses are clean silence, so real speech will test the pause finder harder.
 - **Text ready** no longer grows with length: 7 chunks were polished while talking in 3 minutes, 21 in 9, each in 0.3–0.45 s, and release only decodes the last one. The old numbers are from the same clips and machine, earlier that day.
 - **Word errors** held or dropped, and no run lost or doubled a word at a chunk join (the longest run of missing words is one). Whisper's one pass had lost 85 words in a row. Unified's 9-minute errors are its own guesses ("lighthousekeeper's", "practices at"), the same kind v2 makes less often.
 - **Peak memory** is bounded by the chunk instead of the whole recording.
-- **CPU while talking** is each minute's share of one core (`ps` every 2 s). It stays flat over 9 minutes, since the preview window is capped at 20 s, but at about half a core it's the price of re-decoding: Unified streamed natively for 7–8 %. It doesn't drop in silence either: the long-pauses run kept re-decoding through 8 s pauses.
+- **CPU while talking** is each minute's share of one core (`ps` every 2 s). It stays flat over 9 minutes, since the preview window is capped at 20 s, but at about half a core it's the price of re-decoding: Unified streamed natively for 7–8 %. It didn't drop in silence either: the long-pauses run kept re-decoding through 8 s pauses. The preview now rests in long pauses (see [Idle and energy](#idle-and-energy)).
 - **Preview behind the speech:** how far the preview's newest words trailed the voice, per minute. It kept up for the whole 9 minutes; the longest gap between preview updates was 1.3 s (3.5 s once), when a chunk was being polished. Polished text replaced preview text 6–7 times in 3 minutes and 18 in 9 (at most once per chunk, as the contract says). In the long-pauses run the 95th percentile reaches 4 s in the last minute only because the preview updates during a pause, long after the last word.
+
+## Idle and energy
+
+Three changes for the time EasyVox spends waiting, measured the same day on the same M4 with Parakeet Unified (release builds; `DESIGN.md`, "Keeping it light and fast"):
+
+1. **No timer while idle.** Every binary sets `GGML_METAL_NO_RESIDENCY=1` first thing in `main`, so ggml-metal's residency thread never starts (`DESIGN.md`, "Engine and macOS gotchas").
+2. **The model is freed after 10 minutes without use**, and reloaded on the next key press while the session already records.
+3. **The preview rests in pauses.** A preview pass runs only if something louder than the pause threshold arrived since the last one, plus two more after the speech stops (`SpeechGate` in `crates/easyvox-core/src/pause.rs`).
+
+### The idle app
+
+`dist/EasyVox.app` (`scripts/bundle.sh --release`), launched with `open` and left alone. Rates over 30 s from `proc_pid_rusage`, the counters behind `top`'s wake-up column:
+
+| The app, nobody dictating | Wake-ups a second | CPU, share of one core | Memory footprint |
+|---|---:|---:|---:|
+| Before, model loaded | 145 | 0.15–0.24 % | 687 MB |
+| **Now, model loaded** | **0.3** | **0.003 %** | 667 MB |
+| **Now, after the 10-minute unload** | **0.3** | **0.002 %** | **92 MB** |
+
+- **The wake-ups** came from a ggml-metal thread that wakes every 5 ms to keep its "residency sets" (GPU memory held ready between decodes) alive. It runs for as long as the Metal device exists, so unloading the model alone wouldn't have stopped it. "Before" stayed at 145 a second for minutes after its last decode.
+- **Memory:** unloading frees about 575 MB (630 MB right after a dictation, in the self-test). It takes 25–35 ms, off the UI thread. What's left is the app itself plus ggml's Metal device and compiled shaders, which live until the app quits.
+- **Quitting** left no crash report, with the model loaded or unloaded.
+
+### Dictation after idling
+
+`easyvox-bench session` on the 3 s clip, three runs warm and two after 5 minutes idle (`--idle-before 300`) for each line. `--unload` frees the model first, so the session reloads it while it records:
+
+| | First words | Text ready after release | Reloading the model |
+|---|---:|---:|---:|
+| Residency sets on (ggml's default), warm | 0.46 s | 0.08–0.09 s | |
+| Residency sets off (now), warm | 0.46–0.47 s | 0.08–0.09 s | |
+| Residency sets on, after 5 min idle | 0.47–0.48 s | 0.08–0.11 s | |
+| Residency sets off, after 5 min idle | 0.48 s | 0.07–0.09 s | |
+| Model unloaded, warm | 0.48–0.49 s | 0.07–0.09 s | 0.11–0.12 s |
+| Model unloaded, after 5 min idle | 0.49 s | 0.08 s | 0.14–0.15 s |
+
+- **The residency sets don't help** these decodes, warm or after an idle, so turning them off costs nothing.
+- **A reload costs about 20 ms of first words**, not its 0.11–0.15 s: it overlaps the first 0.4 s of audio that the first preview pass waits for anyway. Nothing said meanwhile is lost; the final text covers the whole recording. In the app's self-test the reload took 0.15 s, and the first words came 0.50 s after the key press, against 0.54 s with the model loaded. (The first load under a new app signature still compiles the Metal shaders, about 14 s, once.)
+
+### The preview in pauses
+
+Real-time replays with the key held, before and after the speech gate. "Before" is the build from before these changes, run with `GGML_METAL_NO_RESIDENCY=1` so that only the gate differs. CPU is the bench's share of one core; GPU is the whole GPU's "Device Utilization %", sampled every second:
+
+| Recording | Preview passes run (skipped) | CPU | GPU | First words | Text ready after release | Word error rate |
+|---|---:|---:|---:|---:|---:|---:|
+| 3 / 11 / 30 s clips, no pauses (6 runs each) | 7 / 26 / 71–73 (none) | unchanged | unchanged | unchanged | unchanged | 0 % |
+| 44 s, 2–8 s pauses over room noise (5 runs) | 106–108 → 68–69 (37–38) | 40–41 → **26–28 %** | 89 → **70 %** (1 run) | unchanged | 0.26–0.31 → 0.30–0.32 s | 0 % |
+| 3.5 min, 2.5–8 s pauses (1 run) | 497 → 436 (59) | 46 → **40 %** | 91 → **83 %** | unchanged | 0.40 → 0.43 s | 0 % |
+| Real voice, 81 s read aloud (3 and 2 runs) | 193–194 → 188–191 (3) | 45–48 → 44–46 % | 90–92 → 87–91 % | unchanged | 0.38–0.46 → 0.39–0.44 s | 2.1 → 2.1 % |
+| Real voice, 5 min ramble (2 runs) | 719 → 705–709 (10–13) | 41–44 → 40–43 % | 88–91 → 88–91 % | unchanged | 0.36 → 0.35–0.36 s | |
+
+- **The clips:** the first three rows are text-to-speech: the test clips, the 44 s clip, and the long-pauses recording from "Long dictation". The 44 s clip strings four of the short clips together with 2–8 s of silence, all over white noise at −50 dBFS. The two real recordings are the author's own voice, on cheap AirPods in an office for the ramble; they're private and not in the repo. Their room noise sits around −50 dBFS against speech at about −17 dBFS. Two runs that overlapped another session's Xcode build on this Mac were dropped.
+- **Long pauses get cheap; real speech barely pauses that long.** Skipping starts only once a quiet stretch outlasts the two settle passes, about 1.2 s. In the 5-minute ramble the gate saw 87 quiet stretches, and 82 of them lasted 0.4–0.8 s (a breath between phrases); only 5 reached 1.2 s. Room noise wasn't the problem: the gate's threshold sat near −37 dBFS, well above the noise. Even with no settle passes it would skip only 17 % of the ramble's passes (offline replay of the gate on the recording). So on real dictation the preview still costs about half a core; a cheaper preview is a job for the energy spike.
+- **First words** don't move: the first check that hears speech always decodes. In both builds a few runs (4 of 18 before, 2 of 18 after, on the short clips) showed the first words one pass (0.4 s) later, from where the 400 ms ticks happened to fall against the first word.
+- **Releasing after a long pause** costs about 25 ms: on the 44 s clip, which ends with 3 s of quiet, the final pass took a median 0.31 s instead of 0.28 s, most likely because the GPU had gone idle and slowed down meanwhile. The real read-aloud recording ends with 2.6 s of quiet and showed no difference, and in the ramble the final text came slightly sooner, since no preview pass was still running at release.
+- **Word errors** are the same, as expected: the gate only touches the preview, and the final text decodes all of the audio.
+
+To reproduce: `easyvox-bench session … --idle-before 300` and `--unload` for the latency table (`metal_residency`, `model_wait_ms`, `partials.first_partial_ms`, `finalize_ms` in its JSON; `EASYVOX_METAL_RESIDENCY=1` turns the residency sets back on), and `partials.passes` and `partials.skipped` for the gate. For the idle app, any tool that reads a process's wake-ups works (`top -stats pid,cpu,idlew,mem -pid <pid>`, or `proc_pid_rusage`).
 
 ## Limits of this bench
 

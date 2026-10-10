@@ -26,16 +26,20 @@ easyvox-bench <command> [options]
   info                                         catalog, model presence, permissions
   transcribe --model ID --wav F [--words]      one-shot decode of a WAV file
   bench --model ID [--cold] [--fast|--reps N]  load times, memory, speed and WER over testdata (3 reps)
-  session --model ID --wav F [--ref T] [--quiet]
+  session --model ID --wav F [--ref T] [--quiet] [--idle-before SECS] [--unload]
                                                WAV replay session with live partials (--ref: WER
-                                               against the transcript in file T)
+                                               against the transcript in file T; --idle-before:
+                                               sit idle with the model loaded first; --unload:
+                                               free the model first, so the session reloads it)
   sessions --model ID                          sessions on 3/10/30 s clips, partials on and off
   mic [--request] [--secs N] [--model ID]      open the microphone once (--request asks for permission first)
   paste [--text T]                             write the clipboard, then simulate Cmd+V
   history [--db F]                             SQLite history demo
 
 Engine options: --models DIR, --threads N, --interval MS, --window SECS, --chunk SECS, --vad
-Output: JSON on stdout (or --out F), progress on stderr.";
+Output: JSON on stdout (or --out F), progress on stderr.
+EASYVOX_METAL_RESIDENCY=1 keeps ggml-metal's residency sets (and their idle wake-ups), for
+comparisons; by default they're off, as in the app (see easyvox_core::process_env).";
 
 /// The workspace's test clips.
 fn testdata() -> PathBuf {
@@ -154,6 +158,11 @@ fn write_out(args: &Args, v: &Value) -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    for (key, value) in process_env() {
+        // SAFETY: the first thing `main` does, before any thread exists, so nothing can read
+        // the environment while it changes.
+        unsafe { std::env::set_var(key, value) };
+    }
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let cmd = argv.first().cloned().unwrap_or_else(|| "help".into());
     let args = Args(argv);
@@ -346,6 +355,7 @@ fn bench(args: &Args) -> anyhow::Result<()> {
 
     let v = json!({
         "model": model, "threads": cfg.threads, "vad_trim": cfg.vad_trim, "cold_clone": args.has("--cold"),
+        "metal_residency": metal_residency(),
         "reps": reps, "loadavg_start": loadavg_start,
         "load_ms_first_in_process": load1, "load_ms_warm_reload": load2,
         "first_decode_ms": first_decode_ms,
@@ -435,6 +445,7 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
     Ok(json!({
         "wav": wav.file_name().map(|f| f.to_string_lossy()),
         "audio_secs": audio_secs, "finalize_ms": finalize_ms, "final_at_ms": fms,
+        "model_wait_ms": stats.model_wait_ms,
         "final_wait_ms": stats.final_wait_ms, "final_decode_ms": stats.final_decode_ms,
         "final_text": final_text,
         "partials": {
@@ -443,7 +454,8 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
             "updates_per_sec": n as f64 / speech_secs,
             "revisions": revisions, "revision_rate": if n > 1 { revisions as f64 / (n - 1) as f64 } else { 0.0 },
             "words_revised": words_revised, "confirmed_rewrites": confirmed_rewrites,
-            "passes": stats.partial_passes, "pass_ms_mean": pass_ms_mean, "pass_ms_max": stats.partial_decode_ms_max,
+            "passes": stats.partial_passes, "skipped": stats.partial_skipped,
+            "pass_ms_mean": pass_ms_mean, "pass_ms_max": stats.partial_decode_ms_max,
             "confirmed_words_at_stop": conf_words.len(), "final_words": final_words.len(),
             "confirmed_coverage": confirmed_coverage,
             "confirmed_vs_final_errors": conf_vs_final_err,
@@ -457,12 +469,25 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
     }))
 }
 
+/// Whether ggml-metal keeps its residency sets (see [`process_env`]).
+fn metal_residency() -> bool {
+    std::env::var_os("GGML_METAL_NO_RESIDENCY").is_none()
+}
+
 fn session_cmd(args: &Args) -> anyhow::Result<()> {
     let model = args.model()?;
     let wav = args.wav()?;
     let engine = Engine::load(config(args, &model)?)?;
     // Warm up (the first decode allocates and compiles kernels).
     engine.transcribe_pcm(&vec![0.0; SAMPLE_RATE as usize])?;
+    // Like the app after a stretch of no use: the model freed, and/or the GPU left idle.
+    let unloaded = args.has("--unload") && engine.unload();
+    let mem_before = mem_json();
+    let idle_secs: f64 = args.num("--idle-before")?.unwrap_or(0.0);
+    if idle_secs > 0.0 {
+        eprintln!("idling {idle_secs} s (model {})", if unloaded { "unloaded" } else { "loaded" });
+        std::thread::sleep(Duration::from_secs_f64(idle_secs));
+    }
     let loadavg_before = loadavg();
     let mut v = run_session(&engine, &wav, args.has("--quiet"))?;
     if let Some(path) = args.get("--ref") {
@@ -472,6 +497,10 @@ fn session_cmd(args: &Args) -> anyhow::Result<()> {
     }
     v["model"] = json!(model);
     v["chunk_secs"] = json!(engine.config().chunk_secs);
+    v["metal_residency"] = json!(metal_residency());
+    v["idle_before_secs"] = json!(idle_secs);
+    v["unloaded_before"] = json!(unloaded);
+    v["mem_before_session"] = mem_before;
     v["loadavg_before"] = json!(loadavg_before);
     v["loadavg_after"] = json!(loadavg());
     v["mem_end"] = mem_json();
@@ -513,6 +542,7 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
     }
     let v = json!({
         "model": model, "threads": base.threads, "vad_trim": base.vad_trim, "chunk_secs": base.chunk_secs,
+        "metal_residency": metal_residency(),
         "runs": out, "mem_end": mem_json(),
     });
     write_out(args, &v)

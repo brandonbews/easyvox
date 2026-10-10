@@ -52,7 +52,7 @@ You need an Apple silicon Mac running macOS 26 or later. That's also what EasyVo
 
    It writes `dist/EasyVox.app` and signs it ad hoc, which needs no certificate. macOS ties the Microphone and Accessibility permissions to the signature, so you may have to grant them again after each rebuild.
 
-   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through one dictation (no mic, no paste), writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
+   Other arguments go to `cargo build`. `scripts/bundle.sh --features self-test` adds a self-check for a Mac nobody is watching: `open -W dist/EasyVox.app --args --self-test` replays a test clip through two dictations, the second right after the model was unloaded (no mic, no paste), writes a JSON report to `$TMPDIR/easyvox-self-test.json` (or `--out <file>`) and quits.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rustfmt, clippy, the build and the tests on macOS 26 for pushes to `main` and for pull requests.
 

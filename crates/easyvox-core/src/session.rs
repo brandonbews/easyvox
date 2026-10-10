@@ -1,14 +1,18 @@
 //! Push-to-talk session: a capture thread and a decode worker, the same for every model.
 //!
-//! While the key is held, the worker ticks every `partial_interval_ms`. Each tick it polishes
-//! the oldest chunk in `Final` mode if enough audio waits (`chunks.rs`), then re-decodes the
-//! recent audio in `Partial` mode for the preview, confirming words once two passes agree
-//! (`partials.rs`). On release it polishes the rest and sends `Final`.
+//! Capture starts at once. The worker first makes sure the model is loaded (reloading it if the
+//! engine was unloaded while idle; the audio meanwhile just buffers), then ticks every
+//! `partial_interval_ms` while the key is held. Each tick it polishes the oldest chunk in
+//! `Final` mode if enough audio waits (`chunks.rs`), then re-decodes the recent audio in
+//! `Partial` mode for the preview, confirming words once two passes agree (`partials.rs`). A
+//! tick skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
+//! On release it polishes the rest and sends `Final`.
 
 use crate::audio::{MicInfo, SharedAudio};
 use crate::chunks::{self, Chunker, Polished};
 use crate::partials::LocalAgreement;
-use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, TranscriptEvent, Word};
+use crate::pause::SpeechGate;
+use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -20,8 +24,13 @@ const SR: usize = SAMPLE_RATE as usize;
 /// Counters a session collects (for benchmarks and diagnostics).
 #[derive(Clone, Debug, Default)]
 pub struct SessionStats {
+    /// How long the session waited for the model at the start: about 0 when it was loaded,
+    /// the reload time when the engine had been unloaded.
+    pub model_wait_ms: f64,
     /// Re-decode passes run for partials.
     pub partial_passes: u32,
+    /// Ticks that skipped the re-decode because nothing had been said since the last passes.
+    pub partial_skipped: u32,
     pub partial_decode_ms_total: f64,
     pub partial_decode_ms_max: f64,
     /// `Partial` events sent.
@@ -84,7 +93,7 @@ impl Session {
 
 impl Drop for Session {
     /// Stops capture and waits for the worker to finish (it still sends `Final`, which takes
-    /// at most a chunk decode and the final decode). Waiting matters: if the process exits
+    /// at most a model reload, a chunk decode and the final decode). Waiting matters: if the process exits
     /// while a decode thread is still running, ggml-metal's static destructors can crash at
     /// exit (seen once).
     fn drop(&mut self) {
@@ -185,18 +194,39 @@ impl Worker {
 
     fn run(self) {
         let started = Instant::now();
+        // Reloads the model if the engine was unloaded. Capture already runs, so whatever is
+        // said meanwhile buffers and gets decoded once the model is ready.
+        let model = self.engine.model();
+        self.ctl.stats.lock().unwrap().model_wait_ms = started.elapsed().as_secs_f64() * 1e3;
+        match model {
+            Ok(model) => self.record(&*model, started),
+            Err(e) => {
+                self.send(TranscriptEvent::Error(format!("the speech model couldn't load: {e:#}")));
+                while !self.done() {
+                    self.wait(Instant::now() + Duration::from_secs(1), usize::MAX);
+                }
+                let end = self.end_instant();
+                self.finish(String::new(), end, Instant::now(), String::new());
+            }
+        }
+    }
+
+    fn record(&self, model: &dyn SpeechModel, started: Instant) {
         let mut warned = false;
         let cfg = &self.engine.config;
         let chunker = Chunker::new(cfg.chunk_secs);
-        let mut polished = Polished::new(self.engine.model.word_timings());
+        let mut polished = Polished::new(model.word_timings());
         let mut la = LocalAgreement::new();
+        let mut gate = SpeechGate::new();
         // With partials off the loop still ticks, to polish chunks.
         let interval =
             Duration::from_millis(if cfg.partial_interval_ms == 0 { 400 } else { cfg.partial_interval_ms } as u64);
         let window = (cfg.partial_window_secs.max(2.0) * SR as f32) as usize;
         let mut anchor = 0usize;
         let mut decoded_len = 0usize;
-        let mut next = Instant::now() + interval;
+        // The first tick comes one interval after the start, or at once if loading the model
+        // took longer than that.
+        let mut next = (started + interval).max(Instant::now());
         let mut last = (String::new(), String::new());
         loop {
             // Sleep until the next tick (new audio alone doesn't wake us early).
@@ -211,7 +241,7 @@ impl Worker {
                 break;
             }
             next = Instant::now() + interval;
-            if self.polish_chunk(&chunker, &mut polished) {
+            if self.polish_chunk(model, &chunker, &mut polished) {
                 // The preview keeps only what follows the polished words, and its window moves
                 // up to the cut (less the chunks' context).
                 la.skip_to(polished.until());
@@ -223,8 +253,7 @@ impl Worker {
             if cfg.partial_interval_ms == 0 {
                 continue;
             }
-            let window_pcm: Vec<f32>;
-            {
+            let window_pcm = {
                 let a = self.audio.samples.lock().unwrap();
                 let total = a.len();
                 if total < SR * 3 / 10 || total < decoded_len + SR / 10 {
@@ -237,13 +266,26 @@ impl Worker {
                         anchor = total - window;
                     }
                 }
-                window_pcm = a[anchor..total].to_vec();
-                decoded_len = total;
-            }
+                gate.should_decode(&a, anchor).then(|| {
+                    decoded_len = total;
+                    a[anchor..total].to_vec()
+                })
+            };
+            let Some(window_pcm) = window_pcm else {
+                // Nothing said since the last passes: a re-decode would only repeat them. A
+                // chunk polished during the pause still updates the preview.
+                self.ctl.stats.lock().unwrap().partial_skipped += 1;
+                let cur = preview(&polished, &la);
+                if cur != last && !(cur.0.is_empty() && cur.1.is_empty()) {
+                    last = cur.clone();
+                    self.send(TranscriptEvent::Partial { confirmed: cur.0, provisional: cur.1 });
+                }
+                continue;
+            };
             let t = Instant::now();
             let hyp = {
                 let _g = self.engine.decode_lock.lock().unwrap();
-                self.engine.model.transcribe(&window_pcm, DecodeMode::Partial)
+                model.transcribe(&window_pcm, DecodeMode::Partial)
             };
             let ms = t.elapsed().as_secs_f64() * 1e3;
             {
@@ -276,13 +318,13 @@ impl Worker {
             let span = polished.span(a.len(), a.len());
             (a[span.clone()].to_vec(), span)
         };
-        polished.add(&self.decode_final(&pcm, span.start), span, None);
+        polished.add(&self.decode_final(model, &pcm, span.start), span, None);
         self.finish(polished.text(), end, t, confirmed);
     }
 
     /// The eager final pass: if enough audio waits unpolished, decode the oldest chunk in
     /// `Final` mode (see `chunks.rs`). True if it did.
-    fn polish_chunk(&self, chunker: &Chunker, polished: &mut Polished) -> bool {
+    fn polish_chunk(&self, model: &dyn SpeechModel, chunker: &Chunker, polished: &mut Polished) -> bool {
         let (pcm, span, end) = {
             let a = self.audio.samples.lock().unwrap();
             let Some(cut) = chunker.cut(&a[polished.start()..]) else { return false };
@@ -291,7 +333,7 @@ impl Worker {
             (a[span.clone()].to_vec(), span, end)
         };
         let t = Instant::now();
-        polished.add(&self.decode_final(&pcm, span.start), span, Some(end));
+        polished.add(&self.decode_final(model, &pcm, span.start), span, Some(end));
         let ms = t.elapsed().as_secs_f64() * 1e3;
         let mut s = self.ctl.stats.lock().unwrap();
         s.chunks += 1;
@@ -302,11 +344,11 @@ impl Worker {
 
     /// `Final`-mode decode of `pcm`, which starts `offset` samples into the recording. Returns
     /// the words with absolute times; failures become `Error` events.
-    fn decode_final(&self, pcm: &[f32], offset: usize) -> Vec<Word> {
+    fn decode_final(&self, model: &dyn SpeechModel, pcm: &[f32], offset: usize) -> Vec<Word> {
         let speech = self.engine.speech(pcm);
         let hyp = {
             let _g = self.engine.decode_lock.lock().unwrap();
-            self.engine.model.transcribe(&pcm[speech.clone()], DecodeMode::Final)
+            model.transcribe(&pcm[speech.clone()], DecodeMode::Final)
         };
         match hyp {
             Ok(h) => h.timed_words((offset + speech.start) as f32 / SR as f32, speech.len() as f32 / SR as f32),
