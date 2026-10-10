@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG8YM9TXGK81DC6WX7TV`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `models` `engine`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -21,6 +21,8 @@ Constraints: model downloads are the only network use EasyVox makes (DESIGN.md "
 
 
 Decided by Brandon 2026-10-09 (plan section 5): (1) NSURLSession via objc2, not /usr/bin/curl, for System Settings proxy support; (2) keep scripts/fetch-model.sh and its drift-guard test; (3) allow the Mac to sleep during a download; it resumes after wake.
+
+Done 2026-10-10 in 6e59ccc. Step 0 go (NSURLSession reaches loopback from cargo test; Range survives a 302). Core: download/download_with(model, dir, &opts, &CancelToken, progress) -> Result<PathBuf, DownloadError>, remove_partials, delete, format_size; is_available checks size. App: one thread per download, progress via async_channel into AppStatus.downloads; EngineStatus::Missing; controller download_model/start_download/cancel_download/use_model/delete_model; quit cancels, launch sweeps .part. Deviations: truncate the part file only after taking its lock (std File::try_lock); live tests also need EASYVOX_LIVE_DOWNLOADS=1; 3 self-test checks instead of a hands-on (loopback download, cancel, missing model and back); no minimal UI. 20 loopback tests x11 runs pass offline; one real download (Whisper base.en, 84.9 MB, 8.8 s) passed; idle wake-ups still 0.3/s. No buttons yet: onboarding (tuh-01M4H2EG9QB2ETECD30F9RBR58) and Settings (tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M).
 
 ---
 IMPLEMENTATION PLAN (2026-10-09, read-only research agent)
@@ -765,3 +767,7 @@ description edited
 ### 2026-10-10 00:22 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 11:38 UTC — edit by `brandon`
+
+description edited · status open→done

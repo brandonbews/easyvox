@@ -2,10 +2,10 @@
 
 `tuh-01M4H2EG9QB2ETECD30F9RBR58`
 
-- **Status:** open — blocked on dependencies
+- **Status:** open — ready
 - **Priority:** 1
 - **Labels:** `onboarding` `app`
-- **Depends on:** [`tuh-x7tv`](tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) (open)
+- **Depends on:** [`tuh-x7tv`](tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) (done)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description
