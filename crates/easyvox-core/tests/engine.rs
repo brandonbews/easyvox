@@ -104,7 +104,7 @@ fn replay_session_streams_partials_then_final() {
 #[test]
 #[ignore = "needs the recommended model (scripts/fetch-model.sh)"]
 fn chunked_final_pass_joins_cleanly() {
-    let engine = engine_with(|c| c.chunk_secs = 8.0);
+    let engine = engine_with(|c| c.tuning.chunk_ms = 8_000);
     let (partials, final_text, stats) = replay(&engine, "long_daniel.wav");
     assert!(stats.chunks >= 2, "only {} chunks polished while playing", stats.chunks);
     let expected = "The old lighthouse stood at the edge of the cliff for nearly 200 years. Every night, the keeper \

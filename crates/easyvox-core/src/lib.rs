@@ -8,7 +8,8 @@
 //! ([`SpeechModel`]). While the key is held, the session re-decodes the recent audio every few
 //! hundred ms for the preview, and polishes finished chunks of a long dictation in the
 //! background. On release it decodes only what's left, so the final text arrives in well under
-//! a second at any length.
+//! a second at any length. The numbers that shape all this, and their defaults, are in
+//! [`Tuning`].
 //!
 //! ```no_run
 //! use easyvox_core::*;
@@ -45,6 +46,7 @@ pub mod paste;
 pub mod paths;
 mod pause;
 mod session;
+pub mod tuning;
 
 #[cfg(feature = "sherpa")]
 mod sherpa;
@@ -64,6 +66,7 @@ pub use paste::{accessibility_trusted, copy_to_clipboard, paste_text};
 pub use session::{Session, SessionStats};
 #[cfg(feature = "transcribe-cpp")]
 pub use tcpp::release_native_models;
+pub use tuning::Tuning;
 
 /// Environment variables a binary using the engine sets first thing in `main`, before it starts
 /// any thread. `std::env::set_var` is only safe while no other thread can read the environment,
@@ -129,20 +132,12 @@ pub struct EngineConfig {
     pub models_dir: PathBuf,
     /// CPU threads for inference. Default 4 (an M-series Mac has at least 4 performance cores).
     pub threads: usize,
-    /// How often to re-decode for live partials, in ms. 0 disables partials.
-    pub partial_interval_ms: u32,
-    /// Max audio window (seconds) re-decoded per partial pass. Older audio that has been
-    /// confirmed is frozen and dropped from the window.
-    pub partial_window_secs: f32,
     /// Trim leading/trailing silence with Silero VAD before the final pass
     /// (needs `models_dir/vad/silero_vad.onnx` and the `sherpa` feature).
     pub vad_trim: bool,
-    /// Eager final pass: once this many seconds of audio wait unpolished, the session cuts off
-    /// the oldest stretch at a pause and decodes it in `Final` mode while the user keeps
-    /// talking, so release only waits for the rest (see `chunks.rs`). Default 30.
-    /// 0 decodes the whole recording in one pass on release, for comparisons: that pass grows
-    /// quadratically (21.6 s after 9 minutes).
-    pub chunk_secs: f32,
+    /// How sessions run the preview, the chunks and the joins, the same for every model. Values
+    /// out of range fall back to their defaults when the engine loads (see [`Tuning::validate`]).
+    pub tuning: Tuning,
 }
 
 /// The default model: Parakeet TDT 0.6B v2 on transcribe.cpp (see `DESIGN.md`, "Models").
@@ -159,10 +154,8 @@ impl EngineConfig {
             model_id: model_id.into(),
             models_dir: models_dir.into(),
             threads: 4,
-            partial_interval_ms: 400,
-            partial_window_secs: 20.0,
             vad_trim: false,
-            chunk_secs: 30.0,
+            tuning: Tuning::default(),
         }
     }
 }
@@ -285,7 +278,10 @@ impl Engine {
         Ok(engine)
     }
 
-    fn new(source: Source, config: EngineConfig) -> anyhow::Result<Engine> {
+    fn new(source: Source, mut config: EngineConfig) -> anyhow::Result<Engine> {
+        for problem in config.tuning.validate() {
+            log::warn!("tuning: {problem}");
+        }
         #[cfg(feature = "sherpa")]
         let vad = if config.vad_trim { Some(sherpa::VadTrimmer::load(&config)?) } else { None };
         #[cfg(not(feature = "sherpa"))]

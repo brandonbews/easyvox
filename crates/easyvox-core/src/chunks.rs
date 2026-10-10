@@ -7,7 +7,7 @@
 //! at any length, and every word of the result still comes from a `Final` decode.
 //!
 //! - **Where to cut:** see [`Chunker::cut`]. Pauses come from `pause.rs` (energy-based).
-//! - **Context:** when the model times each word, a chunk is decoded with [`CONTEXT_SECS`] of
+//! - **Context:** when the model times each word, a chunk is decoded with `chunk_context_ms` of
 //!   the audio around it ([`Polished::span`]), so the model punctuates across the cut as it
 //!   would in one pass (without it, Parakeet Unified left a sentence without its full stop at
 //!   about one cut in ten). A model with coarser timings (Whisper: per segment) gets none:
@@ -19,52 +19,43 @@
 //!   their words around the cut and keeps it once.
 
 use crate::partials::norm_word;
-use crate::{SAMPLE_RATE, Word, pause};
+use crate::pause::{self, PauseFinder};
+use crate::tuning::{Tuning, ms_samples, ms_secs};
+use crate::{SAMPLE_RATE, Word};
 use std::ops::Range;
 
 const SR: usize = SAMPLE_RATE as usize;
 
-/// Audio decoded on each side of a chunk, for context, when the model times each word. Its
-/// words belong to the neighbours. 1 s and 2 s gave the same accuracy on the long clips.
-pub(crate) const CONTEXT_SECS: f32 = 1.0;
-/// The newest audio is never cut: the speaker may be mid-word.
-const GUARD: usize = SR / 2;
-/// How far before the chunk a word's middle may lie and still be kept, when the previous
-/// decode didn't hear it at all (word timings in two decodes can disagree by a frame or two).
-const SLACK_SECS: f32 = 0.3;
-/// How far apart two decodes may place the same word (the gap between their timings) and still
-/// match. On real speech they disagreed by up to 0.46 s on a soft word before a pause.
-const MATCH_SECS: f32 = 1.0;
-/// Longest run of leading words [`Polished::without_repeat`] checks against the polished text.
-const MAX_REPEAT: usize = 4;
-
 /// Decides when and where to cut the unpolished audio.
 pub(crate) struct Chunker {
+    /// Unpolished samples before cutting (`chunk_ms`); 0 never cuts (one pass on release).
     target: usize,
+    /// The newest samples, never cut: the speaker may be mid-word (`chunk_guard_ms`).
+    guard: usize,
+    pauses: PauseFinder,
 }
 
 impl Chunker {
-    /// `target_secs` of unpolished audio before cutting; 0 never cuts (one pass on release).
-    pub(crate) fn new(target_secs: f32) -> Self {
-        Self { target: (target_secs.max(0.0) * SR as f32) as usize }
+    pub(crate) fn new(t: &Tuning) -> Self {
+        Self { target: ms_samples(t.chunk_ms), guard: ms_samples(t.chunk_guard_ms), pauses: PauseFinder::new(t) }
     }
 
     /// Where to cut `pcm`, the audio not polished yet (an offset into it), or `None` to wait.
     ///
     /// Nothing happens until `target` samples are waiting. Then the cut goes in the middle of
-    /// the longest pause between `target / 2` and the last 0.5 s, so chunks are 0.5–2× the
-    /// target. Without a pause, it waits for one until `2 × target` are waiting, then cuts at
-    /// the quietest point.
+    /// the longest pause between `target / 2` and the guard (the last 0.5 s), so chunks are
+    /// 0.5–2× the target. Without a pause, it waits for one until `2 × target` are waiting, then
+    /// cuts at the quietest point.
     pub(crate) fn cut(&self, pcm: &[f32]) -> Option<usize> {
         if self.target == 0 || pcm.len() < self.target {
             return None;
         }
-        let range = self.target / 2..pcm.len().saturating_sub(GUARD);
+        let range = self.target / 2..pcm.len().saturating_sub(self.guard);
         if range.is_empty() {
             return None;
         }
         let search = &pcm[range.clone()];
-        match pause::longest_pause(search) {
+        match self.pauses.longest(search) {
             Some(p) => Some(range.start + (p.start + p.end) / 2),
             None if pcm.len() >= 2 * self.target => Some(range.start + pause::quietest_point(search)),
             None => None,
@@ -88,15 +79,29 @@ pub(crate) struct Polished {
     tail: Vec<Word>,
     /// First sample not polished yet: the last cut.
     start: usize,
-    /// Samples of context decoded on each side of a chunk.
+    /// Samples of context decoded on each side of a chunk (`chunk_context_ms`).
     context: usize,
+    /// How far before the chunk a word's middle may lie and still be kept, when the previous
+    /// decode didn't hear it at all, in seconds (`join_slack_ms`).
+    slack: f32,
+    /// How far apart two decodes may place the same word (the gap between their timings) and
+    /// still match, in seconds (`join_match_ms`).
+    match_gap: f32,
+    /// Longest run of leading words [`without_repeat`](Self::without_repeat) checks against the
+    /// polished text (`join_max_repeat_words`).
+    max_repeat: usize,
 }
 
 impl Polished {
     /// `word_timings`: the model times each word, so chunks can be decoded with context.
-    pub(crate) fn new(word_timings: bool) -> Self {
-        let context = if word_timings { (CONTEXT_SECS * SR as f32) as usize } else { 0 };
-        Self { context, ..Self::default() }
+    pub(crate) fn new(word_timings: bool, t: &Tuning) -> Self {
+        Self {
+            context: if word_timings { ms_samples(t.chunk_context_ms) } else { 0 },
+            slack: ms_secs(t.join_slack_ms),
+            match_gap: ms_secs(t.join_match_ms),
+            max_repeat: t.join_max_repeat_words as usize,
+            ..Self::default()
+        }
     }
 
     /// First sample not polished yet.
@@ -151,12 +156,12 @@ impl Polished {
     /// over the pause (Parakeet Unified does that to a word with trailing punctuation). So the
     /// words are first matched, in order, with what the previous decode heard there: the
     /// polished words in this decode's left context, then the tail. Two words match if they
-    /// have the same text and lie at most [`MATCH_SECS`] apart (the closest wins). Then:
+    /// have the same text and lie at most `join_match_ms` apart (the closest wins). Then:
     ///
     /// - the words up to the last one matching a polished word are dropped: they're in already;
     /// - a word matching the tail is kept: the previous decode heard it after the cut;
     /// - any other word is kept if its middle lies in the unpolished audio, or just before it
-    ///   (by up to [`SLACK_SECS`]) after the last polished word.
+    ///   (by up to `join_slack_ms`) after the last polished word.
     ///
     /// A word said again across the cut ("very, very") stays twice: its first copy matches the
     /// polished word and its second the tail, or nothing.
@@ -166,7 +171,7 @@ impl Polished {
         let first = matches.iter().rposition(|m| *m == Some(Seen::Polished)).map_or(0, |i| i + 1);
         let after = self.words.last().map_or(f32::NEG_INFINITY, |w| w.end);
         let keep = |w: &Word, m: Option<Seen>| {
-            m == Some(Seen::Tail) || mid(w) >= cut || (mid(w) >= cut - SLACK_SECS && mid(w) > after)
+            m == Some(Seen::Tail) || mid(w) >= cut || (mid(w) >= cut - self.slack && mid(w) > after)
         };
         words.iter().zip(matches).skip(first).filter(|(w, m)| keep(w, *m)).map(|(w, _)| w.clone()).collect()
     }
@@ -182,7 +187,9 @@ impl Polished {
         for w in words {
             let text = norm_word(&w.text);
             let best = (next..old.len())
-                .filter(|&i| !text.is_empty() && norm_word(&old[i].0.text) == text && gap(old[i].0, w) <= MATCH_SECS)
+                .filter(|&i| {
+                    !text.is_empty() && norm_word(&old[i].0.text) == text && gap(old[i].0, w) <= self.match_gap
+                })
                 .min_by(|&a, &b| gap(old[a].0, w).total_cmp(&gap(old[b].0, w)));
             matches.push(best.map(|i| old[i].1));
             next = best.map_or(next, |i| i + 1);
@@ -195,7 +202,7 @@ impl Polished {
     /// speech). A word said again after the cut ("very, very") does neither, so it stays. The
     /// preview uses it to start where the polished text ends.
     pub(crate) fn without_repeat(&self, mut new: Vec<Word>) -> Vec<Word> {
-        let max = MAX_REPEAT.min(self.words.len()).min(new.len());
+        let max = self.max_repeat.min(self.words.len()).min(new.len());
         for n in (1..=max).rev() {
             let old = &self.words[self.words.len() - n..];
             let same = old.iter().zip(&new).all(|(a, b)| norm_word(&a.text) == norm_word(&b.text));
@@ -239,9 +246,17 @@ mod tests {
         (secs * SR as f32) as usize
     }
 
+    fn chunker(target_secs: u32) -> Chunker {
+        Chunker::new(&Tuning { chunk_ms: target_secs * 1000, ..Tuning::default() })
+    }
+
+    fn polished(word_timings: bool) -> Polished {
+        Polished::new(word_timings, &Tuning::default())
+    }
+
     #[test]
     fn waits_for_the_target_then_cuts_in_the_longest_pause() {
-        let c = Chunker::new(10.0);
+        let c = chunker(10);
         // 9.9 s with a pause: too early.
         assert_eq!(c.cut(&audio(&[(4.0, 0.3), (0.5, 0.0), (5.4, 0.3)])), None);
         // Pauses at 3 s (before target/2, ignored), 6 s (0.3 s) and 8 s (0.6 s, the longest).
@@ -252,7 +267,7 @@ mod tests {
 
     #[test]
     fn without_a_pause_waits_until_twice_the_target_then_cuts_at_the_quietest_point() {
-        let c = Chunker::new(10.0);
+        let c = chunker(10);
         let mut pcm = audio(&[(12.0, 0.3), (0.06, 0.05), (7.0, 0.3)]);
         assert_eq!(c.cut(&pcm), None);
         pcm.extend(audio(&[(1.0, 0.3)]));
@@ -264,8 +279,8 @@ mod tests {
     fn never_cuts_the_newest_half_second_or_with_target_zero() {
         // The only pause is in the last 0.5 s.
         let pcm = audio(&[(10.6, 0.3), (0.4, 0.0)]);
-        assert_eq!(Chunker::new(10.0).cut(&pcm), None);
-        assert_eq!(Chunker::new(0.0).cut(&audio(&[(5.0, 0.3), (1.0, 0.0), (5.0, 0.3)])), None);
+        assert_eq!(chunker(10).cut(&pcm), None);
+        assert_eq!(chunker(0).cut(&audio(&[(5.0, 0.3), (1.0, 0.0), (5.0, 0.3)])), None);
     }
 
     /// Polishes the chunk up to `end` (seconds; `None`: the rest of `secs` of audio) with the
@@ -277,18 +292,18 @@ mod tests {
 
     #[test]
     fn span_adds_context_only_for_word_timings() {
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         assert_eq!(p.span(at(10.0), at(10.5)), 0..at(10.5));
         p.add(&[], 0..at(10.5), Some(at(10.0)));
         assert_eq!(p.span(at(40.0), at(60.0)), at(9.0)..at(41.0));
-        let mut p = Polished::new(false);
+        let mut p = polished(false);
         p.add(&[], 0..at(10.0), Some(at(10.0)));
         assert_eq!(p.span(at(40.0), at(60.0)), at(10.0)..at(40.0));
     }
 
     #[test]
     fn context_words_belong_to_the_neighbouring_chunks() {
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         // Chunk 0..5 s, decoded with 1 s of right context; the cut is in a pause at 5 s.
         let first = ws(&[("We", 0.5, 0.7), ("met", 0.8, 1.0), ("Tuesday.", 3.0, 4.6), ("Then", 5.4, 5.7)]);
         polish(&mut p, &first, Some(5.0), 20.0);
@@ -306,12 +321,12 @@ mod tests {
     #[test]
     fn a_word_on_the_cut_is_kept_once_whichever_side_each_decode_puts_it() {
         // Left decode puts "kitchen" after the cut (5.0 s), right decode before it: kept on the right.
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &ws(&[("the", 4.4, 4.6), ("kitchen", 4.7, 5.4)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("the", 4.4, 4.6), ("kitchen", 4.6, 5.3), ("sink", 5.5, 5.8)]), None, 9.0);
         assert_eq!(p.text(), "the kitchen sink");
         // Left decode puts it before the cut, right decode after: the copy matches it, so it goes.
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &ws(&[("the", 4.4, 4.6), ("kitchen", 4.6, 5.3)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("kitchen", 4.75, 5.4), ("sink", 5.5, 5.8)]), None, 9.0);
         assert_eq!(p.text(), "the kitchen sink");
@@ -321,7 +336,7 @@ mod tests {
     fn a_short_word_placed_a_little_later_by_the_next_decode_is_not_doubled() {
         // One-frame words: the two decodes' copies of "the" don't overlap, but they're close, so
         // the second matches the polished one.
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(
             &mut p,
             &ws(&[("from", 13.99, 14.07), ("the", 14.15, 14.23), ("west,", 14.27, 14.95)]),
@@ -343,7 +358,7 @@ mod tests {
         // A soft "a" trailing into the pause, with the cut at 5.0 s. The left decode puts it after
         // the cut, so it belongs to the next chunk. The right decode puts it 0.45 s before the
         // cut, beyond the slack. It matches the left decode's tail, so it's kept.
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(
             &mut p,
             &ws(&[("to", 3.9, 4.2), ("fill", 4.2, 4.5), ("a", 5.2, 5.4), ("kettle.", 5.4, 5.9)]),
@@ -360,7 +375,7 @@ mod tests {
         assert_eq!(p.text(), "to fill a kettle first");
         // A word the left decode stretches over the pause, past the cut, and the right decode
         // puts 0.45 s before it, without the polished word before it.
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &ws(&[("the", 3.4, 3.6), ("old", 3.8, 3.9), ("bridge,", 4.1, 6.0)]), Some(5.0), 9.0);
         assert_eq!(p.text(), "the old");
         polish(&mut p, &ws(&[("Bridge", 4.5, 4.6), ("and", 6.0, 6.1), ("then", 6.2, 6.3)]), None, 9.0);
@@ -371,7 +386,7 @@ mod tests {
     fn a_word_the_next_decode_stretches_past_the_cut_is_not_doubled() {
         // The left decode keeps "tea" before the cut at 5.0 s. The right decode stretches it
         // over the pause: its middle lies past the cut, and it starts after the first copy ends.
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &ws(&[("some", 4.0, 4.1), ("tea", 4.2, 4.3), ("scone", 5.8, 6.0)]), Some(5.0), 9.0);
         assert_eq!(p.text(), "some tea");
         polish(&mut p, &ws(&[("Tea.", 4.65, 6.0), ("Scones", 6.1, 6.4), ("too", 7.0, 7.1)]), None, 9.0);
@@ -380,7 +395,7 @@ mod tests {
 
     #[test]
     fn a_word_said_twice_across_the_cut_stays_twice() {
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &ws(&[("very", 4.3, 4.6)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("very", 4.3, 4.6), ("very", 5.2, 5.5), ("good", 5.6, 5.9)]), None, 9.0);
         assert_eq!(p.text(), "very very good");
@@ -390,7 +405,7 @@ mod tests {
             &[("very", 4.3, 4.6), ("very", 5.2, 5.5), ("good", 5.6, 5.9)][..],
             &[("very", 5.25, 5.5), ("good", 5.6, 5.9)],
         ] {
-            let mut p = Polished::new(true);
+            let mut p = polished(true);
             polish(&mut p, &ws(&[("very", 4.3, 4.6), ("very", 5.2, 5.5)]), Some(5.0), 9.0);
             polish(&mut p, &ws(right), None, 9.0);
             assert_eq!(p.text(), "very very good");
@@ -399,7 +414,7 @@ mod tests {
 
     #[test]
     fn noise_deep_in_the_pause_before_the_cut_is_dropped() {
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &ws(&[("Done.", 3.0, 3.4)]), Some(5.0), 9.0);
         // A made-up "you" in the silence at 4.4 s: before the chunk, beyond the slack.
         polish(&mut p, &ws(&[("Done.", 4.0, 4.1), ("you", 4.3, 4.5), ("Next", 5.6, 5.9)]), None, 9.0);
@@ -409,7 +424,7 @@ mod tests {
     #[test]
     fn without_context_every_word_is_kept_whatever_its_timing() {
         // Segment-level timings spread over the words can stray past the chunk's ends.
-        let mut p = Polished::new(false);
+        let mut p = polished(false);
         polish(&mut p, &ws(&[("one", 0.0, 2.0), ("two", 2.0, 4.0), ("three", 4.0, 6.0)]), Some(5.0), 9.0);
         polish(&mut p, &ws(&[("three", 4.6, 5.4), ("four", 5.4, 7.0)]), None, 9.0);
         assert_eq!(p.text(), "one two three three four");
@@ -417,7 +432,7 @@ mod tests {
 
     #[test]
     fn empty_chunks_join_cleanly() {
-        let mut p = Polished::new(true);
+        let mut p = polished(true);
         polish(&mut p, &[], Some(30.0), 31.0);
         polish(&mut p, &ws(&[("Hello", 31.0, 31.4)]), Some(60.0), 61.0);
         polish(&mut p, &[], None, 62.0);

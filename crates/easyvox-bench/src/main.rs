@@ -32,12 +32,16 @@ easyvox-bench <command> [options]
                                                sit idle with the model loaded first; --unload:
                                                free the model first, so the session reloads it)
   sessions --model ID                          sessions on 3/10/30 s clips, partials on and off
+  tuning                                       every tuning key: effective value, default, range, docs
   mic [--request] [--secs N] [--model ID]      open the microphone once (--request asks for permission first)
   paste [--text T]                             write the clipboard, then simulate Cmd+V
   history [--db F]                             SQLite history demo
 
-Engine options: --models DIR, --threads N, --interval MS, --window SECS, --chunk SECS, --vad
-Output: JSON on stdout (or --out F), progress on stderr.
+Engine options: --models DIR, --threads N, --vad, and --set KEY=VALUE (repeatable) for any
+field of easyvox_core::Tuning (see `tuning`), e.g. --set preview_interval_ms=800. Older
+aliases: --interval MS (preview_interval_ms), --window SECS (preview_window_ms), --chunk SECS
+(chunk_ms); --set wins over them. Out-of-range values are an error.
+Output: JSON on stdout (or --out F), progress on stderr. Results include the effective tuning.
 EASYVOX_METAL_RESIDENCY=1 keeps ggml-metal's residency sets (and their idle wake-ups), for
 comparisons; by default they're off, as in the app (see easyvox_core::process_env).";
 
@@ -111,6 +115,10 @@ impl Args {
     fn get(&self, k: &str) -> Option<String> {
         self.0.iter().position(|a| a == k).and_then(|i| self.0.get(i + 1).cloned())
     }
+    /// The value after every occurrence of `k`, for repeatable options.
+    fn all(&self, k: &str) -> Vec<String> {
+        self.0.windows(2).filter(|w| w[0] == k).map(|w| w[1].clone()).collect()
+    }
     fn has(&self, k: &str) -> bool {
         self.0.iter().any(|a| a == k)
     }
@@ -133,17 +141,48 @@ fn config(args: &Args, model: &str) -> anyhow::Result<EngineConfig> {
     if let Some(t) = args.num("--threads")? {
         c.threads = t;
     }
-    if let Some(i) = args.num("--interval")? {
-        c.partial_interval_ms = i;
-    }
-    if let Some(w) = args.num("--window")? {
-        c.partial_window_secs = w;
-    }
-    if let Some(k) = args.num("--chunk")? {
-        c.chunk_secs = k;
-    }
     c.vad_trim = args.has("--vad");
+    c.tuning = tuning(args)?;
     Ok(c)
+}
+
+/// The defaults, changed by the older aliases and then by every `--set key=value`.
+fn tuning(args: &Args) -> anyhow::Result<Tuning> {
+    let mut t = Tuning::default();
+    if let Some(ms) = args.num("--interval")? {
+        t.preview_interval_ms = ms;
+    }
+    if let Some(secs) = args.num("--window")? {
+        t.preview_window_ms = secs_to_ms("--window", secs)?;
+    }
+    if let Some(secs) = args.num("--chunk")? {
+        t.chunk_ms = secs_to_ms("--chunk", secs)?;
+    }
+    for kv in args.all("--set") {
+        let (key, value) = kv.split_once('=').with_context(|| format!("--set {kv:?}: expected key=value"))?;
+        t.set(key.trim(), value).map_err(|e| anyhow::anyhow!("--set {kv:?}: {e}"))?;
+    }
+    let problems = t.validate();
+    if !problems.is_empty() {
+        let list: Vec<String> =
+            problems.iter().map(|p| format!("{} = {} (allowed {}..={})", p.key, p.value, p.min, p.max)).collect();
+        bail!("tuning out of range: {}", list.join("; "));
+    }
+    Ok(t)
+}
+
+fn secs_to_ms(flag: &str, secs: f64) -> anyhow::Result<u32> {
+    let ms = (secs * 1e3).round();
+    if !(0.0..=u32::MAX as f64).contains(&ms) {
+        bail!("{flag}: {secs} isn't a usable number of seconds");
+    }
+    Ok(ms as u32)
+}
+
+/// The tuning as a JSON object of numbers.
+fn tuning_json(t: &Tuning) -> Value {
+    let number = |v: String| serde_json::from_str(&v).unwrap_or(Value::String(v));
+    Value::Object(t.fields().into_iter().map(|f| (f.key.to_string(), number(f.value))).collect())
 }
 
 fn write_out(args: &Args, v: &Value) -> anyhow::Result<()> {
@@ -172,6 +211,7 @@ fn main() -> anyhow::Result<()> {
         "bench" => bench(&args),
         "session" => session_cmd(&args),
         "sessions" => sessions(&args),
+        "tuning" => tuning_cmd(&args),
         "mic" => mic(&args),
         "paste" => paste(&args),
         "history" => history_demo(&args),
@@ -355,6 +395,7 @@ fn bench(args: &Args) -> anyhow::Result<()> {
 
     let v = json!({
         "model": model, "threads": cfg.threads, "vad_trim": cfg.vad_trim, "cold_clone": args.has("--cold"),
+        "tuning": tuning_json(&cfg.tuning),
         "metal_residency": metal_residency(),
         "reps": reps, "loadavg_start": loadavg_start,
         "load_ms_first_in_process": load1, "load_ms_warm_reload": load2,
@@ -496,7 +537,7 @@ fn session_cmd(args: &Args) -> anyhow::Result<()> {
         v["wer"] = json!({"errors": errors, "ref_words": words, "wer": errors as f64 / words.max(1) as f64});
     }
     v["model"] = json!(model);
-    v["chunk_secs"] = json!(engine.config().chunk_secs);
+    v["tuning"] = tuning_json(&engine.config().tuning);
     v["metal_residency"] = json!(metal_residency());
     v["idle_before_secs"] = json!(idle_secs);
     v["unloaded_before"] = json!(unloaded);
@@ -512,7 +553,7 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
     let base = config(args, &model)?;
     let engine = Engine::load(base.clone())?;
     engine.transcribe_pcm(&audio::load_wav_16k_mono(&testdata().join("cmd_samantha.wav"))?)?; // warm-up
-    let interval = base.partial_interval_ms;
+    let interval = base.tuning.preview_interval_ms;
     let mut out = Vec::new();
     for (label, iv) in [("partials_on", interval), ("partials_off", 0)] {
         // The interval is part of the engine config, so "off" needs its own engine.
@@ -520,7 +561,7 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
             engine.clone()
         } else {
             let mut c = base.clone();
-            c.partial_interval_ms = iv;
+            c.tuning.preview_interval_ms = iv;
             Engine::load(c)?
         };
         for w in SESSION_CLIPS {
@@ -541,11 +582,26 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
         }
     }
     let v = json!({
-        "model": model, "threads": base.threads, "vad_trim": base.vad_trim, "chunk_secs": base.chunk_secs,
+        "model": model, "threads": base.threads, "vad_trim": base.vad_trim, "tuning": tuning_json(&base.tuning),
         "metal_residency": metal_residency(),
         "runs": out, "mem_end": mem_json(),
     });
     write_out(args, &v)
+}
+
+/// Every tuning key with its effective value (after the aliases and `--set`), default, range
+/// and docs.
+fn tuning_cmd(args: &Args) -> anyhow::Result<()> {
+    let t = tuning(args)?;
+    let keys: Vec<Value> = t
+        .fields()
+        .into_iter()
+        .map(|f| {
+            let doc = f.doc.lines().map(str::trim).collect::<Vec<_>>().join(" ");
+            json!({"key": f.key, "value": f.value, "default": f.default, "min": f.min, "max": f.max, "doc": doc})
+        })
+        .collect();
+    write_out(args, &json!({"tuning": tuning_json(&t), "keys": keys}))
 }
 
 fn mic(args: &Args) -> anyhow::Result<()> {
@@ -650,6 +706,41 @@ mod tests {
         for id in SESSION_CLIPS {
             assert!(clips.iter().any(|c| c.id == id), "{id} not in manifest.tsv");
         }
+    }
+
+    fn args(a: &[&str]) -> Args {
+        Args(a.iter().map(|s| s.to_string()).collect())
+    }
+
+    #[test]
+    fn set_changes_any_tuning_field_and_rejects_unknown_keys() {
+        let t =
+            tuning(&args(&["session", "--set", "preview_interval_ms=800", "--set", "pause_quiet_ratio=0.2"])).unwrap();
+        assert_eq!(t, Tuning { preview_interval_ms: 800, pause_quiet_ratio: 0.2, ..Tuning::default() });
+        for bad in ["no_such_key=1", "preview_interval_ms", "preview_interval_ms=fast", "preview_interval_ms=99999"] {
+            assert!(tuning(&args(&["session", "--set", bad])).is_err(), "--set {bad} was accepted");
+        }
+        let err = tuning(&args(&["--set", "chunk=15"])).unwrap_err().to_string();
+        assert!(err.contains("unknown tuning key") && err.contains("chunk_ms"), "{err}");
+    }
+
+    #[test]
+    fn the_older_flags_are_aliases_that_set_loses_to() {
+        let t = tuning(&args(&["--interval", "600", "--window", "12.5", "--chunk", "0"])).unwrap();
+        assert_eq!(t, Tuning { preview_interval_ms: 600, preview_window_ms: 12_500, chunk_ms: 0, ..Tuning::default() });
+        let t = tuning(&args(&["--chunk", "15", "--set", "chunk_ms=20000"])).unwrap();
+        assert_eq!(t.chunk_ms, 20_000);
+        assert!(tuning(&args(&["--chunk", "-1"])).is_err());
+        assert_eq!(tuning(&args(&["session"])).unwrap(), Tuning::default());
+    }
+
+    #[test]
+    fn results_record_the_tuning_as_numbers() {
+        let v = tuning_json(&Tuning { chunk_ms: 15_000, ..Tuning::default() });
+        assert_eq!(v["chunk_ms"], json!(15_000));
+        assert_eq!(v["preview_interval_ms"], json!(400));
+        assert_eq!(v["gate_silence_level"].as_f64(), Some(0.0018));
+        assert_eq!(v.as_object().unwrap().len(), Tuning::KEYS.len());
     }
 
     #[test]

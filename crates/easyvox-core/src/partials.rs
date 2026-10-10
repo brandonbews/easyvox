@@ -7,24 +7,44 @@
 //! the session polishes a chunk and hands it over with [`LocalAgreement::skip_to`].
 
 use crate::Word;
+use crate::tuning::{Tuning, ms_secs};
 
 /// Lowercase alphanumerics only, so "Hello," and "hello" agree.
 pub fn norm_word(w: &str) -> String {
     w.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LocalAgreement {
     confirmed: Vec<Word>,
     /// End time (seconds, absolute) of the last confirmed word.
     confirmed_until: f32,
     prev_tail: Vec<Word>,
     provisional: String,
+    /// A new word starting within this many seconds of `confirmed_until` may be a re-decoded
+    /// copy of the confirmed words (`agreement_repeat_ms`).
+    repeat_secs: f32,
+    /// Longest run of words checked for such a copy (`agreement_max_repeat_words`).
+    max_repeat: usize,
+}
+
+impl Default for LocalAgreement {
+    /// With the default [`Tuning`].
+    fn default() -> Self {
+        Self::new(&Tuning::default())
+    }
 }
 
 impl LocalAgreement {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(t: &Tuning) -> Self {
+        Self {
+            confirmed: Vec::new(),
+            confirmed_until: 0.0,
+            prev_tail: Vec::new(),
+            provisional: String::new(),
+            repeat_secs: ms_secs(t.agreement_repeat_ms),
+            max_repeat: t.agreement_max_repeat_words as usize,
+        }
     }
 
     /// End (absolute seconds) of the last confirmed word; the session may move the decode
@@ -64,8 +84,8 @@ impl LocalAgreement {
         // Word boundaries jitter between passes (TDT frames are 80 ms), so a re-decoded copy
         // of the last confirmed word(s) can slip past the time filter. Drop an n-gram at the
         // start of the tail that repeats the end of the confirmed text (as whisper_streaming does).
-        if tail.first().is_some_and(|w| w.start < self.confirmed_until + 0.3) {
-            let max_n = 5.min(self.confirmed.len()).min(tail.len());
+        if tail.first().is_some_and(|w| w.start < self.confirmed_until + self.repeat_secs) {
+            let max_n = self.max_repeat.min(self.confirmed.len()).min(tail.len());
             for n in (1..=max_n).rev() {
                 let conf = &self.confirmed[self.confirmed.len() - n..];
                 if conf.iter().zip(&tail[..n]).all(|(c, t)| norm_word(&c.text) == norm_word(&t.text)) {
@@ -101,7 +121,7 @@ mod tests {
 
     #[test]
     fn confirms_after_two_agreeing_passes_and_only_grows() {
-        let mut la = LocalAgreement::new();
+        let mut la = LocalAgreement::default();
         let (c, p) = la.update(&ws(&[("Hello", 0.0, 0.4), ("wor", 0.5, 0.7)]));
         assert_eq!((c.as_str(), p.as_str()), ("", "Hello wor"));
         let (c, p) = la.update(&ws(&[("Hello,", 0.0, 0.4), ("world", 0.5, 0.9), ("how", 1.0, 1.2)]));
@@ -115,7 +135,7 @@ mod tests {
 
     #[test]
     fn jittered_copy_of_confirmed_word_is_not_duplicated() {
-        let mut la = LocalAgreement::new();
+        let mut la = LocalAgreement::default();
         la.update(&ws(&[("ship", 0.0, 0.3), ("on", 0.3, 0.4), ("Friday", 0.5, 0.9)]));
         let (c, p) = la.update(&ws(&[("ship", 0.0, 0.3), ("on", 0.3, 0.4), ("Friday,", 0.5, 0.9), ("and", 1.0, 1.1)]));
         assert_eq!((c.as_str(), p.as_str()), ("ship on Friday,", "and"));
@@ -132,7 +152,7 @@ mod tests {
 
     #[test]
     fn skip_to_hands_the_audio_before_a_cut_over() {
-        let mut la = LocalAgreement::new();
+        let mut la = LocalAgreement::default();
         la.update(&ws(&[("one", 0.0, 0.3), ("two", 0.5, 0.8), ("three", 1.2, 1.5), ("four", 1.6, 1.9)]));
         la.update(&ws(&[
             ("one", 0.0, 0.3),
@@ -156,7 +176,7 @@ mod tests {
 
     #[test]
     fn disagreement_keeps_text_provisional() {
-        let mut la = LocalAgreement::new();
+        let mut la = LocalAgreement::default();
         la.update(&ws(&[("I", 0.0, 0.2), ("scream", 0.3, 0.6), ("x", 0.7, 0.8)]));
         let (c, p) = la.update(&ws(&[("Ice", 0.0, 0.3), ("cream", 0.3, 0.6), ("is", 0.7, 0.8)]));
         assert_eq!(c, "");

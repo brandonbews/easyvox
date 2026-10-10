@@ -18,6 +18,9 @@ pub struct AppSettings {
     pub keep_model_loaded: bool,
     /// How long without a dictation before the model is freed (unless `keep_model_loaded`).
     pub unload_after_secs: u64,
+    /// Advanced: the speech pipeline's numbers (preview, chunks, pauses). Applied when the
+    /// engine loads.
+    pub tuning: easyvox_core::Tuning,
 }
 
 impl Default for AppSettings {
@@ -28,6 +31,7 @@ impl Default for AppSettings {
             hold_right_option: false,
             keep_model_loaded: false,
             unload_after_secs: 10 * 60,
+            tuning: easyvox_core::Tuning::default(),
         }
     }
 }

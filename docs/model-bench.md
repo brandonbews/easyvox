@@ -291,6 +291,8 @@ for m in $MODELS; do $B sessions --model $m --out sessions-$m.json; done
 /usr/bin/time -l $B session --model parakeet-tdt-0.6b-v2-q5_k_m-gguf --wav long.wav --ref long.txt --out long.json
 ```
 
+**Tuning.** The pipeline's numbers (preview interval and window, chunk length, joins, the speech gate, pauses) are the fields of `Tuning` in `crates/easyvox-core/src/tuning.rs`, each with its default, unit, range and trade-off. `--set key=value` changes any of them for one run and can be repeated, e.g. `--set preview_interval_ms=800 --set chunk_ms=15000`. An unknown key or an out-of-range value is an error. The older `--interval MS`, `--window SECS` and `--chunk SECS` still work, as aliases of `preview_interval_ms`, `preview_window_ms` and `chunk_ms`, and `--set` wins over them. `$B tuning` lists every key with its default, range and docs, and every result records the values it ran with under `tuning`.
+
 Where the table's numbers come from:
 
 - `bench`: `wer_total`, `empty_speech_decodes` and `failed_speech_decodes`, `rtf_speech_clips`, `mem.after_load.footprint_mb` and `mem.after_decodes.peak_footprint_mb`. The silence clip's `hypothesis` is under `clips`. Progress lines on stderr flag `EMPTY`, `FAILED` and `UNSTABLE` (runs that disagree).

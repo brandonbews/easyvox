@@ -401,6 +401,7 @@ impl Controller {
     pub fn load_engine(&mut self, model_id: &str, cx: &mut Context<Self>) {
         let mut config = easyvox_core::EngineConfig::recommended(easyvox_core::paths::models_dir());
         config.model_id = model_id.to_string();
+        config.tuning = cx.global::<AppSettings>().tuning;
         cx.global_mut::<AppSettings>().model = model_id.to_string();
         cx.global_mut::<AppStatus>().engine = EngineStatus::Loading;
         cx.refresh_windows();

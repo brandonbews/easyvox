@@ -2,16 +2,17 @@
 //!
 //! Capture starts at once. The worker first makes sure the model is loaded (reloading it if the
 //! engine was unloaded while idle; the audio meanwhile just buffers), then ticks every
-//! `partial_interval_ms` while the key is held. Each tick it polishes the oldest chunk in
-//! `Final` mode if enough audio waits (`chunks.rs`), then re-decodes the recent audio in
-//! `Partial` mode for the preview, confirming words once two passes agree (`partials.rs`). A
-//! tick skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
-//! On release it polishes the rest and sends `Final`.
+//! `preview_interval_ms` ([`Tuning`](crate::Tuning)) while the key is held. Each tick it
+//! polishes the oldest chunk in `Final` mode if enough audio waits (`chunks.rs`), then
+//! re-decodes the recent audio in `Partial` mode for the preview, confirming words once two
+//! passes agree (`partials.rs`). A tick skips the re-decode when nothing has been said since
+//! the last ones (`pause::SpeechGate`). On release it polishes the rest and sends `Final`.
 
 use crate::audio::{MicInfo, SharedAudio};
 use crate::chunks::{self, Chunker, Polished};
 use crate::partials::LocalAgreement;
 use crate::pause::SpeechGate;
+use crate::tuning::ms_samples;
 use crate::{AudioSource, DecodeMode, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -20,6 +21,12 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 const SR: usize = SAMPLE_RATE as usize;
+
+/// With the preview off (`preview_interval_ms` = 0, for comparisons), how often the loop still
+/// ticks to polish chunks.
+const POLISH_TICK_MS: u32 = 400;
+/// The preview window never gets shorter than this, whatever `preview_window_ms` says.
+const MIN_WINDOW_MS: u32 = 2_000;
 
 /// Counters a session collects (for benchmarks and diagnostics).
 #[derive(Clone, Debug, Default)]
@@ -213,15 +220,16 @@ impl Worker {
 
     fn record(&self, model: &dyn SpeechModel, started: Instant) {
         let mut warned = false;
-        let cfg = &self.engine.config;
-        let chunker = Chunker::new(cfg.chunk_secs);
-        let mut polished = Polished::new(model.word_timings());
-        let mut la = LocalAgreement::new();
-        let mut gate = SpeechGate::new();
-        // With partials off the loop still ticks, to polish chunks.
-        let interval =
-            Duration::from_millis(if cfg.partial_interval_ms == 0 { 400 } else { cfg.partial_interval_ms } as u64);
-        let window = (cfg.partial_window_secs.max(2.0) * SR as f32) as usize;
+        let t = &self.engine.config.tuning;
+        let chunker = Chunker::new(t);
+        let mut polished = Polished::new(model.word_timings(), t);
+        let mut la = LocalAgreement::new(t);
+        let mut gate = SpeechGate::new(t);
+        let preview_on = t.preview_interval_ms > 0;
+        let interval = Duration::from_millis(if preview_on { t.preview_interval_ms } else { POLISH_TICK_MS } as u64);
+        let window = ms_samples(t.preview_window_ms.max(MIN_WINDOW_MS));
+        let min_audio = ms_samples(t.preview_min_audio_ms);
+        let min_gap = Duration::from_millis(t.preview_min_gap_ms as u64);
         let mut anchor = 0usize;
         let mut decoded_len = 0usize;
         // The first tick comes one interval after the start, or at once if loading the model
@@ -250,13 +258,14 @@ impl Worker {
                     break;
                 }
             }
-            if cfg.partial_interval_ms == 0 {
+            if !preview_on {
                 continue;
             }
             let window_pcm = {
                 let a = self.audio.samples.lock().unwrap();
                 let total = a.len();
-                if total < SR * 3 / 10 || total < decoded_len + SR / 10 {
+                // Too little audio yet, or less than 0.1 s new since the last pass.
+                if total < min_audio || total < decoded_len + SR / 10 {
                     continue;
                 }
                 if total - anchor > window {
@@ -306,7 +315,7 @@ impl Worker {
                 Err(e) => self.send(TranscriptEvent::Error(format!("partial decode failed: {e:#}"))),
             }
             if Instant::now() >= next {
-                next = Instant::now() + Duration::from_millis(50);
+                next = Instant::now() + min_gap;
             }
         }
         // Released: polish the rest.
