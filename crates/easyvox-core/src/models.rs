@@ -190,6 +190,24 @@ pub static CATALOG: &[ModelInfo] = &[
         attribution: "Canary 180M Flash by NVIDIA, licensed under CC BY 4.0",
         card_url: "https://huggingface.co/nvidia/canary-180m-flash",
     },
+    // Bench only: v2's multilingual successor (25 European languages, picked per recording). On
+    // the author's voice it was no more accurate than v2, wrote hesitations as words, and used
+    // more CPU and memory. See docs/model-bench.md ("Parakeet TDT v3 against v2").
+    ModelInfo {
+        id: "parakeet-tdt-0.6b-v3-q5_k_m-gguf",
+        name: "Parakeet TDT 0.6B v3 (multilingual)",
+        runtime: Runtime::TranscribeCpp,
+        offering: Offering::BenchOnly,
+        path: "gguf/parakeet-tdt-0.6b-v3-Q5_K_M.gguf",
+        download_url: "https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/90f082450fcbacdb54e5900c44ef697c9ea59622/parakeet-tdt-0.6b-v3-Q5_K_M.gguf",
+        sha256: Some("cc722e76adc1a629fc0b2535de879d99b8160d07ad4c0215e2ca7d7ea0ae4b8f"),
+        download_bytes: 548_946_272,
+        disk_bytes: 548_946_272,
+        punctuation: true,
+        license: CC_BY_4_0,
+        attribution: "Parakeet TDT 0.6B v3 by NVIDIA, licensed under CC BY 4.0",
+        card_url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
+    },
     ModelInfo {
         id: "parakeet-tdt-0.6b-v2-int8",
         name: "Parakeet TDT 0.6B v2 (CPU, sherpa-onnx)",

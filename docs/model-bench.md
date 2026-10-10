@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three offered models, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults.
 
 ## Results
 
@@ -14,6 +14,7 @@ Later the same day the engine moved to one pipeline for every model (no native s
 | **Parakeet Unified EN 0.6B Q5_K_M** (alternative) | 541 MB | 0.55 % | 0 of 84 | nothing | 1.35 s | 0.09 / 0.18 / 0.46 s | 7–9 % | 0.015 | 693 / 743 MB |
 | Parakeet TDT 0.6B v2 Q8_0 (dropped) | 730 MB | 0.55 % | 0 of 84 | nothing | 0.45 s | 0.06 / 0.16 / 0.42 s | 18–37 % | 0.014 | 879 / 924 MB |
 | **Parakeet TDT 0.6B v2 Q5_K_M** (default) | 539 MB | 0.55 % | 0 of 84 | nothing | 0.47 s | 0.07 / 0.17 / 0.44 s | 15–37 % | 0.015 | 691 / 735 MB |
+| Parakeet TDT 0.6B v3 Q5_K_M (bench only, 10 October) | 549 MB | 1.37 % | 0 of 84 | "Thank you." | – | – | – | 0.017 | 716 / 806 MB |
 | Canary 180M Flash Q5_K_M (bench only) | 159 MB | **7.12 %** | 0 of 84 | nothing | 0.45 s | 0.09 / 0.20 / 0.51 s | 5–14 % | 0.016 | 243 / 312 MB |
 | **Whisper base.en Q8_0** (alternative) | 85 MB | 1.37 % | 0 of 84 | "you" | 0.51 s | 0.17 / 0.17 / 0.52 s | 31–36 % | 0.014 | 205 / 259 MB |
 
@@ -28,6 +29,7 @@ How to read it:
 - **Speed (RTF):** decode time divided by audio length. 0.015 means a 10 s recording takes 0.15 s.
 - **Memory:** the process's memory footprint once the model is loaded, and its peak after decoding every clip.
 - **First words, text ready and CPU** in this table come from the old engine, where Parakeet Unified streamed natively. [One pipeline](#one-pipeline) has the current numbers.
+- **Parakeet TDT v3** was added on 10 October, after the old engine was gone, so it has no first-words, text-ready or CPU figures here: see [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2). The same 6 runs of each clip, with v2 run alongside (v2 repeated its 0.55 % and its text; 649 / 737 MB that day). v3 made 5 errors per run to v2's 2: two of the three names on `names_tessa` (v2 misses two as well, one of them the same), "Kowolski" for "Kowalski", "15th" for "15" and "the full copy" for "a full copy". Like v2 it wrote the numbers as digits. Decoded on its own, 2 s of silence came out as "Thank you."; the app no longer decodes a recording without speech (see [First words and silence](#first-words-and-silence)).
 
 ## What we decided
 
@@ -257,6 +259,52 @@ $B session --model canary-180m-flash-q5_k_m-gguf --models /tmp/m --wav $R/struct
   - the preview's lag: the partial lines on stderr.
 - **Cut times and word timings** came from a scratch copy of the bench with three `eprintln!` lines added, not committed: the pause each cut used (in `Chunker::cut`), each cut (in `polish_chunk`), and every final word with its timing. The same copy ran every session above. Each chunk's span was then decoded on its own with `transcribe --words`, to replay the join rules with other `SLACK_SECS` values.
 - **The loudness checks and the noise replay** read the WAV's 30 ms and 10 ms frame levels. Noise is mixed in by adding its power to each frame.
+
+### Parakeet TDT v3 against v2
+
+Run on 10 October 2026, same M4, at commit f424519: today's defaults, after [Lightness](#lightness) and [First words and silence](#first-words-and-silence), so these numbers compare with each other, not with the tables above. Parakeet TDT 0.6B v3 is v2's multilingual successor (25 European languages, the same size, CC-BY-4.0). It's a little behind v2 on public English benchmarks (Open ASR Leaderboard average 6.82 against 6.43) and had never been run on the author's voice. It's in the catalog as bench only, and v2 stays the default.
+
+Same recordings and methods as above: real-time `session` replays, the models taking turns in a different order each round, each run started on a quiet machine (load average 1.3–2.2, nothing compiling). Energy as in [Lightness](#lightness) (macmon, CPU + GPU + Neural Engine + DRAM over the idle machine). Each model wrote the same final text in every run of the same recording.
+
+**Read aloud** (81 s, 3 runs each; one pass on release, `--chunk 0`, one run each):
+
+| Model | Word error rate (one pass) | First words, after speech starts | Text ready after release (one pass) | CPU while talking | Memory, loaded / peak |
+|---|---:|---:|---:|---:|---:|
+| **Parakeet TDT v2** | **1.68 %** (4 words; 3.36 %, 8) | 0.61–0.62 s | 0.36–0.42 s (1.31 s) | 9.4–9.6 % | 705–706 / 740–742 MB |
+| Parakeet TDT v3 | 2.10 % (5 words; 3.78 %, 9) | 0.62–0.65 s | 0.41–0.46 s (1.44 s) | 13.1–13.4 % | 772–773 / 808–811 MB |
+
+**Ramble** (5 minutes, 2 energy runs each; one pass, one run each):
+
+| Model | Energy per minute | GPU power added | CPU while talking | Text ready after release (one pass) | Peak memory (one pass) | First words | Preview behind the voice: median / 95th pct | Words lost / doubled at the 13 joins | Hesitations written |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Parakeet TDT v2** | 41.5 J (37.8–45.2) | 0.52–0.53 W | 7.6–8.0 % | 0.33–0.35 s (7.92 s) | 763–783 MB (950) | 2.14–2.16 s | 0.76–0.78 / 1.96–2.05 s | 0 / 0 | 0 |
+| Parakeet TDT v3 | 40.9 J (39.5–42.3) | 0.51–0.54 W | 10.6–11.0 % | 0.38–0.43 s (8.28 s) | 833–842 MB (1,018) | 2.13–2.14 s | 0.81–0.87 / 2.33–2.49 s | 0 / 0 | 25 |
+
+- **Accuracy: about a tie, v2 a word ahead.** On the read-aloud clip they share three errors (two names and a sum of money). v2's fourth is a plural heard as a singular. v3 wrote another sum of money in words instead of digits, which the scorer counts as two errors. On the text-to-speech clips v2 was ahead too (0.55 % against 1.37 %; see [Results](#results)).
+- **v3 writes hesitations.** On the ramble it wrote 25 hesitation sounds as words in the chunked text (27 in one pass), where v2 wrote none. That's most of its 30 extra words (742 against 712). Dictated text would need them taken out again. On the read-aloud clip it wrote none. Apart from them, the two models' ramble texts differ in 25 places, and with no reference there's no telling which is right.
+- **v3 costs a little more.** About 40 % more CPU while talking (a few points of one core), about 70 MB more memory, and text ready 40–75 ms later after release: its decodes are about 5–10 % slower (preview passes 119–125 against 111–113 ms on the ramble). **Energy is a tie:** the GPU's power is the same, over the same 185 preview passes, and the totals differ by less than the CPU rail's noise.
+- **The preview.** First words come as soon. The median lag is the same within 0.1 s; the 95th percentile is 0.3–0.4 s longer for v3. Each model's lag is measured against its own one-pass decode; against v2's, v3's is 0.76–0.79 / 2.28–2.47 s.
+- **Joins.** Both cut at the same 13 places as on 9 October. Neither lost or doubled a word at a join. Near three of v3's cuts its chunked text has a short word its one-pass decode doesn't. One is a word repeated across a pause, which both chunk decodes, each decoded on its own, also heard twice: the one-pass decode heard it once. The other two lie 0.8 and 1.5 s before a cut, inside one chunk, and were simply heard differently. v2's only difference near a cut is one word written as two.
+- **Language.** v3 picks the language itself. It stayed in English throughout: no accented letter and no foreign word in any final text or any preview update, on either recording or on the text-to-speech clips.
+- **What it means:** on this voice v3 isn't more accurate than v2, writes hesitations, and costs a little more CPU and memory. v2 stays the default. v3's case would be the other languages, which this bench doesn't test.
+
+```sh
+B=target/release/easyvox-bench      # a scratch copy printing the cut and word lines described above
+R=recordings                        # private, gitignored
+V2=parakeet-tdt-0.6b-v2-q5_k_m-gguf; V3=parakeet-tdt-0.6b-v3-q5_k_m-gguf
+scripts/fetch-model.sh $V3
+# Read aloud: 3 rounds (v2 then v3, v3 then v2, v2 then v3), then one pass each.
+$B session --model $V3 --wav $R/structured.wav --ref $R/structured-reference.txt --out s1-v3.json 2> s1-v3.err
+$B session --model $V3 --wav $R/structured.wav --ref $R/structured-reference.txt --chunk 0 --out s0-v3.json
+# Ramble: energy runs as in "Lightness" (macmon around the run), 2 rounds (v3 then v2, v2 then v3).
+macmon pipe -i 500 > r1-v3.jsonl & sleep 60
+$B session --model $V3 --wav $R/ramble.wav --idle-before 10 --out r1-v3.json 2> r1-v3.err
+sleep 60; kill %1
+# One pass, for the joins and the preview's lag.
+$B session --model $V3 --wav $R/ramble.wav --chunk 0 --out r0-v3.json 2> r0-v3.err
+# Text-to-speech clips: 3 runs of each, twice, in reverse model order the second time.
+$B bench --model $V3 --reps 3 --out tts-v3.json
+```
 
 ## Lightness
 

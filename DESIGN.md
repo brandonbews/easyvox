@@ -162,7 +162,7 @@ Why it's the default (decided 9 October 2026; Parakeet Unified was the default b
 The catalog has a `license` (name and URL), an `attribution` line and the upstream model card for every model. The app shows the license and attribution next to each model in Settings.
 
 - **NVIDIA Open Model License** ([agreement](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/)): Parakeet Unified. Free use, including commercial use and redistribution. The app must show "Licensed by NVIDIA Corporation under the NVIDIA Open Model License" with a link to the agreement. The `handy-computer` GGUF repo labels it CC-BY-4.0, but NVIDIA's [model card](https://huggingface.co/nvidia/parakeet-unified-en-0.6b) says the Open Model License, and upstream wins.
-- **CC-BY-4.0** ([license](https://creativecommons.org/licenses/by/4.0/)): Parakeet TDT v2 ([card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)), and later Parakeet Ultra ([card](https://huggingface.co/moondream/parakeet-ultra)). Free for any use; credit the creator (NVIDIA, or Moondream for Ultra) and link the license.
+- **CC-BY-4.0** ([license](https://creativecommons.org/licenses/by/4.0/)): Parakeet TDT v2 ([card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)) and v3 ([card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), bench only), and later Parakeet Ultra ([card](https://huggingface.co/moondream/parakeet-ultra)). Free for any use; credit the creator (NVIDIA, or Moondream for Ultra) and link the license.
 - **Apache-2.0** ([license](https://www.apache.org/licenses/LICENSE-2.0)): Whisper base.en ([card](https://huggingface.co/openai/whisper-base.en)). Permissive.
 
 ### Bench only
@@ -170,11 +170,12 @@ The catalog has a `license` (name and URL), an `attribution` line and the upstre
 These stay in the catalog (`offering: BenchOnly`) for `easyvox-bench` and comparisons, but the app doesn't offer them:
 
 - Canary 180M Flash (Q5_K_M, CC-BY-4.0), for the reason above;
+- Parakeet TDT 0.6B v3 (Q5_K_M, CC-BY-4.0), v2's multilingual successor. On the author's voice it was no more accurate than v2 (one word behind on the read-aloud clip), wrote hesitations as words, and used about 40 % more CPU and 70 MB more memory, for the same energy ([`docs/model-bench.md`](docs/model-bench.md), "Parakeet TDT v3 against v2"). It stayed in English throughout. It's the stopgap for French (see "Later: French");
 - the two sherpa-onnx models (Parakeet TDT 0.6B v2 int8, CC-BY-4.0, and Nemotron Speech Streaming 0.6B, NVIDIA Open Model License) and the Silero VAD model. The app doesn't compile that runtime in (it would add 18.5 MB), so they could never show up there anyway.
 
 ### Later: French
 
-Parakeet Ultra (Q5_K_M, 550 MB), Moondream's further-trained Parakeet v3, is the pick for French. Its English is about v2's, and it has the best French of any fast model in transcribe.cpp's runs (4.66 % on FLEURS French). It needs transcribe-cpp 0.4, because its support landed after the pinned 0.3.1 ([PR #192](https://github.com/handy-computer/transcribe.cpp/pull/192)). Parakeet TDT v3 runs on 0.3.1 today as a stopgap.
+Parakeet Ultra (Q5_K_M, 550 MB), Moondream's further-trained Parakeet v3, is the pick for French. Its English is about v2's, and it has the best French of any fast model in transcribe.cpp's runs (4.66 % on FLEURS French). It needs transcribe-cpp 0.4, because its support landed after the pinned 0.3.1 ([PR #192](https://github.com/handy-computer/transcribe.cpp/pull/192)). Parakeet TDT v3 runs on 0.3.1 today as a stopgap; it's in the catalog as bench only (see "Bench only").
 
 ### Other models we looked at
 

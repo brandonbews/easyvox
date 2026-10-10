@@ -5,8 +5,9 @@
 //!
 //!   EASYVOX_LIVE_DOWNLOADS=1 cargo test -p easyvox-core --test download_live -- --ignored
 //!
-//! - `pinned_urls_match_hugging_face`: a HEAD of every offered model's URL. Three tiny requests,
-//!   no body: it catches a catalog typo before anyone downloads 539 MB.
+//! - `pinned_urls_match_hugging_face`: a HEAD of every single-file model's URL (the GGUF files,
+//!   offered or bench only). Tiny requests, no body: it catches a catalog typo before anyone
+//!   downloads 539 MB.
 //! - `downloads_whisper_base_en`: a real `download()` of the smallest offered model (85 MB) into
 //!   a temporary folder, deleted afterwards. Redirect, CDN, sha256 and activation, end to end.
 
@@ -31,7 +32,7 @@ fn pinned_urls_match_hugging_face() {
     if !enabled("pinned_urls_match_hugging_face") {
         return;
     }
-    for m in models::offered() {
+    for m in models::catalog().iter().filter(|m| m.sha256.is_some()) {
         // curl is fine in a dev-only test; it doesn't follow the redirect, so no body moves.
         let out = std::process::Command::new("/usr/bin/curl")
             .args(["--silent", "--show-error", "--head", "--max-time", "30", m.download_url])
