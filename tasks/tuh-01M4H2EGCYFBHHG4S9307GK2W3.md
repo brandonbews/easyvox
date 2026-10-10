@@ -18,6 +18,8 @@ Acceptance: the exact NVIDIA sentence with a working link appears for Parakeet U
 Pointers: crates/easyvox-core/src/models.rs; crates/easyvox-app/src/settings.rs.
 
 
+Decided by Brandon 2026-10-10: Parakeet Unified leaves the app (bench-only; see 'Drop Parakeet Unified from the app'), so no NVIDIA agreement line or notice is needed in the app. No upstream issue to handy-computer about its Unified license tag. Defaults taken (orchestrator, per the plan's recommendations): an About/Acknowledgements view lists every offered model; write a LICENSE.txt next to each downloaded model; show Whisper base.en as Apache-2.0 (its Hugging Face card and GGUF metadata). v2 needs the modification note (converted to GGUF and quantized to Q5_K_M by handy-computer, with the repo link) per CC BY 4.0 s3(a)(1)(B). Bundled code: generate third-party notices with cargo-about into the .app (covers ggml, miniz, Lucide icons; option-ext is MPL-2.0: list with a source link).
+
 ---
 LICENSE PLAN (2026-10-10, read-only research agent; not legal advice; Brandon's answers get recorded above this line)
 
@@ -447,5 +449,9 @@ SQLite, the Rust std, and the YaRN and Mozilla snippets.
 ## History
 
 ### 2026-10-10 12:20 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-10 14:56 UTC — edit by `brandon`
 
 description edited

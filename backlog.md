@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 14 ready · 2 blocked · 15 on hold · 9 inbox · 17 done · 0 cancelled
+0 in progress · 15 ready · 2 blocked · 15 on hold · 9 inbox · 17 done · 0 cancelled
 
 ## In progress
 
@@ -12,6 +12,7 @@ _None._
 |---|---|---:|---|
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-br58`](tasks/tuh-01M4H2EG9QB2ETECD30F9RBR58.md) | Onboarding: Microphone and Accessibility, default model download, shader warm-up | 1 | `onboarding` `app` |
+| [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) | Drop Parakeet Unified from the app (keep it bench-only) | 1 | `models` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) | Settings: click-to-download the alternative models | 2 | `models` `app` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
