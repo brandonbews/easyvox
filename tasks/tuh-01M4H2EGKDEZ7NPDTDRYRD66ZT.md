@@ -17,6 +17,10 @@ Acceptance: the config validates on GitHub (Insights → Dependency graph → De
 
 Constraints: every Dependabot PR runs CI on macOS, which bills at 10× while the repo is private (tuh-01M4H2EG5RQG3TVM45KP1CVCQS). Keep the schedule monthly and grouped unless the repo goes public.
 
+Finding (2026-10-10, agent): added .github/dependabot.yml: github-actions ecosystem, directory /, monthly, one group (patterns ["*"]) so each run opens one PR. Dependabot updates a SHA pin and its `# vX.Y.Z` comment together when the comment names the release, as ci.yml's do. Checked locally: it parses (Ruby's YAML) and passes the Dependabot schema (check-jsonschema 0.36.2, --builtin-schema vendor.dependabot), which does reject a bad interval. Still to check after it's pushed: Insights -> Dependency graph -> Dependabot shows it, and the first grouped PR bumps a pin and its comment.
+
 ## History
 
-_No activity yet._
+### 2026-10-10 20:38 UTC — edit by `brandon`
+
+description edited
