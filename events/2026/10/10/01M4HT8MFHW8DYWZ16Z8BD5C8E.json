@@ -1,0 +1,1 @@
+{"actor":"brandon","data":{"depends_on":null,"description":"","labels":["engine"],"priority":null,"status":"inbox","title":"Pause finder: add a noise-floor term to quiet_level (floor + 6 dB) if louder rooms start forcing cuts"},"id":"01M4HT8MFHW8DYWZ16Z8BD5C8E","machine":"m-e24b618e","sig":null,"task":"tuh-01M4HT8MFHW8DYWZ16Z7JYK3K5","type":"task.created","v":3}

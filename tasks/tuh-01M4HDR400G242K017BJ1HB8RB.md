@@ -12,8 +12,10 @@
 Measure energy per minute of dictation on the same 5-min recording (real voice if available, else the long TTS clips): (P0) today's ggml-Metal with the idle fix, plus a cheaper preview; (P1) Parakeet encoder on the ANE via the glimpse-hq transcribe.cpp fork (coreml feature); (P2) FluidAudio CLI as a pure Core ML reference; (P3) Apple SpeechAnalyzer via a small Swift script. Tools without sudo: macmon pipe (brew), top -stats idlew,power, rusage v6 ri_energy_nj. Rule: move Parakeet to Core ML/ANE (pure-Rust objc2-core-ml adapter, ~2 weeks) only if it at least halves energy per minute. Research: ane-research artifact https://claude.ai/artifact/FdvUCLeFA2pd35qhy1k8dS
 
 
+Decided by Brandon 2026-10-09: (1) "halves" is measured against the best GPU setup of equal accuracy and speed (e.g. the same short windows), not today's settings; (2) uv is installed (Homebrew, uv 0.12.24) for the coremltools conversion; macmon 0.9.0 is installed too.
+
 ---
-RUNBOOK (2026-10-09, read-only research agent; scripts are in its appendix; user answers to its open questions get recorded above this line)
+RUNBOOK (2026-10-09, read-only research agent; scripts are in its appendix)
 
 # Energy spike plan: GPU vs cheaper preview vs Neural Engine
 
@@ -1136,5 +1138,9 @@ print("scrubbed %d files" % n)
 ## History
 
 ### 2026-10-10 01:28 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-10 02:28 UTC — edit by `brandon`
 
 description edited

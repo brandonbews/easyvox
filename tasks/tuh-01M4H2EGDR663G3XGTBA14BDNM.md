@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGDR663G3XGTBA14BDNM`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `models` `bench`
 - **Depends on:** [`tuh-h9ae`](tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) (done)
@@ -20,6 +20,11 @@ Pointers: crates/easyvox-bench (`help`, `session`), docs/model-bench.md, testdat
 
 Constraints: bench on an otherwise idle machine; numbers only compare within one run.
 
+
+Done 2026-10-09 in 9a2e921 (docs/model-bench.md 'Real voice'). structured.wav (81 s, 3 runs): v2 WER 1.68 %, Unified 2.10 %, Whisper base.en 6.72 % (Canary 180M 11.76 %, footnote). First words ~0.5 s for all; final 0.37-0.42 s (v2). v2 used the least CPU (39 % vs 43-45 %). Real voice supports v2 as the default. Whisper is much worse on real voice (6.7 %) than on TTS clips (1.4 %). The EASYVOX_PK_CHUNK_MS run was skipped: that setting went away with native streaming.
+
 ## History
 
-_No activity yet._
+### 2026-10-10 02:28 UTC — edit by `brandon`
+
+description edited · status open→done
