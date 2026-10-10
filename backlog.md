@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 19 on hold · 9 inbox · 32 done · 0 cancelled
+0 in progress · 1 ready · 2 blocked · 19 on hold · 9 inbox · 33 done · 0 cancelled
 
 ## In progress
 
@@ -11,7 +11,6 @@ _None._
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
 | [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
-| [`tuh-8kk7`](tasks/tuh-01M4HDR425AX71RAQFA15Q8KK7.md) | Whisper base.en preview: heavy flicker and growing CPU | 3 | `engine` `models` |
 
 ## Blocked / waiting
 
@@ -86,6 +85,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-4p1s`](tasks/tuh-01M4HDR3Z8GQ7132ZNSN5Q4P1S.md) Skip preview passes when nothing new was heard
 - [`tuh-6htq`](tasks/tuh-01M4HDR40PA99G6HQDAN026HTQ.md) Test chunk cutting on real-voice long recordings; consider a VAD
 - [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) Add the long-dictation clip generator to testdata/
+- [`tuh-8kk7`](tasks/tuh-01M4HDR425AX71RAQFA15Q8KK7.md) Whisper base.en preview: heavy flicker and growing CPU
 - [`tuh-0jj5`](tasks/tuh-01M4HDR42WSW44E2TM6C940JJ5.md) Drop or use DecodeMode
 - [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) Make Parakeet TDT v2 the default model
 - [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) Widen the chunk-join slack so soft words at a cut aren't lost

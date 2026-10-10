@@ -2,7 +2,7 @@
 
 `tuh-01M4HDR425AX71RAQFA15Q8KK7`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 3
 - **Labels:** `engine` `models`
 - **Created:** 2026-10-09 22:50 UTC by `brandon`
@@ -18,8 +18,14 @@ Findings, 10 Oct 2026 (agent; uncommitted working tree on cd78c42, for review). 
 - Fix (general, every model): partials.rs LocalAgreement starts a pass's new words after its text copy of the confirmed words' end, searched near the time boundary (new Tuning key agreement_reach_words = 2, [advanced]; 0 = much as before). Whisper: revising updates 50-53 / 31 / 27 %, stalled passes -25 % ramble, -73..81 % TTS, lf_10m missing words 254 -> 23. v2: rule differs in 1 of 185 passes (logged side by side); numbers within run spread. Final text identical everywhere; read-aloud WER v2 1.68 %, Whisper 6.72 %, unchanged.
 - Gates 5/5 PASS, bundle + self-test PASS (33 checks). Remaining Whisper flicker on real voice is base.en hearing the same audio differently pass to pass: accepted as the small option's limit.
 
+Committed and pushed as fc7c60a after the orchestrator re-ran the 5 gates, bundle and self-test (33/33). Remaining Whisper flicker on real voice accepted as the small option's limit.
+
 ## History
 
 ### 2026-10-10 23:39 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 23:42 UTC — edit by `brandon`
+
+description edited · status open→done
