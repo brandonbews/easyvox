@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 8 ready · 2 blocked · 19 on hold · 9 inbox · 26 done · 0 cancelled
+0 in progress · 2 ready · 2 blocked · 19 on hold · 9 inbox · 32 done · 0 cancelled
 
 ## In progress
 
@@ -10,14 +10,8 @@ _None._
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
-| [`tuh-xbek`](tasks/tuh-01M4K8HZ2NA22EC4M7XF1RXBEK.md) | Flaky test: download range_ignored sometimes restarts from 0 | 2 | `tests` `downloads` |
 | [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
-| [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) | Quiet the gpui "RefCell already borrowed" error logged at every launch | 3 | `app` |
-| [`tuh-04zz`](tasks/tuh-01M4H2EGHS8QGWQCZ7TGRT04ZZ.md) | Check, and likely set, MACOSX_DEPLOYMENT_TARGET=26.0 in .cargo/config.toml | 3 | `build` |
-| [`tuh-y75b`](tasks/tuh-01M4H2EGJKYV58RHW70R9YY75B.md) | Future-incompat warning from the block 0.1.6 dependency | 3 | `deps` |
-| [`tuh-66zt`](tasks/tuh-01M4H2EGKDEZ7NPDTDRYRD66ZT.md) | Dependabot for the GitHub Actions SHA pins | 3 | `ci` `deps` |
 | [`tuh-8kk7`](tasks/tuh-01M4HDR425AX71RAQFA15Q8KK7.md) | Whisper base.en preview: heavy flicker and growing CPU | 3 | `engine` `models` |
-| [`tuh-0jj5`](tasks/tuh-01M4HDR42WSW44E2TM6C940JJ5.md) | Drop or use DecodeMode | 4 | `engine` `cleanup` |
 
 ## Blocked / waiting
 
@@ -84,16 +78,22 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-bdnm`](tasks/tuh-01M4H2EGDR663G3XGTBA14BDNM.md) Bench the model list on the real-voice clips
 - [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) Unload the speech model after a stretch of no use
 - [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) Idle wake-ups from ggml-metal's residency loop
+- [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) Quiet the gpui "RefCell already borrowed" error logged at every launch
+- [`tuh-04zz`](tasks/tuh-01M4H2EGHS8QGWQCZ7TGRT04ZZ.md) Check, and likely set, MACOSX_DEPLOYMENT_TARGET=26.0 in .cargo/config.toml
+- [`tuh-y75b`](tasks/tuh-01M4H2EGJKYV58RHW70R9YY75B.md) Future-incompat warning from the block 0.1.6 dependency
+- [`tuh-66zt`](tasks/tuh-01M4H2EGKDEZ7NPDTDRYRD66ZT.md) Dependabot for the GitHub Actions SHA pins
 - [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) Decide the default model: Parakeet TDT v2 or Unified
 - [`tuh-4p1s`](tasks/tuh-01M4HDR3Z8GQ7132ZNSN5Q4P1S.md) Skip preview passes when nothing new was heard
 - [`tuh-6htq`](tasks/tuh-01M4HDR40PA99G6HQDAN026HTQ.md) Test chunk cutting on real-voice long recordings; consider a VAD
 - [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) Add the long-dictation clip generator to testdata/
+- [`tuh-0jj5`](tasks/tuh-01M4HDR42WSW44E2TM6C940JJ5.md) Drop or use DecodeMode
 - [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) Make Parakeet TDT v2 the default model
 - [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) Widen the chunk-join slack so soft words at a cut aren't lost
 - [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) Make dictation light: tune the preview until the GPU mostly rests while talking
 - [`tuh-w7y9`](tasks/tuh-01M4JNRW9D3CBNF5X80JPWW7Y9.md) Show first words sooner: run the first preview pass early
 - [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) Drop Parakeet Unified from the app (keep it bench-only)
 - [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) Bench Parakeet TDT v3 on Brandon's voice
+- [`tuh-xbek`](tasks/tuh-01M4K8HZ2NA22EC4M7XF1RXBEK.md) Flaky test: download range_ignored sometimes restarts from 0
 
 ## Cancelled
 

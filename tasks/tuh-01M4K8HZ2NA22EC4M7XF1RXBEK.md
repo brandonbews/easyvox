@@ -2,7 +2,7 @@
 
 `tuh-01M4K8HZ2NA22EC4M7XF1RXBEK`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `tests` `downloads`
 - **Created:** 2026-10-10 15:57 UTC by `brandon`
@@ -14,6 +14,8 @@ crates/easyvox-core/tests/download.rs range_ignored failed once (2026-10-10, gat
 Second case, CI run 38071344577 on 0e90b9d (a docs/catalog commit): interrupted_every_time failed at download.rs:381, the resumes asked for Range 907700, not 1048576 (MIB). So the client had persisted only 907,700 bytes when the cut came. Likely cause for both: the test server cuts the connection with bytes still in flight (an abortive close / RST drops what the client hasn't read yet), so how much arrives before the cut depends on timing. Fix the test server (flush, then a graceful shutdown of the write side) and/or assert on what the client actually wrote (the resume offset from events) rather than the server's cut point.
 
 Finding (2026-10-10, agent): the loss is in NSURLSession, not the test server and not download.rs. Evidence: (1) a raw TcpStream client against the same server always got the full MiB and a clean EOF, even reading 500 ms late, so the server's close is already graceful (no RST); (2) shutdown(Write) + drain on the server lost bytes at the same rate as the plain close (8/300 vs 10/300 under load); (3) tracing the delegate showed it only ever received resumed_at bytes before -1005 "The network connection was lost": when a response ends before its Content-Length, NSURLSession drops what it had received but not yet handed to the delegate, more of it the busier the machine. download.rs already resumes from what it actually wrote, so it needs no change. Fix, in tests/download.rs only: a cut now holds the connection until the client has reported bytes (Server::saw, fed from the progress callback), so a resume always has something to resume from; interrupted_every_time asserts the last three requests start where the client got stuck (the last Reconnecting's done, > 0 and <= 1 MiB), not at the cut point. Stress (10 parallel niced test processes under 10 `yes`): old tests failed 9/100 (range_ignored at resumed_at > 0, interrupted_every_time stuck at 915424, and the other two cut tests), new tests passed 300/300. `cargo test -p easyvox-core --test download --locked`: 50/50 passes (20 idle, 20 under 10 `yes`, 10 under 20 `yes`).
+
+Done in 4053e54 (tests only; download.rs unchanged).
 
 ## History
 
@@ -32,3 +34,7 @@ description edited
 ### 2026-10-10 20:24 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 20:46 UTC — edit by `brandon`
+
+description edited · status open→done
