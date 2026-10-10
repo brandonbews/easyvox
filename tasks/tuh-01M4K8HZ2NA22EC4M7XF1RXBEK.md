@@ -11,8 +11,14 @@
 
 crates/easyvox-core/tests/download.rs range_ignored failed once (2026-10-10, gates run right after a long bench) at the assert resumed_at > 0 (line 518): the retry started from byte 0 instead of resuming. Passed on 3 reruns and in CI. Likely a race between the simulated cut at 1 MiB and the .part flush under load. Find the race; make the test deterministic rather than retrying it.
 
+Second case, CI run 38071344577 on 0e90b9d (a docs/catalog commit): interrupted_every_time failed at download.rs:381, the resumes asked for Range 907700, not 1048576 (MIB). So the client had persisted only 907,700 bytes when the cut came. Likely cause for both: the test server cuts the connection with bytes still in flight (an abortive close / RST drops what the client hasn't read yet), so how much arrives before the cut depends on timing. Fix the test server (flush, then a graceful shutdown of the write side) and/or assert on what the client actually wrote (the resume offset from events) rather than the server's cut point.
+
 ## History
 
 ### 2026-10-10 18:17 UTC — edit by `brandon`
 
 status inbox→open
+
+### 2026-10-10 19:51 UTC — edit by `brandon`
+
+description edited
