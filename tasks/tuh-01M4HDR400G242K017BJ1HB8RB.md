@@ -2,9 +2,10 @@
 
 `tuh-01M4HDR400G242K017BJ1HB8RB`
 
-- **Status:** open — ready
+- **Status:** open — blocked on dependencies
 - **Priority:** 2
 - **Labels:** `engine` `perf` `energy` `spike`
+- **Depends on:** [`tuh-z7dr`](tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) (open)
 - **Created:** 2026-10-09 22:50 UTC by `brandon`
 
 ## Description
@@ -1144,3 +1145,7 @@ description edited
 ### 2026-10-10 02:28 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 02:52 UTC — edit by `brandon`
+
+depends_on +tuh-z7dr
