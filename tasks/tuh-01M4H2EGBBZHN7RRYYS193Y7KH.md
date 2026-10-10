@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGBBZHN7RRYYS193Y7KH`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `overlay`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -19,8 +19,14 @@ Pointers: crates/easyvox-app/src/overlay.rs, controller.rs (sync_system_appearan
 
 Implemented 2026-10-10 (implementation agent; DESIGN.md "Light and dark"): a light/dark pair of palettes in crates/easyvox-app/src/overlay.rs, read from the app's live appearance at each draw and redrawn when the overlay window's appearance changes. Worst-case WCAG contrast (pill composited over black or white): confirmed text 14.5:1 dark, 13.6:1 light; provisional 5.5:1 dark (was 4.2:1, under AA, before), 5.1:1 light; unit test computes them. The self-test flips EasyVox's own NSApp appearance mid-dictation (never the system's) and checks the overlay redraws itself in the right palette both ways. Still to see by eye: a real System Settings switch with the overlay up.
 
+Done in b9dd9fb. Level meter at ~15/s, sent only on visible change; shared loudness with the SpeechDetector (core level.rs); NoInput for no frames or early digital silence. Light/dark pairs read per draw, WCAG AA unit test. A/B (ramble replay, overlay drawn, screen locked): meter off 10.99 % CPU / 35.5 J/min, 15/s 11.29 % / 35.4, 30/s 11.42 % / 42.8. On-screen compositing cost unmeasured (hands-on). Self-test 33/33.
+
 ## History
 
 ### 2026-10-10 19:46 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 19:51 UTC — edit by `brandon`
+
+description edited · status open→done

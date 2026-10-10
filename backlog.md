@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 10 ready · 2 blocked · 18 on hold · 9 inbox · 24 done · 0 cancelled
+0 in progress · 8 ready · 2 blocked · 19 on hold · 9 inbox · 26 done · 0 cancelled
 
 ## In progress
 
@@ -10,8 +10,6 @@ _None._
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
-| [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
-| [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
 | [`tuh-xbek`](tasks/tuh-01M4K8HZ2NA22EC4M7XF1RXBEK.md) | Flaky test: download range_ignored sometimes restarts from 0 | 2 | `tests` `downloads` |
 | [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
 | [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) | Quiet the gpui "RefCell already borrowed" error logged at every launch | 3 | `app` |
@@ -52,6 +50,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-94ns`](tasks/tuh-01M4K926MM34Y3SX6H399294NS.md) | Hands-on: 'Didn't catch anything' on silence, and quick first words | 2 | `human` `hands-on` |
 | [`tuh-tqbf`](tasks/tuh-01M4KF1V8BMQ8SGXH92HDSTQBF.md) | Hands-on: Settings Models page, downloads, and About | 1 | `human` `hands-on` |
 | [`tuh-8fhp`](tasks/tuh-01M4KGHG3AMCQVBMYVQEJB8FHP.md) | Hands-on: first-launch onboarding from a clean slate | 1 | `human` `hands-on` |
+| [`tuh-qjqs`](tasks/tuh-01M4KNXEYGGE3QSN96GHNXQJQS.md) | Hands-on: overlay level meter, 'Can't hear you', live light/dark | 2 | `human` `hands-on` |
 
 ## Inbox
 
@@ -74,10 +73,12 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) Hands-on: record a few real-voice clips for benching
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
 - [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
+- [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) Core: TranscriptEvent::Level, and a level meter in the overlay
 - [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) Skip the final pass when a recording has no speech
 - [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) Core: download a model in the app — download, sha256 verify, activate
 - [`tuh-br58`](tasks/tuh-01M4H2EG9QB2ETECD30F9RBR58.md) Onboarding: Microphone and Accessibility, default model download, shader warm-up
 - [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) Settings: click-to-download the alternative models
+- [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) Overlay: follow the system light/dark appearance
 - [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) Settings file: ~/.config/easyvox/config.toml, applied live
 - [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified)
 - [`tuh-bdnm`](tasks/tuh-01M4H2EGDR663G3XGTBA14BDNM.md) Bench the model list on the real-voice clips

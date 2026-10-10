@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG7A8NGQH489P244AEBA`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `engine` `overlay`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -31,8 +31,14 @@ Measured 2026-10-10 (implementation agent; details in docs/model-bench.md "Level
 - 30 ticks/s (33 ms), drawn: 42.8 J/min, app CPU 11.42 % (+0.43 points); moved 10.9 times/s.
 Not measured: the screen was locked, so GPUI presented no frames; the GPU's and WindowServer's share of on-screen drawing still needs a person at an unlocked screen (same replay command without --draw, plus macmon).
 
+Done in b9dd9fb. Level meter at ~15/s, sent only on visible change; shared loudness with the SpeechDetector (core level.rs); NoInput for no frames or early digital silence. Light/dark pairs read per draw, WCAG AA unit test. A/B (ramble replay, overlay drawn, screen locked): meter off 10.99 % CPU / 35.5 J/min, 15/s 11.29 % / 35.4, 30/s 11.42 % / 42.8. On-screen compositing cost unmeasured (hands-on). Self-test 33/33.
+
 ## History
 
 ### 2026-10-10 19:46 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 19:51 UTC — edit by `brandon`
+
+description edited · status open→done
