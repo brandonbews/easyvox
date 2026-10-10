@@ -33,12 +33,12 @@ Problems show under **Settings → General → Settings file**, and in the log (
 
 ## Loudness is in decibels
 
-Six keys say how loud is "quiet" or "speech": `gate_quiet_db` and `pause_quiet_db` compare with your own speech, `speech_above_noise_db` with the room, and `gate_silence_dbfs`, `pause_silence_dbfs` and `speech_loud_dbfs` with the loudest sound a microphone can record.
+Six keys say how loud is "quiet" or "speech": `gate_quiet_db` and `pause_quiet_db` compare with your own speech, `speech_above_noise_db` with the room, and `gate_silence_dbfs`, `pause_silence_dbfs` and `speech_loud_dbfs` with the loudest sound a microphone can record. Two more measure spans of loudness for the overlay's level meter: `meter_range_db`, how far over the line where speech starts a sound fills the meter, and `meter_step_db`, the smallest change it shows.
 
 - **dB** (`_db`) is relative to another level. -20 dB is a tenth of it, -6 dB about half, 0 dB the same, and 20 dB ten times it.
 - **dBFS** (`_dbfs`) is relative to full scale, the loudest a sample can be (0 dBFS). In the recordings EasyVox was tuned on (AirPods in an office), speech is about -17 dBFS and the room about -50 dBFS.
 
-The `_dbfs` keys are always 0 or below, and so are the two `_quiet_db` keys; `speech_above_noise_db` is 0 or above, since speech is louder than the room. Closer to 0 dBFS means louder. Before October 2026 the `gate_*` and `pause_*` levels were linear (0.1 and 0.0018); the defaults moved to -20 dB and -55 dBFS, and behave the same on every test clip.
+The `_dbfs` keys are always 0 or below, and so are the two `_quiet_db` keys; `speech_above_noise_db` and the two `meter_*_db` keys are 0 or above, since speech is louder than the room. Closer to 0 dBFS means louder. Before October 2026 the `gate_*` and `pause_*` levels were linear (0.1 and 0.0018); the defaults moved to -20 dB and -55 dBFS, and behave the same on every test clip.
 
 ## Examples
 
@@ -81,6 +81,14 @@ speech_above_noise_db = 3
 speech_loud_dbfs = -45
 ```
 
+The level meter in the overlay moves about 15 times a second at most, and only when your voice changes its level visibly. A smoother meter, 30 times a second, for a little more CPU (0.43 % of a core instead of 0.3 %); and a microphone that takes longer than a second and a half to wake up, which would otherwise show "Can't hear you" for a moment at the start:
+
+```toml
+[advanced]
+meter_interval_ms = 33
+meter_no_input_ms = 3000
+```
+
 ## Every key
 
 Each key, at its default, with its unit, its range and what raising or lowering it trades off. The app prints the same text: `easyvox --print-default-config` (in a build, `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config`; from source, `cargo run -p easyvox-app -- --print-default-config`). A test keeps this page in step with the code.
@@ -92,8 +100,8 @@ Each key, at its default, with its unit, its range and what raising or lowering 
 # change: anything you leave out follows the default, so a release that improves one reaches
 # you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
 # that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
-# save it: the [advanced] numbers for the live preview, the chunks and the pauses from your
-# next dictation, the same for every model.
+# save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
+# meter from your next dictation, the same for every model.
 
 # The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them
 # default or alternative). Settings → Models downloads it, and the next dictation uses it.
@@ -112,8 +120,8 @@ keep_model_loaded = false
 
 [advanced]
 # Settings the window doesn't show: how long the overlay stays up and the model stays
-# loaded, then the numbers behind the live preview, the chunks, and what counts as
-# speech or a pause.
+# loaded, then the numbers behind the live preview, the chunks, what counts as speech
+# or a pause, and the overlay's level meter.
 
 # How long EasyVox keeps the speech model in memory after your last dictation, unless
 # "Keep model loaded" is on. Freeing it takes the app from about 670 MB to about
@@ -303,4 +311,44 @@ pause_quiet_db = -20
 # loud frames around it.
 # In dBFS (decibels relative to full scale), from -120 to 0.
 pause_silence_dbfs = -55
+
+# Level meter: how often the overlay's level indicator can move while you hold the
+# key, at most (66 is about 15 times a second). It only moves when the level changed
+# by `meter_step_db`, so in silence it doesn't redraw at all; on real speech it moved
+# about 7 times a second, for 0.3 % of a CPU core. Lower looks smoother but wakes the
+# app and redraws the overlay more often (33, 30 a second, moved it 11 times a second
+# for 0.43 %); higher is lighter and jerkier. 0 turns the meter off, and with it the
+# "can't hear you" state (for comparisons).
+# In milliseconds, from 0 to 1000.
+meter_interval_ms = 66
+
+# Level meter: how fast it falls back after a loud moment (the time it takes to fall
+# about two-thirds of the way). It rises at once. Lower follows each syllable more
+# closely and flickers more; higher looks calmer but lags behind your pauses.
+# In milliseconds, from 0 to 5000.
+meter_release_ms = 150
+
+# Level meter: how far above the speech detector's line (`speech_above_noise_db` over
+# the room, or `speech_loud_dbfs`) a sound fills the meter. The meter rests flat on
+# anything under that line, so room noise doesn't move it. Lower fills it sooner (a
+# normal voice pins it at the top); higher leaves soft voices barely moving it.
+# In dB (relative to another level), from 6 to 96.
+meter_range_db = 36
+
+# Level meter: the smallest change worth showing. Smaller changes aren't sent to the
+# overlay, so it doesn't redraw for them. 2 is a little under a point of the tallest
+# bar.
+# Lower moves more finely, for more redraws; higher moves in coarser steps.
+# In dB (relative to another level), from 0 to 20.
+meter_step_db = 2
+
+# "Can't hear you": the overlay says so once no audio has reached EasyVox for this
+# long, which is not the same as quiet audio. That's when the microphone delivers
+# nothing, or only digital silence (exact zeros, as a muted or blocked input gives)
+# before it has delivered any sound; once it has, zeros count as quiet (some
+# microphones send them in pauses). Lower warns sooner, but a Bluetooth headset, which
+# can start with about a second of zeros, may flash it; higher lets you talk longer
+# into a dead microphone.
+# In milliseconds, from 100 to 60000.
+meter_no_input_ms = 1500
 ```

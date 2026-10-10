@@ -31,6 +31,8 @@ fn main() -> anyhow::Result<()> {
                 break;
             }
             TranscriptEvent::Error(e) => eprintln!("error: {e}"),
+            TranscriptEvent::NoInput(true) => eprintln!("can't hear the input"),
+            TranscriptEvent::Level(_) | TranscriptEvent::NoInput(false) => {}
         }
     }
     Ok(())

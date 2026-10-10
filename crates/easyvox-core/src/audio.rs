@@ -5,6 +5,7 @@
 //! permission is granted, so ask with [`request_mic_permission`] first.
 
 use crate::SAMPLE_RATE;
+use crate::pause::FrameLevels;
 use anyhow::{Context, bail};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -12,10 +13,14 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-/// Audio shared between the capture thread and the session worker.
+/// Audio shared between the capture thread, the session worker and the level meter.
 #[derive(Default)]
 pub(crate) struct SharedAudio {
     pub samples: Mutex<Vec<f32>>,
+    /// The loudness of `samples`, 30 ms frame by frame, measured once as they arrive. Speech
+    /// detection and the level meter read it; it has a lock of its own, so the meter never
+    /// waits on the worker copying audio out of `samples`.
+    pub levels: Mutex<FrameLevels>,
     pub cv: Condvar,
     /// The source ran out (WAV ended) or capture stopped.
     pub done: AtomicBool,
@@ -32,6 +37,7 @@ impl SharedAudio {
             self.peak_bits.store(peak.to_bits(), Ordering::Relaxed);
         }
         self.callbacks.fetch_add(1, Ordering::Relaxed);
+        self.levels.lock().unwrap().push(chunk);
         self.samples.lock().unwrap().extend_from_slice(chunk);
         self.cv.notify_all();
     }

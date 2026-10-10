@@ -2,7 +2,9 @@
 //! ([`SpeechDetector`]), where to cut a long recording into chunks (see `chunks.rs`), and
 //! whether anything was said since the last preview pass ([`SpeechGate`]).
 //!
-//! Energy-based for now, on the levels of 30 ms frames. A pause is a run of quiet frames, and a
+//! Energy-based for now, on the levels of 30 ms frames. The recording's own frame levels are
+//! measured once, as the audio arrives ([`FrameLevels`]): speech detection and the input level
+//! meter (`level.rs`) both read them. A pause is a run of quiet frames, and a
 //! frame is quiet when its level is well under the loud frames around it (their 90th
 //! percentile), or under a silence level whatever the level around. By default that's 20 dB
 //! under, or under about -55 dBFS (see [`Tuning`]'s `pause_*` and `gate_*` fields). Speech is
@@ -15,11 +17,48 @@ use crate::tuning::{Tuning, db_to_linear};
 use std::ops::Range;
 
 /// Frame length, in ms: the resolution levels are measured at.
-const FRAME_MS: usize = 30;
-const FRAME: usize = SAMPLE_RATE as usize * FRAME_MS / 1000;
+pub(crate) const FRAME_MS: usize = 30;
+pub(crate) const FRAME: usize = SAMPLE_RATE as usize * FRAME_MS / 1000;
 
 fn frame_levels(pcm: &[f32]) -> Vec<f32> {
     pcm.chunks(FRAME).map(|c| (c.iter().map(|x| x * x).sum::<f32>() / c.len() as f32).sqrt()).collect()
+}
+
+/// A recording's loudness, frame by frame: the RMS level of each whole 30 ms frame, from its
+/// first sample. The capture thread measures each sample once, as it arrives
+/// (`audio::SharedAudio::push`), so the speech detector and the level meter share one
+/// measurement, and neither goes over the audio again. A frame's level is exactly what
+/// `frame_levels` gives for it.
+#[derive(Debug, Default)]
+pub(crate) struct FrameLevels {
+    levels: Vec<f32>,
+    /// The sum of squares and the number of samples of the frame in progress.
+    sum: f32,
+    partial: usize,
+}
+
+impl FrameLevels {
+    /// Adds the next samples of the recording.
+    pub(crate) fn push(&mut self, pcm: &[f32]) {
+        for x in pcm {
+            self.sum += x * x;
+            self.partial += 1;
+            if self.partial == FRAME {
+                self.levels.push((self.sum / FRAME as f32).sqrt());
+                (self.sum, self.partial) = (0.0, 0);
+            }
+        }
+    }
+
+    /// The level of every whole frame so far.
+    pub(crate) fn levels(&self) -> &[f32] {
+        &self.levels
+    }
+
+    /// Samples pushed so far, the frame in progress included.
+    pub(crate) fn samples(&self) -> usize {
+        self.levels.len() * FRAME + self.partial
+    }
 }
 
 /// The level of the loud frames: their 90th percentile (0 if there are none).
@@ -101,9 +140,9 @@ impl SpeechGate {
 
 /// Frames at or under this level (-100 dBFS) are digital silence, not the room: a Bluetooth
 /// microphone can start with a stretch of zeros.
-const DIGITAL_SILENCE: f32 = 1e-5;
+pub(crate) const DIGITAL_SILENCE: f32 = 1e-5;
 /// The room's level counts once this many frames (0.3 s) of it were heard.
-const MIN_ROOM_FRAMES: usize = 10;
+pub(crate) const MIN_ROOM_FRAMES: usize = 10;
 
 /// Whether a recording holds speech, and where it starts (the `speech_*` fields of [`Tuning`]).
 /// Until a recording holds speech the session decodes nothing, so silence or room noise gives
@@ -114,16 +153,15 @@ const MIN_ROOM_FRAMES: usize = 10;
 /// or louder than `speech_loud_dbfs` whatever the room, and never at or under
 /// `gate_silence_dbfs`. The room is the recording's quietest frames, their 10th percentile,
 /// leaving out digital silence; until 0.3 s of it was heard, only `speech_loud_dbfs` counts.
-/// Every check reads the whole recording again against the room measured so far, so a guess
-/// made from the first few frames can't stick.
+/// Every check reads the whole recording's [`FrameLevels`] again against the room measured so
+/// far, so a guess made from the first few frames can't stick. The level meter shows loudness
+/// against the same line ([`speech_level`](Self::speech_level)), so it rests flat on the room.
 pub(crate) struct SpeechDetector {
     above_room: f32,
     loud: f32,
     silence: f32,
     /// Frames of speech needed in a row; 0 takes every recording as speech.
     min_frames: usize,
-    /// The level of every whole frame so far.
-    levels: Vec<f32>,
 }
 
 impl SpeechDetector {
@@ -133,23 +171,18 @@ impl SpeechDetector {
             loud: db_to_linear(t.speech_loud_dbfs),
             silence: db_to_linear(t.gate_silence_dbfs),
             min_frames: (t.speech_min_ms as usize).div_ceil(FRAME_MS),
-            levels: Vec::new(),
         }
     }
 
-    /// Where speech starts in `pcm`, the recording so far (a sample offset), or `None` if it
-    /// holds none yet. Call it again as the recording grows: only the new frames are measured.
-    pub(crate) fn onset(&mut self, pcm: &[f32]) -> Option<usize> {
+    /// Where speech starts in a recording whose frames have these `levels` (a sample offset),
+    /// or `None` if it holds none yet. Call it again as the recording grows.
+    pub(crate) fn onset(&self, levels: &[f32]) -> Option<usize> {
         if self.min_frames == 0 {
             return Some(0);
         }
-        let (measured, whole) = (self.levels.len() * FRAME, pcm.len() / FRAME * FRAME);
-        if whole > measured {
-            self.levels.extend(frame_levels(&pcm[measured..whole]));
-        }
-        let speech = self.speech_level();
+        let speech = self.speech_level(levels);
         let mut run = 0;
-        for (i, level) in self.levels.iter().enumerate() {
+        for (i, level) in levels.iter().enumerate() {
             run = if *level > speech { run + 1 } else { 0 };
             if run == self.min_frames {
                 return Some((i + 1 - run) * FRAME);
@@ -158,9 +191,10 @@ impl SpeechDetector {
         None
     }
 
-    /// Frames louder than this are speech.
-    fn speech_level(&self) -> f32 {
-        let mut room: Vec<f32> = self.levels.iter().copied().filter(|level| *level > DIGITAL_SILENCE).collect();
+    /// Frames louder than this (a linear RMS level) are speech, in a recording whose frames have
+    /// these `levels`.
+    pub(crate) fn speech_level(&self, levels: &[f32]) -> f32 {
+        let mut room: Vec<f32> = levels.iter().copied().filter(|level| *level > DIGITAL_SILENCE).collect();
         let above_room = if room.len() >= MIN_ROOM_FRAMES {
             let k = room.len() / 10;
             *room.select_nth_unstable_by(k, f32::total_cmp).1 * self.above_room
@@ -345,10 +379,18 @@ pub(crate) mod tests {
     }
 
     /// Feeds `pcm` to a speech detector every 100 ms, as the session does before the first
-    /// preview pass, and returns the onset (seconds) each check found.
+    /// preview pass (its levels measured as they arrive, in 20 ms pieces like a WAV replay), and
+    /// returns the onset (seconds) each check found.
     fn onsets(t: &Tuning, pcm: &[f32]) -> Vec<Option<f32>> {
-        let mut speech = SpeechDetector::new(t);
-        (1..=pcm.len() / (SR / 10)).map(|i| speech.onset(&pcm[..i * SR / 10]).map(|at| at as f32 / SR as f32)).collect()
+        let speech = SpeechDetector::new(t);
+        let mut levels = FrameLevels::default();
+        pcm.chunks(SR / 50)
+            .enumerate()
+            .filter_map(|(i, piece)| {
+                levels.push(piece);
+                ((i + 1) % 5 == 0).then(|| speech.onset(levels.levels()).map(|at| at as f32 / SR as f32))
+            })
+            .collect()
     }
 
     /// Where the detector finds speech once it has heard all of `pcm`, checking as it goes.
@@ -406,6 +448,19 @@ pub(crate) mod tests {
     fn speech_min_ms_zero_takes_every_recording_as_speech() {
         let t = Tuning { speech_min_ms: 0, ..Tuning::default() };
         assert_eq!(onsets(&t, &audio(&[(0.5, 0.0)])).last(), Some(&Some(0.0)));
+    }
+
+    #[test]
+    fn frame_levels_measured_as_audio_arrives_match_the_whole_recording() {
+        let pcm = audio(&[(0.5, 0.0), (0.4, 0.007), (0.7, 0.3)]);
+        let mut levels = FrameLevels::default();
+        // Pieces that don't line up with frames, as a microphone delivers them.
+        for piece in pcm.chunks(441) {
+            levels.push(piece);
+        }
+        let whole = pcm.len() / FRAME * FRAME;
+        assert_eq!(levels.levels(), frame_levels(&pcm[..whole]));
+        assert_eq!(levels.samples(), pcm.len());
     }
 
     #[test]

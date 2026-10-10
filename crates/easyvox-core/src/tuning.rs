@@ -1,6 +1,6 @@
 //! Every number that shapes how dictation feels or what it costs, in one place: how often the
 //! preview re-decodes and how much, how long dictations are cut into chunks and joined again,
-//! and what counts as speech or a pause.
+//! what counts as speech or a pause, and how the input level meter moves.
 //!
 //! The defaults here are the single source of truth: the settings file (`[advanced]`) or a
 //! benchmark overrides single fields and leaves the rest alone, so a default can change in a
@@ -110,7 +110,8 @@ macro_rules! tunables {
 
 tunables! {
     /// The pipeline's tuning: the live preview, the chunks polished while you talk, how they're
-    /// joined, and how speech and pauses are found. See the module docs for the units.
+    /// joined, how speech and pauses are found, and the input level meter. See the module docs
+    /// for the units.
     ///
     /// Build it with `Tuning::default()` and change fields, or by name with [`Tuning::set`];
     /// [`Tuning::validate`] puts out-of-range values back to their defaults.
@@ -235,6 +236,36 @@ tunables! {
         /// Pause finder: ...or at most this, so a stretch of pure silence counts even with no
         /// loud frames around it.
         pause_silence_dbfs: f32 = -55.0, -120.0..=0.0;
+        /// Level meter: how often the overlay's level indicator can move while you hold the
+        /// key, at most (66 is about 15 times a second). It only moves when the level changed
+        /// by `meter_step_db`, so in silence it doesn't redraw at all; on real speech it moved
+        /// about 7 times a second, for 0.3 % of a CPU core. Lower looks smoother but wakes the
+        /// app and redraws the overlay more often (33, 30 a second, moved it 11 times a second
+        /// for 0.43 %); higher is lighter and jerkier. 0 turns the meter off, and with it the
+        /// "can't hear you" state (for comparisons).
+        meter_interval_ms: u32 = 66, 0..=1_000;
+        /// Level meter: how fast it falls back after a loud moment (the time it takes to fall
+        /// about two-thirds of the way). It rises at once. Lower follows each syllable more
+        /// closely and flickers more; higher looks calmer but lags behind your pauses.
+        meter_release_ms: u32 = 150, 0..=5_000;
+        /// Level meter: how far above the speech detector's line (`speech_above_noise_db` over
+        /// the room, or `speech_loud_dbfs`) a sound fills the meter. The meter rests flat on
+        /// anything under that line, so room noise doesn't move it. Lower fills it sooner (a
+        /// normal voice pins it at the top); higher leaves soft voices barely moving it.
+        meter_range_db: f32 = 36.0, 6.0..=96.0;
+        /// Level meter: the smallest change worth showing. Smaller changes aren't sent to the
+        /// overlay, so it doesn't redraw for them. 2 is a little under a point of the tallest
+        /// bar.
+        /// Lower moves more finely, for more redraws; higher moves in coarser steps.
+        meter_step_db: f32 = 2.0, 0.0..=20.0;
+        /// "Can't hear you": the overlay says so once no audio has reached EasyVox for this
+        /// long, which is not the same as quiet audio. That's when the microphone delivers
+        /// nothing, or only digital silence (exact zeros, as a muted or blocked input gives)
+        /// before it has delivered any sound; once it has, zeros count as quiet (some
+        /// microphones send them in pauses). Lower warns sooner, but a Bluetooth headset, which
+        /// can start with about a second of zeros, may flash it; higher lets you talk longer
+        /// into a dead microphone.
+        meter_no_input_ms: u32 = 1_500, 100..=60_000;
     }
 }
 

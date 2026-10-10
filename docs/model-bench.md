@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk.
 
 ## Results
 
@@ -447,6 +447,38 @@ $B session --model parakeet-tdt-0.6b-v2-q5_k_m-gguf --wav testdata/punct_samanth
 # Silence: speech_onset_secs is null, partials.passes 0 and final_decode_ms about 0 when nothing was decoded.
 $B session --model whisper-base.en-q8_0-gguf --wav testdata/silence_2s.wav --out silence.json
 ```
+
+## Level meter
+
+Run at midday on 10 October 2026, same M4, for the overlay's level meter and its "can't hear you" state (`DESIGN.md`, "Overlay animation"). The bar: the meter mustn't undo [Lightness](#lightness).
+
+**What it does** (`crates/easyvox-core/src/level.rs`; its numbers are the `meter_*` fields of `Tuning`). While a dictation captures, a thread ticks every 66 ms. It reads the 30 ms frame levels the capture thread already measures for speech detection, and sends `TranscriptEvent::Level` only when the meter would move by 2 dB or more. The overlay redraws only when a bar changes by half a point. Nothing runs between dictations.
+
+**The runs.** The app itself, not the bench: `dist/EasyVox.app` (release build with the `self-test` feature) with `--self-test --replay recordings/ramble.wav`. It starts, loads Parakeet TDT v2, waits 5 s, dictates the 5-minute ramble in real time with the overlay up (a key press's path, with the file in place of the microphone), and quits after the final text. `macmon` ran around each run as in [Lightness](#lightness), in two rounds, the second in reverse order, each on a quiet machine. The Mac's screen was locked, so GPUI drew nothing on its own (views ask for a redraw, but no frame comes). The "drawn" rows draw the overlay at each redraw it asks for, as the next frame would: layout and paint, on the CPU. No row includes the GPU presenting the frame or WindowServer compositing it.
+
+| Setting | Energy per minute of dictation | Added power: all / GPU | GPU active | The app's CPU, share of one core | Meter moves / overlay redraws a second |
+|---|---:|---:|---:|---:|---:|
+| Meter off (`meter_interval_ms = 0`) | 35.5 J (33.6–37.4) | 0.59 / 0.51 W | 6.0 % | 10.99 % (10.93–11.05) | – / 0.6 |
+| Meter on, 15 a second (the default), not drawn | 38.1 J (37.2–39.0) | 0.63 / 0.51 W | 6.0 % | 11.07 % (11.03–11.12) | 7.2 / 7.9 |
+| **… drawn** | **35.4 J (35.3–35.5)** | **0.59 / 0.52 W** | **6.0 %** | **11.29 % (11.27–11.31)** | **7.2 / 7.9** |
+| 30 a second (`meter_interval_ms = 33`), drawn | 42.8 J (40.8–44.9) | 0.71 / 0.51 W | 6.1 % | 11.42 % (11.39–11.44) | 10.9 / 11.6 |
+
+- **The app's CPU is the measure to read.** It comes from the app's own CPU time (`getrusage`), so other processes don't touch it, and both runs of each setting agree within 0.1 points. Drawn at 15 a second, the meter adds 0.30 points of one core to the app's 11 % while you talk: 2.7 % more. Of that, 0.08 points are the meter itself (its thread, the events, the app waking for them) and 0.22 the drawing (about 0.3 ms a frame). At 30 a second it's 0.43 points (3.9 % more). 15 a second stays the default: cheaper, and whether 30 looks better needs a person at the screen.
+- **Energy doesn't show it.** The GPU's power is the same in every row (0.51 W), and so is DRAM's. The totals differ by the CPU rail, which swings by ±0.1 W with whatever else the Mac does (see [Lightness](#lightness)): the meter drawn at 15 a second came out at 35.4 J a minute against 35.5 J without it. Both runs at 30 a second were the highest of the eight (40.8 and 44.9 J), which may be a real cost of waking twice as often, but it's within that noise. The whole dictation, about 36 J a minute here, is in line with the 39 J of [Lightness](#lightness).
+- **How often it moves.** At 15 ticks a second the meter moved 7.2 times a second over the ramble, pauses included; at 30 ticks, 10.9 times. Most ticks send nothing: a steady voice or a pause doesn't move it by 2 dB. The text, for comparison, changes 0.6 times a second. A simulation of the same logic on the ramble's frame levels gave 7.7 and 11.7, and 9.3 at 20 ticks a second.
+- **Not measured: drawing on screen.** With the screen locked, the frames were never presented, so the GPU's and WindowServer's share of each redraw is missing. It's about 8 small frames a second (a 640 × 56 pill, five bars and a line of text), and only while you talk. Measuring it needs a person at an unlocked screen (the same command, without `--draw`; it's on the task).
+- **The bench runs the meter too.** `easyvox-bench session` sessions now include the meter's thread (not the overlay). `--set meter_interval_ms=0` gives the pipeline the sections above measured. From the agents' shell, timers are coalesced (a 66 ms sleep took about 190 ms), so a bench session there ticks the meter about 5 times a second, not 15.
+
+```sh
+# One run. The settings file says whether the meter is on: an empty file (the default, 66 ms),
+# or [advanced] meter_interval_ms = 0 (off) or 33 (30 a second). The app quits after the final text.
+macmon pipe -i 500 > run.jsonl & sleep 60
+open -W --env EASYVOX_CONFIG=$PWD/meter.toml dist/EasyVox.app \
+  --args --self-test --replay $PWD/recordings/ramble.wav --out $PWD/run.json   # add --draw to draw
+sleep 60; kill %1
+```
+
+- **Where the numbers come from:** `run.json` has the app's CPU (`cpu_pct_of_one_core`), the meter's levels (`levels_received`), the overlay's redraws (`redraws_asked`) and draws (`renders`), and the session's start and end (`start_unix_ms`, `end_unix_ms`), which cut `macmon`'s samples. Energy is computed as in [Lightness](#lightness).
 
 ## Limits of this bench
 

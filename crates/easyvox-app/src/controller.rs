@@ -161,6 +161,9 @@ pub struct Controller {
     /// Simulate ⌘V after copying the final text. The self-test turns it off: it must never
     /// type into other apps.
     pub auto_paste: bool,
+    /// Put the final text on the clipboard at all. The self-test's `--replay` turns it off: it
+    /// may replay a private recording, whose words must not land on the clipboard.
+    pub copy_final: bool,
 }
 
 impl Controller {
@@ -200,6 +203,7 @@ impl Controller {
             load_generation: Arc::default(),
             source_override: None,
             auto_paste: true,
+            copy_final: true,
         }
     }
 
@@ -381,10 +385,18 @@ impl Controller {
             TranscriptEvent::Error(e) => {
                 // The core still sends a Final after an error.
                 log::error!("session {seq}: {e}");
-                self.overlay.view.update(cx, |v, cx| {
-                    v.provisional = format!("  ⚠ {e}");
-                    cx.notify();
-                });
+                self.overlay.view.update(cx, |v, cx| v.set_note(format!("  ⚠ {e}"), cx));
+            }
+            // About 8 a second while you talk, none in silence: the overlay redraws only if a
+            // bar of its meter moves.
+            TranscriptEvent::Level(level) => self.overlay.view.update(cx, |v, cx| v.set_level(level, cx)),
+            TranscriptEvent::NoInput(cant_hear) => {
+                if cant_hear {
+                    log::warn!("session {seq}: can't hear the input (no audio, or only digital silence)");
+                } else {
+                    log::info!("session {seq}: hearing the input again");
+                }
+                self.overlay.view.update(cx, |v, cx| v.set_cant_hear(cant_hear, cx));
             }
         }
     }
@@ -398,7 +410,9 @@ impl Controller {
         }
         self.overlay.view.update(cx, |v, cx| v.set_final(text.clone(), cx));
         // The overlay never takes focus, so the app the user was typing in gets the ⌘V.
-        let result = if self.auto_paste {
+        let result = if !self.copy_final {
+            Ok(())
+        } else if self.auto_paste {
             easyvox_core::paste_text(&text)
         } else {
             easyvox_core::copy_to_clipboard(&text).map(|_| ())

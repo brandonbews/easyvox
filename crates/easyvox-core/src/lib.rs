@@ -22,6 +22,7 @@
 //!         TranscriptEvent::Partial { confirmed, provisional } => println!("{confirmed} [{provisional}]"),
 //!         TranscriptEvent::Final { text, .. } => { println!("{text}"); break; }
 //!         TranscriptEvent::Error(e) => eprintln!("{e}"),
+//!         TranscriptEvent::Level(_) | TranscriptEvent::NoInput(_) => {} // for a level meter
 //!     }
 //! }
 //! # drop(session);
@@ -44,6 +45,7 @@ pub mod audio;
 mod chunks;
 pub mod download;
 pub mod history;
+mod level;
 pub mod metrics;
 pub mod models;
 pub mod partials;
@@ -114,9 +116,24 @@ pub enum TranscriptEvent {
     /// Empty when the recording held no speech (silence or room noise; see [`Tuning`]'s
     /// `speech_*`): then nothing was decoded at all, the same for every model.
     Final { text: String, audio_secs: f32, finalize_ms: u32 },
-    /// A problem during the session (the mic delivered silence, a decode failed, ...).
+    /// A problem during the session (the model didn't load, a decode failed, ...).
     /// A `Final` still follows.
     Error(String),
+    /// How loud the input is now, for a level meter: 0 rests flat, 1 is full. It's the loudest
+    /// 30 ms of the latest `meter_interval_ms`, in decibels over the line where the speech
+    /// detector starts counting sound as speech (so room noise stays at 0), across
+    /// `meter_range_db`; it rises at once and falls back over `meter_release_ms` ([`Tuning`]).
+    ///
+    /// Sent only when it changed by at least `meter_step_db` (or reached 0 or 1), at most every
+    /// `meter_interval_ms` while the session captures: nothing in a steady room, so a UI can
+    /// redraw on each one. A last `Level(0.0)` follows when capture ends. None at all with
+    /// `meter_interval_ms` = 0.
+    Level(f32),
+    /// `true`: no audio has reached the session for `meter_no_input_ms` ("can't hear you"),
+    /// which is not the same as quiet audio. That's when no samples arrive, or, before the input
+    /// has delivered any sound, only digital silence (exact zeros, as a muted or blocked input
+    /// gives). `false`: audio arrives again. Sent on each change; off with the meter.
+    NoInput(bool),
 }
 
 /// Where audio comes from.

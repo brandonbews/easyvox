@@ -18,10 +18,19 @@
 //! writes to it or deletes from it; onboarding's download check reads the chosen model from it
 //! to serve on 127.0.0.1. Switching models needs a second offered model in it, or that check is
 //! skipped.
+//!
+//! Light and dark are checked by giving EasyVox its own appearance for a moment (as a system
+//! change would reach it), never by changing the system's.
+//!
+//! `--self-test --replay <wav> [--draw]` runs no checks: one real-time dictation of the file with
+//! the overlay up, then a JSON report of what it cost the app (CPU, redraws), for measuring the
+//! overlay (`docs/model-bench.md`, "Level meter"). `--draw` draws the overlay at each redraw it
+//! asks for, as GPUI does on screen but not while the screen is locked.
 
 use crate::controller::Controller;
 use crate::onboarding::{Busy, LaunchFacts, Onboarding, Problem, State, StepId};
 use crate::onboarding_window::{Permissions, chosen_model};
+use crate::overlay::CANT_HEAR;
 use crate::overlay::Mode;
 use crate::platform::{self, PanelState};
 use crate::settings::Page;
@@ -52,17 +61,23 @@ pub struct Options {
     out: PathBuf,
     /// Temporary folder for the history database; removed at the end.
     dir: PathBuf,
+    /// `--replay <wav>`: only replay this file, and report its cost; `--draw`: and draw the
+    /// overlay at each redraw it asks for, as the screen would.
+    replay: Option<PathBuf>,
+    draw: bool,
 }
 
 impl Options {
     /// `Some` when the command line has `--self-test` (and maybe `--out <file>`).
     pub fn from_args() -> Option<Self> {
         let mut args = std::env::args().skip(1);
-        let (mut enabled, mut out) = (false, None);
+        let (mut enabled, mut out, mut replay, mut draw) = (false, None, None, false);
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--self-test" => enabled = true,
                 "--out" => out = args.next().map(PathBuf::from),
+                "--replay" => replay = args.next().map(PathBuf::from),
+                "--draw" => draw = true,
                 _ => {} // e.g. -psn_… from LaunchServices
             }
         }
@@ -70,6 +85,8 @@ impl Options {
         enabled.then(|| Self {
             out: out.unwrap_or_else(|| tmp.join("easyvox-self-test.json")),
             dir: tmp.join(format!("easyvox-self-test-{}", std::process::id())),
+            replay,
+            draw,
         })
     }
 
@@ -113,6 +130,9 @@ impl Report {
 }
 
 async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp) {
+    if let Some(wav) = options.replay.clone() {
+        return replay(&controller, &options, &wav, cx).await;
+    }
     let started = Instant::now();
     let mut report = Report::default();
 
@@ -265,22 +285,44 @@ async fn dictation(
 
     let mut partials: Vec<(u128, String)> = vec![];
     let release_at = Duration::from_secs_f64((clip_secs - RELEASE_BEFORE_END).max(0.5));
+    let before = cx.update(|cx| overlay_counts(controller, cx));
+    let (mut max_level, mut cant_hear) = (0f32, false);
+    let mut appearance = None;
     while pressed.elapsed() < release_at {
         sleep(cx, 100).await;
-        let (mode, text) = cx.update(|cx| {
+        let (mode, text, level, no_input) = cx.update(|cx| {
             let view = controller.read(cx).overlay.view.read(cx);
-            (view.mode, view.text())
+            (view.mode, view.text(), view.level, view.cant_hear)
         });
+        (max_level, cant_hear) = (max_level.max(level), cant_hear || no_input);
         if mode == Mode::Live && partials.last().is_none_or(|(_, last)| *last != text) {
             partials.push((pressed.elapsed().as_millis(), text));
         }
+        if appearance.is_none() && pressed.elapsed() > Duration::from_secs(3) {
+            appearance = Some(light_and_dark(controller, cx).await);
+        }
     }
+    let after = cx.update(|cx| overlay_counts(controller, cx));
     report.check(
         "live text streams into the overlay",
         partials.len() >= 3,
         json!({"updates_seen": partials.len(), "first_ms": partials.first().map(|p| p.0),
                "last": partials.last().map(|p| &p.1)}),
     );
+    // Each level is one redraw at most, partials and the switches of appearance aside: the
+    // meter's rate caps them.
+    let interval = cx.update(|cx| cx.global::<AppSettings>().tuning.meter_interval_ms).max(1);
+    let (levels, redraws) = (after.0 - before.0, after.1 - before.1);
+    let cap = (release_at.as_secs_f64() * 1e3 / interval as f64) as u32 + partials.len() as u32 + 8;
+    report.check(
+        "the level meter moves with the voice and redraws only when it changes",
+        max_level > 0.5 && !cant_hear && levels > 0 && redraws <= cap && redraws <= levels + partials.len() as u32 + 8,
+        json!({"max_level": max_level, "cant_hear_seen": cant_hear, "levels_received": levels,
+               "redraws_asked": redraws, "redraws_cap": cap, "renders": after.2 - before.2,
+               "meter_interval_ms": interval}),
+    );
+    let (ok, detail) = appearance.unwrap_or((false, json!("the dictation ended before the switch")));
+    report.check("the overlay follows light and dark, live, mid-dictation", ok, detail);
 
     let status = platform::post_hotkey_event(hotkey_id, false);
     let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
@@ -390,14 +432,26 @@ async fn dictation_after_unload(
 /// A press with nothing said (the silent test clip): the core decodes nothing and sends empty
 /// text, so nothing is copied or saved, and the overlay says so, then hides.
 async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
-    cx.update(|cx| {
-        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join("silence_2s.wav")))
+    // The clip is digital silence, as a muted microphone gives: "can't hear you", sooner than
+    // the default so it shows within the press.
+    let no_input_ms = cx.update(|cx| {
+        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join("silence_2s.wav")));
+        std::mem::replace(&mut cx.global_mut::<AppSettings>().tuning.meter_no_input_ms, 600)
     });
     let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
     let clipboard_before = platform::clipboard_change_count();
     let pressed = platform::post_hotkey_event(hotkey_id, true);
     let started = wait_for(cx, Duration::from_secs(1), |cx| !controller.read(cx).is_idle()).await;
-    sleep(cx, 1500).await;
+    let before = cx.update(|cx| overlay_counts(controller, cx));
+    let cant_hear =
+        wait_for(cx, Duration::from_millis(1400), |cx| controller.read(cx).overlay.view.read(cx).cant_hear).await;
+    // Drawn as a person would see it (GPUI doesn't draw while the screen is locked).
+    let drawn = cx.update(|cx| draw_overlay(controller, cx));
+    let (max_level, during) = cx.update(|cx| {
+        let view = controller.read(cx).overlay.view.read(cx);
+        (view.level, overlay_counts(controller, cx))
+    });
+    sleep(cx, 1500u64.saturating_sub(started.unwrap_or(0) as u64 + cant_hear.unwrap_or(1400) as u64)).await;
     let released = platform::post_hotkey_event(hotkey_id, false);
     let finished = wait_for(cx, Duration::from_secs(5), |cx| controller.read(cx).is_idle()).await;
     let (mode, notice) = cx.update(|cx| {
@@ -412,8 +466,15 @@ async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut R
     let history_after = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
     let clipboard_after = platform::clipboard_change_count();
     cx.update(|cx| {
-        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join(format!("{CLIP}.wav"))))
+        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join(format!("{CLIP}.wav"))));
+        cx.global_mut::<AppSettings>().tuning.meter_no_input_ms = no_input_ms;
     });
+    report.check(
+        "digital silence: the meter rests flat and the overlay says it can't hear you",
+        cant_hear.is_some() && drawn && max_level == 0. && during.0 == before.0 && during.1 - before.1 <= 2,
+        json!({"cant_hear_after_ms": cant_hear, "says": CANT_HEAR, "drawn": drawn, "level": max_level,
+               "levels_received": during.0 - before.0, "redraws_asked": during.1 - before.1}),
+    );
     report.check(
         "silence pastes and saves nothing, and the overlay says so",
         pressed == 0
@@ -1212,6 +1273,98 @@ fn serve_file(
         }
     }
     // A cut: the connection closes here, short of the length announced.
+}
+
+/// Mid-dictation, as if the system switched to the other appearance and back: the overlay
+/// redraws on its own each time, in the right palette. EasyVox gets its own appearance for a
+/// moment (`platform::set_app_appearance`); the system's setting is never touched.
+async fn light_and_dark(controller: &Entity<Controller>, cx: &mut AsyncApp) -> (bool, Value) {
+    let system_dark =
+        cx.update(|cx| matches!(cx.window_appearance(), WindowAppearance::Dark | WindowAppearance::VibrantDark));
+    let mut steps = vec![];
+    // The other appearance, then back to following the system.
+    for (forced, dark) in [(Some(!system_dark), !system_dark), (None, system_dark)] {
+        let asked = cx.update(|cx| controller.read(cx).overlay.view.read(cx).redraws_asked);
+        let set = platform::set_app_appearance(forced);
+        let noticed =
+            wait_for(cx, Duration::from_secs(2), |cx| controller.read(cx).overlay.view.read(cx).redraws_asked > asked)
+                .await;
+        // GPUI doesn't draw while the screen is locked, so draw it here, as the next frame would.
+        let drawn = cx.update(|cx| draw_overlay(controller, cx));
+        let drawn_dark = cx.update(|cx| controller.read(cx).overlay.view.read(cx).drawn_dark);
+        let ok = set.is_ok() && noticed.is_some() && drawn && drawn_dark == Some(dark);
+        steps.push(json!({"app_appearance": forced.map(|d| if d { "dark" } else { "light" }).unwrap_or("system"),
+                          "set": set.err(), "redraw_asked_after_ms": noticed, "drawn": drawn,
+                          "drawn_dark": drawn_dark, "ok": ok}));
+    }
+    let ok = steps.iter().all(|s| s["ok"] == true);
+    (ok, json!({"system_dark": system_dark, "steps": steps}))
+}
+
+/// Draws the overlay now (GPUI doesn't draw while the screen is locked). False if it failed.
+fn draw_overlay(controller: &Entity<Controller>, cx: &mut App) -> bool {
+    let window = controller.read(cx).overlay.window;
+    window.update(cx, |_, window, cx| window.draw(cx).clear(cx)).is_ok()
+}
+
+/// The overlay's counters: levels received, redraws asked for, draws.
+fn overlay_counts(controller: &Entity<Controller>, cx: &App) -> (u32, u32, u32) {
+    let view = controller.read(cx).overlay.view.read(cx);
+    (view.levels, view.redraws_asked, view.renders)
+}
+
+/// `--replay <wav>`: one real-time dictation of `wav` with the overlay up, nothing else, then a
+/// report of what it cost the app: its CPU time and the overlay's redraws, with the wall-clock
+/// times of the session's start and end so `macmon`'s samples can be cut to it
+/// (`docs/model-bench.md`, "Level meter"). Whether the meter is on comes from the settings file
+/// (`meter_interval_ms = 0` turns it off).
+async fn replay(controller: &Entity<Controller>, options: &Options, wav: &Path, cx: &mut AsyncApp) {
+    let unix_ms = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+    let waited = wait_for(cx, Duration::from_secs(120), |cx| {
+        matches!(cx.global::<AppStatus>().engine, EngineStatus::Ready { .. })
+    })
+    .await;
+    let audio_secs = easyvox_core::audio::load_wav_16k_mono(wav)
+        .map_or(0., |pcm| pcm.len() as f64 / easyvox_core::SAMPLE_RATE as f64);
+    let mut out = json!({"wav": wav, "audio_secs": audio_secs, "model_ready_ms": waited});
+    if waited.is_some() && audio_secs > 0. {
+        // The file may be a private recording: its words stay off the clipboard.
+        cx.update(|cx| controller.update(cx, |c, _| c.copy_final = false));
+        if options.draw {
+            cx.update(|cx| {
+                let window = controller.read(cx).overlay.window;
+                controller.read(cx).overlay.view.clone().update(cx, |v, _| v.draw_each_redraw = Some(window));
+            });
+        }
+        // A moment for the load's after-effects to settle, as a person would take.
+        sleep(cx, 5000).await;
+        let before = cx.update(|cx| overlay_counts(controller, cx));
+        let (cpu0, start_ms, t0) = (easyvox_core::metrics::proc_stats().cpu_secs, unix_ms(), Instant::now());
+        cx.update(|cx| {
+            controller.update(cx, |c, cx| {
+                c.start_session(easyvox_core::AudioSource::WavReplay(wav.to_path_buf()), "replay", cx)
+            })
+        });
+        // The session ends by itself at the end of the file.
+        let finished =
+            wait_for(cx, Duration::from_secs_f64(audio_secs + 60.), |cx| controller.read(cx).is_idle()).await;
+        let (cpu, end_ms, wall) = (easyvox_core::metrics::proc_stats().cpu_secs - cpu0, unix_ms(), t0.elapsed());
+        let after = cx.update(|cx| overlay_counts(controller, cx));
+        let tuning = cx.update(|cx| cx.global::<AppSettings>().tuning);
+        out = json!({
+            "wav": wav, "audio_secs": audio_secs, "model_ready_ms": waited, "finished_ms": finished,
+            "start_unix_ms": start_ms, "end_unix_ms": end_ms, "wall_secs": wall.as_secs_f64(),
+            "cpu_secs": cpu, "cpu_pct_of_one_core": 100. * cpu / wall.as_secs_f64(),
+            "meter_interval_ms": tuning.meter_interval_ms, "draw_each_redraw": options.draw,
+            "levels_received": after.0 - before.0, "redraws_asked": after.1 - before.1, "renders": after.2 - before.2,
+        });
+    }
+    match std::fs::write(&options.out, serde_json::to_string_pretty(&out).unwrap_or_default()) {
+        Ok(()) => log::info!("self-test: replay report written to {}", options.out.display()),
+        Err(e) => log::error!("self-test: couldn't write {}: {e}", options.out.display()),
+    }
+    let _ = std::fs::remove_dir_all(&options.dir);
+    cx.update(|cx| cx.quit());
 }
 
 fn panel_state(controller: &Entity<Controller>, cx: &mut AsyncApp) -> PanelState {

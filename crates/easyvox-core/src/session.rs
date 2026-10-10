@@ -12,9 +12,14 @@
 //! confirmed words (`preview_context_ms`), so it only decodes what may still change. A tick
 //! skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
 //! On release it polishes the rest and sends `Final`.
+//!
+//! A third thread runs the level meter while capture lasts (`level.rs`): it sends `Level` when
+//! the input's loudness changes visibly, and `NoInput` when audio stops reaching the session.
+//! It never waits on a decode, so the meter keeps moving while the model loads or decodes.
 
 use crate::audio::{MicInfo, SharedAudio};
 use crate::chunks::{self, Chunker, Polished};
+use crate::level::LevelMeter;
 use crate::partials::LocalAgreement;
 use crate::pause::{SpeechDetector, SpeechGate};
 use crate::tuning::{Tuning, ms_samples};
@@ -34,6 +39,8 @@ const POLISH_TICK_MS: u32 = 400;
 const MIN_WINDOW_MS: u32 = 2_000;
 /// How often the worker looks for speech until it has heard some.
 const SPEECH_POLL: Duration = Duration::from_millis(100);
+/// The level meter never ticks faster than this, whatever `meter_interval_ms` says.
+const MIN_METER_TICK_MS: u32 = 10;
 
 /// Counters a session collects (for benchmarks and diagnostics).
 #[derive(Clone, Debug, Default)]
@@ -66,6 +73,9 @@ pub struct SessionStats {
     pub speech_onset_secs: Option<f32>,
     /// Confirmed partial text at the moment the final pass started.
     pub confirmed_at_stop: String,
+    /// `Level` events sent (the meter moved visibly), and `NoInput` events.
+    pub level_events: u32,
+    pub no_input_events: u32,
     pub audio_secs: f32,
     pub input_peak: f32,
     pub mic: Option<MicInfo>,
@@ -132,7 +142,6 @@ pub(crate) fn start(
     let ctl = Arc::new(Control { stop: stop_flag.clone(), stop_at: Mutex::new(None), stats: Mutex::default() });
     let (tx, rx) = mpsc::channel();
 
-    let is_mic = matches!(source, AudioSource::Microphone);
     let capture = match source {
         AudioSource::WavReplay(path) => crate::audio::spawn_wav_replay(&path, audio.clone(), stop_flag.clone())?,
         AudioSource::Microphone => {
@@ -147,15 +156,66 @@ pub(crate) fn start(
         }
     };
 
+    let mut threads = vec![capture];
+    if tuning.meter_interval_ms > 0 {
+        threads.push(spawn_meter(audio.clone(), ctl.clone(), tuning, tx.clone())?);
+    }
     let worker = {
         let (ctl, audio) = (ctl.clone(), audio.clone());
         std::thread::Builder::new().name("easyvox-decode".into()).spawn(move || {
-            let w = Worker { engine, tuning, audio, ctl, tx, is_mic };
+            let w = Worker { engine, tuning, audio, ctl, tx };
             w.run();
         })?
     };
+    threads.push(worker);
 
-    Ok((Session { ctl, audio, threads: Mutex::new(vec![capture, worker]) }, rx))
+    Ok((Session { ctl, audio, threads: Mutex::new(threads) }, rx))
+}
+
+/// The level meter's thread: a tick every `meter_interval_ms` while capture lasts, reading the
+/// frame levels the capture thread measured (`level.rs`). When capture ends, the meter falls
+/// flat and the thread exits, so nothing runs after the session.
+fn spawn_meter(
+    audio: Arc<SharedAudio>,
+    ctl: Arc<Control>,
+    tuning: Tuning,
+    tx: Sender<TranscriptEvent>,
+) -> std::io::Result<JoinHandle<()>> {
+    let tick = Duration::from_millis(tuning.meter_interval_ms.max(MIN_METER_TICK_MS) as u64);
+    std::thread::Builder::new().name("easyvox-level".into()).spawn(move || {
+        let mut meter = LevelMeter::new(&tuning, Instant::now());
+        let send = |ev: TranscriptEvent| {
+            let mut s = ctl.stats.lock().unwrap();
+            match ev {
+                TranscriptEvent::Level(_) => s.level_events += 1,
+                _ => s.no_input_events += 1,
+            }
+            drop(s);
+            tx.send(ev).is_ok()
+        };
+        loop {
+            // A tick late (the machine was busy) isn't made up for: the next one is a full tick
+            // later, so the overlay is never asked to redraw faster than the meter's rate.
+            std::thread::sleep(tick);
+            let done = audio.done.load(Ordering::SeqCst);
+            let reading = {
+                let levels = audio.levels.lock().unwrap();
+                meter.tick(Instant::now(), levels.levels(), levels.samples())
+            };
+            if done {
+                // Capture ended: rest flat (the overlay shows the final text next).
+                if meter.sent() > 0.0 {
+                    send(TranscriptEvent::Level(0.0));
+                }
+                return;
+            }
+            let sent = reading.no_input.is_none_or(|n| send(TranscriptEvent::NoInput(n)))
+                && reading.level.is_none_or(|l| send(TranscriptEvent::Level(l)));
+            if !sent {
+                return; // nobody is listening any more
+            }
+        }
+    })
 }
 
 struct Worker {
@@ -164,7 +224,6 @@ struct Worker {
     audio: Arc<SharedAudio>,
     ctl: Arc<Control>,
     tx: Sender<TranscriptEvent>,
-    is_mic: bool,
 }
 
 impl Worker {
@@ -198,22 +257,6 @@ impl Worker {
         }
     }
 
-    fn mic_checks(&self, started: Instant, warned: &mut bool) {
-        if !self.is_mic || *warned || started.elapsed() < Duration::from_millis(1500) {
-            return;
-        }
-        let n = self.audio.len();
-        if n == 0 {
-            *warned = true;
-            self.send(TranscriptEvent::Error("No audio arrived from the microphone in 1.5 s.".into()));
-        } else if self.audio.peak() == 0.0 {
-            *warned = true;
-            self.send(TranscriptEvent::Error(
-                "The microphone is delivering digital silence. On macOS this usually means the app has not been granted Microphone permission.".into(),
-            ));
-        }
-    }
-
     fn run(self) {
         let started = Instant::now();
         // Reloads the model if the engine was unloaded. Capture already runs, so whatever is
@@ -221,7 +264,7 @@ impl Worker {
         let model = self.engine.model();
         self.ctl.stats.lock().unwrap().model_wait_ms = started.elapsed().as_secs_f64() * 1e3;
         match model {
-            Ok(model) => self.record(&*model, started),
+            Ok(model) => self.record(&*model),
             Err(e) => {
                 self.send(TranscriptEvent::Error(format!("the speech model couldn't load: {e:#}")));
                 while !self.done() {
@@ -233,8 +276,7 @@ impl Worker {
         }
     }
 
-    fn record(&self, model: &dyn SpeechModel, started: Instant) {
-        let mut warned = false;
+    fn record(&self, model: &dyn SpeechModel) {
         let t = &self.tuning;
         let chunker = Chunker::new(t);
         let mut polished = Polished::new(model.word_timings(), t);
@@ -251,7 +293,7 @@ impl Worker {
         let min_gap = Duration::from_millis(t.preview_min_gap_ms as u64);
         let mut anchor = 0usize;
         let mut decoded_len = 0usize;
-        let mut speech = SpeechDetector::new(t);
+        let speech = SpeechDetector::new(t);
         // Where speech starts, once the first tick has come. Nothing is decoded before.
         let mut onset = None;
         let mut next = Instant::now();
@@ -260,7 +302,7 @@ impl Worker {
             if onset.is_none() {
                 // The first tick: once the recording holds speech (and, with the preview on,
                 // enough of it for the first pass).
-                onset = self.wait_for_speech(&mut speech, started, &mut warned);
+                onset = self.wait_for_speech(&speech);
                 if onset.is_none() {
                     break;
                 }
@@ -273,7 +315,6 @@ impl Worker {
                     }
                 }
             }
-            self.mic_checks(started, &mut warned);
             if self.done() {
                 break;
             }
@@ -354,7 +395,7 @@ impl Worker {
         let end = self.end_instant();
         let t = Instant::now();
         let confirmed = preview(&polished, &la).0;
-        let onset = onset.or_else(|| speech.onset(&self.audio.samples.lock().unwrap()));
+        let onset = onset.or_else(|| speech.onset(self.audio.levels.lock().unwrap().levels()));
         self.ctl.stats.lock().unwrap().speech_onset_secs = onset.map(|at| at as f32 / SR as f32);
         if onset.is_some() {
             let (pcm, span) = {
@@ -370,7 +411,7 @@ impl Worker {
     /// Waits for the first tick: until the recording holds speech and, with the preview on,
     /// `preview_first_ms` of audio has followed its start (and `preview_min_audio_ms` in all).
     /// Returns where speech starts, or `None` if the input ended first.
-    fn wait_for_speech(&self, speech: &mut SpeechDetector, started: Instant, warned: &mut bool) -> Option<usize> {
+    fn wait_for_speech(&self, speech: &SpeechDetector) -> Option<usize> {
         let t = &self.tuning;
         let (after, min_audio) = match t.preview_interval_ms {
             0 => (0, 0),
@@ -380,14 +421,13 @@ impl Worker {
         loop {
             // Look again every 100 ms, or as soon as the audio reaches the first tick.
             self.wait(Instant::now() + SPEECH_POLL, due.saturating_sub(1));
-            self.mic_checks(started, warned);
             if self.done() {
                 return None;
             }
-            let a = self.audio.samples.lock().unwrap();
-            let onset = speech.onset(&a);
+            let levels = self.audio.levels.lock().unwrap();
+            let onset = speech.onset(levels.levels());
             due = onset.map_or(usize::MAX, |at| (at + after).max(min_audio));
-            if a.len() >= due {
+            if levels.samples() >= due {
                 return onset;
             }
         }
@@ -479,9 +519,8 @@ mod tests {
         }
     }
 
-    /// Replays `pcm` in real time through a session on a [`Counting`] model. Returns the final
-    /// text, the number of decodes and the session's counters.
-    fn replay(name: &str, pcm: &[f32]) -> (String, u32, SessionStats) {
+    /// Writes `pcm` to a WAV file in a temporary folder.
+    fn write_wav(name: &str, pcm: &[f32]) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("easyvox-session-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let wav = dir.join(format!("{name}.wav"));
@@ -494,8 +533,15 @@ mod tests {
         let mut writer = hound::WavWriter::create(&wav, spec).unwrap();
         pcm.iter().for_each(|x| writer.write_sample(*x).unwrap());
         writer.finalize().unwrap();
+        wav
+    }
+
+    /// Replays `pcm` in real time through a session on a [`Counting`] model. Returns the final
+    /// text, the number of decodes and the session's counters.
+    fn replay(name: &str, pcm: &[f32]) -> (String, u32, SessionStats) {
+        let wav = write_wav(name, pcm);
         let model = Arc::new(Counting::default());
-        let engine = Engine::from_model(model.clone(), EngineConfig::new("counting", &dir)).unwrap();
+        let engine = Engine::from_model(model.clone(), EngineConfig::new("counting", wav.parent().unwrap())).unwrap();
         let (session, events) = engine.start(AudioSource::WavReplay(wav.clone())).unwrap();
         let text = loop {
             if let TranscriptEvent::Final { text, .. } = events.recv_timeout(Duration::from_secs(10)).unwrap() {
@@ -515,6 +561,82 @@ mod tests {
             assert_eq!((text.as_str(), decodes, stats.speech_onset_secs), ("", 0, None), "{name}");
             assert!(stats.finished, "{name}");
         }
+    }
+
+    /// Replays a WAV file through a session on a [`Counting`] model with `tuning`, and returns
+    /// every event with the time it arrived (seconds after the start).
+    fn replay_events(wav: &std::path::Path, tuning: Tuning) -> Vec<(f32, TranscriptEvent)> {
+        let engine =
+            Engine::from_model(Arc::new(Counting::default()), EngineConfig::new("counting", wav.parent().unwrap()))
+                .unwrap();
+        let start = Instant::now();
+        let (session, events) = engine.start_with(AudioSource::WavReplay(wav.into()), tuning).unwrap();
+        let mut out = vec![];
+        for event in events.iter() {
+            out.push((start.elapsed().as_secs_f32(), event));
+        }
+        session.join();
+        out
+    }
+
+    /// [`replay_events`] of a clip in `testdata/`.
+    fn replay_clip(clip: &str, tuning: Tuning) -> Vec<(f32, TranscriptEvent)> {
+        replay_events(&std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata")).join(clip), tuning)
+    }
+
+    fn levels(events: &[(f32, TranscriptEvent)]) -> Vec<(f32, f32)> {
+        events
+            .iter()
+            .filter_map(|(at, e)| if let TranscriptEvent::Level(l) = e { Some((*at, *l)) } else { None })
+            .collect()
+    }
+
+    #[test]
+    fn speech_moves_the_level_meter_at_up_to_its_rate() {
+        // 3 s of a voice whose loudness swings by 20 dB four times a second, as syllables do
+        // (-13 to -33 dBFS), after 0.5 s of a quiet room.
+        let mut pcm = audio(&[(0.5, 0.003)]);
+        pcm.extend(crate::level::tests::syllables(3.0));
+        let wav = write_wav("syllables", &pcm);
+        for interval in [Tuning::default().meter_interval_ms, 33] {
+            let events = replay_events(&wav, Tuning { meter_interval_ms: interval, ..Tuning::default() });
+            let sent = levels(&events);
+            let peak = sent.iter().map(|(_, l)| *l).fold(0.0, f32::max);
+            assert!(peak > 0.5, "{interval} ms: {sent:?}");
+            // At most one level a tick. (How many ticks send is checked in `level.rs`, on exact
+            // times: a busy or throttled machine can sleep the meter's thread far longer than
+            // asked, which only makes for fewer.)
+            let ticks = 3.5e3 / interval as f32;
+            assert!((4.0..=ticks + 2.0).contains(&(sent.len() as f32)), "{interval} ms: {sent:?}");
+            let fastest = sent.windows(2).map(|w| w[1].0 - w[0].0).fold(f32::INFINITY, f32::min);
+            assert!(fastest > interval as f32 / 2e3, "{interval} ms: two levels {fastest} s apart (as received)");
+            assert_eq!(sent.last().map(|(_, l)| *l), Some(0.0), "{interval} ms: it rests flat at the end");
+        }
+        let _ = std::fs::remove_file(&wav);
+    }
+
+    #[test]
+    fn a_spoken_clip_lifts_the_meter_and_it_rests_after() {
+        // A text-to-speech voice from its first frame: steadier than a person, so the meter
+        // mostly holds near the top while it speaks.
+        let events = replay_clip("cmd_samantha.wav", Tuning::default());
+        let sent = levels(&events);
+        assert!(sent.iter().any(|(at, l)| *at < 0.4 && *l > 0.5), "{sent:?}");
+        assert_eq!(sent.last().map(|(_, l)| *l), Some(0.0), "{sent:?}");
+        assert!(!events.iter().any(|(_, e)| matches!(e, TranscriptEvent::NoInput(_))), "{events:?}");
+    }
+
+    #[test]
+    fn digital_silence_keeps_the_meter_flat_and_says_it_cant_hear() {
+        // 2 s of exact zeros, as a muted microphone gives.
+        let events = replay_clip("silence_2s.wav", Tuning::default());
+        assert!(levels(&events).iter().all(|(_, l)| *l < 0.05), "{events:?}");
+        let said: Vec<_> =
+            events.iter().filter_map(|(at, e)| matches!(e, TranscriptEvent::NoInput(true)).then_some(*at)).collect();
+        assert!(said.len() == 1 && (1.5..1.8).contains(&said[0]), "{said:?}");
+        // With the meter off, neither.
+        let off = replay_clip("silence_2s.wav", Tuning { meter_interval_ms: 0, ..Tuning::default() });
+        assert!(off.iter().all(|(_, e)| matches!(e, TranscriptEvent::Final { .. })), "{off:?}");
     }
 
     #[test]

@@ -381,8 +381,8 @@ pub fn default_config_text() -> String {
 # change: anything you leave out follows the default, so a release that improves one reaches
 # you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
 # that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
-# save it: the [advanced] numbers for the live preview, the chunks and the pauses from your
-# next dictation, the same for every model.
+# save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
+# meter from your next dictation, the same for every model.
 ",
     );
     // Doc comments come one line per source line, each starting with a space.
@@ -407,8 +407,8 @@ pub fn default_config_text() -> String {
     }
     out.push_str(&format!(
         "\n[{ADVANCED}]\n# Settings the window doesn't show: how long the overlay stays up and the model stays\n\
-         # loaded, then the numbers behind the live preview, the chunks, and what counts as\n\
-         # speech or a pause.\n"
+         # loaded, then the numbers behind the live preview, the chunks, what counts as speech\n\
+         # or a pause, and the overlay's level meter.\n"
     ));
     for field in defaults.app.fields().into_iter().chain(defaults.tuning.fields()) {
         out.push('\n');
@@ -566,7 +566,7 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 31);
+        assert_eq!(keys.len(), 36);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
         }

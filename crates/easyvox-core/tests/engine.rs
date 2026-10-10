@@ -51,6 +51,7 @@ fn replay_wav(
             TranscriptEvent::Partial { confirmed, provisional } => partials.push((confirmed, provisional)),
             TranscriptEvent::Final { text, .. } => break text,
             TranscriptEvent::Error(e) => panic!("session error: {e}"),
+            TranscriptEvent::Level(_) | TranscriptEvent::NoInput(_) => {}
         }
     };
     session.join();

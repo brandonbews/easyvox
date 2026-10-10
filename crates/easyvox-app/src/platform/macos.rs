@@ -257,6 +257,23 @@ pub struct PanelState {
     pub ignores_mouse: bool,
 }
 
+/// Gives EasyVox its own appearance (`Some(true)` dark, `Some(false)` light), as if the
+/// system's had changed, or `None` to follow the system again. AppKit tells every window, so the
+/// windows recolour through the same path as a real change. It never touches the system's
+/// setting, and it lasts until the app quits. Main thread only.
+#[cfg(feature = "self-test")]
+pub fn set_app_appearance(dark: Option<bool>) -> Result<(), String> {
+    use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication};
+    let mtm = objc2::MainThreadMarker::new().ok_or("not on the main thread")?;
+    let appearance = dark.and_then(|dark| {
+        // SAFETY: AppKit's constant appearance names, valid for the life of the process.
+        let name = unsafe { if dark { NSAppearanceNameDarkAqua } else { NSAppearanceNameAqua } };
+        NSAppearance::appearanceNamed(name)
+    });
+    NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
+    Ok(())
+}
+
 /// Whether the menu bar icon's status item is visible.
 #[cfg(feature = "self-test")]
 pub fn status_item_visible(icon: &tray_icon::TrayIcon) -> Option<bool> {

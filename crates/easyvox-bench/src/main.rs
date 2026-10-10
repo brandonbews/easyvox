@@ -441,6 +441,12 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
                 eprintln!("{ms:8.0}ms  ERROR {e}");
                 errors.push(e);
             }
+            TranscriptEvent::NoInput(on) => {
+                if !quiet {
+                    eprintln!("{ms:8.0}ms  {}", if on { "CAN'T HEAR the input" } else { "input back" });
+                }
+            }
+            TranscriptEvent::Level(_) => {}
         }
     }
     session.join();
@@ -506,6 +512,7 @@ fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value
             "polished": stats.chunks, "decode_ms_total": stats.chunk_decode_ms_total,
             "decode_ms_max": stats.chunk_decode_ms_max,
         },
+        "meter": {"level_events": stats.level_events, "no_input_events": stats.no_input_events},
         "cpu": {"cpu_secs": cpu, "wall_secs": wall, "cpu_pct_of_one_core": 100.0 * cpu / wall},
         "errors": errors,
     }))
