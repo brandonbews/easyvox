@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGCYFBHHG4S9307GK2W3`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `models` `app`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -446,6 +446,8 @@ SQLite, the Rust std, and the YaRN and Mozilla snippets.
   - `~/.cargo/registry/src/...` for `transcribe-cpp-sys-0.3.1`, `gpui-kit-assets-0.7.1`, `gpui-pre-0.3.8` and `muda-0.21.2`
   - Zed `crates/*/Cargo.toml` at commit `279fe07`
 
+Done in 695c6d1: license, creator, model card and GGUF modification note per model; Whisper as Apache 2.0; <file>.LICENSE.txt written next to each downloaded model; About page (Settings and tray) with credits, THIRD_PARTY_NOTICES.html and LICENSE; scripts/notices.sh (cargo-about 0.9, --features cli) generates packaging/THIRD_PARTY_NOTICES.html; tests/notices.rs catches Cargo.lock drift without CI installing cargo-about. Models already on disk before this (downloaded by fetch-model.sh) have no LICENSE.txt.
+
 ## History
 
 ### 2026-10-10 12:20 UTC — edit by `brandon`
@@ -455,3 +457,7 @@ description edited
 ### 2026-10-10 14:56 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-10 17:51 UTC — edit by `brandon`
+
+description edited · status open→done

@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 13 ready · 2 blocked · 16 on hold · 10 inbox · 20 done · 0 cancelled
+0 in progress · 10 ready · 2 blocked · 17 on hold · 10 inbox · 23 done · 0 cancelled
 
 ## In progress
 
@@ -11,11 +11,8 @@ _None._
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
 | [`tuh-br58`](tasks/tuh-01M4H2EG9QB2ETECD30F9RBR58.md) | Onboarding: Microphone and Accessibility, default model download, shader warm-up | 1 | `onboarding` `app` |
-| [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) | Drop Parakeet Unified from the app (keep it bench-only) | 1 | `models` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
-| [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) | Settings: click-to-download the alternative models | 2 | `models` `app` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
-| [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) | Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified) | 2 | `models` `app` |
 | [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
 | [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) | Quiet the gpui "RefCell already borrowed" error logged at every launch | 3 | `app` |
 | [`tuh-04zz`](tasks/tuh-01M4H2EGHS8QGWQCZ7TGRT04ZZ.md) | Check, and likely set, MACOSX_DEPLOYMENT_TARGET=26.0 in .cargo/config.toml | 3 | `build` |
@@ -53,6 +50,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-x9cd`](tasks/tuh-01M4HN1AWAEEECAS8SWAJ5X9CD.md) | Hands-on: 'Keep model loaded' switch, and first words after an unload | 1 | `human` `hands-on` |
 | [`tuh-xq3v`](tasks/tuh-01M4JNRWA7PCN1YSN2PBY4XQ3V.md) | Hands-on: does the lighter preview feel OK? | 2 | `human` `hands-on` |
 | [`tuh-94ns`](tasks/tuh-01M4K926MM34Y3SX6H399294NS.md) | Hands-on: 'Didn't catch anything' on silence, and quick first words | 2 | `human` `hands-on` |
+| [`tuh-tqbf`](tasks/tuh-01M4KF1V8BMQ8SGXH92HDSTQBF.md) | Hands-on: Settings Models page, downloads, and About | 1 | `human` `hands-on` |
 
 ## Inbox
 
@@ -78,7 +76,9 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-z2g1`](tasks/tuh-01M4H2EG6HXSP5GCH39FEPZ2G1.md) Push the 7 local commits on main (and let tuhdoo publish its data branch)
 - [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) Skip the final pass when a recording has no speech
 - [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) Core: download a model in the app — download, sha256 verify, activate
+- [`tuh-gz9m`](tasks/tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M.md) Settings: click-to-download the alternative models
 - [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) Settings file: ~/.config/easyvox/config.toml, applied live
+- [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified)
 - [`tuh-bdnm`](tasks/tuh-01M4H2EGDR663G3XGTBA14BDNM.md) Bench the model list on the real-voice clips
 - [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) Unload the speech model after a stretch of no use
 - [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) Idle wake-ups from ggml-metal's residency loop
@@ -90,6 +90,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) Widen the chunk-join slack so soft words at a cut aren't lost
 - [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) Make dictation light: tune the preview until the GPU mostly rests while talking
 - [`tuh-w7y9`](tasks/tuh-01M4JNRW9D3CBNF5X80JPWW7Y9.md) Show first words sooner: run the first preview pass early
+- [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) Drop Parakeet Unified from the app (keep it bench-only)
 - [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) Bench Parakeet TDT v3 on Brandon's voice
 
 ## Cancelled

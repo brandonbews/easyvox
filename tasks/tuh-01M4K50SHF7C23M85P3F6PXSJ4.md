@@ -2,7 +2,7 @@
 
 `tuh-01M4K50SHF7C23M85P3F6PXSJ4`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `models`
 - **Created:** 2026-10-10 14:56 UTC by `brandon`
@@ -13,6 +13,10 @@ Brandon, 2026-10-10: "If Unified is worse, do we even want it?" Agreed, unless h
 
 The ask: the app offers v2 (default) and Whisper base.en (the small option) only. In crates/easyvox-core/src/models.rs make Unified bench-only (Offering::BenchOnly or equivalent), keep its pinned URL and sha256 so easyvox-bench and fetch-model.sh can still fetch it; update scripts/fetch-model.sh's row (drift-guard test), the Settings model list, DESIGN.md "Models", README, docs/model-bench.md and docs/settings.md wherever Unified is offered. A config.toml that names Unified as `model` falls back to the default with a warning (the existing unknown/invalid path). The NVIDIA notice work in tuh-01M4H2EGCYFBHHG4S9307GK2W3 shrinks to "none in the app" (keep the constants for the bench docs if useful).
 
+Done in 695c6d1: Unified is BenchOnly (URL and sha256 kept); the app offers v2 and Whisper base.en; a config naming Unified falls back to the default with a warning (tested). Docs updated, bench numbers kept.
+
 ## History
 
-_No activity yet._
+### 2026-10-10 17:51 UTC — edit by `brandon`
+
+description edited · status open→done

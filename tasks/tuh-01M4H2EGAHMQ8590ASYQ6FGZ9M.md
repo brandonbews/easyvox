@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `models` `app`
 - **Depends on:** [`tuh-x7tv`](tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) (done)
@@ -18,6 +18,10 @@ Acceptance: download, cancel, delete and activate each work for both alternative
 
 Pointers: crates/easyvox-app/src/settings.rs, state.rs; crates/easyvox-core/src/models.rs (offering, download_bytes); DESIGN.md "Models" (the "pick this if" lines).
 
+Done in 695c6d1: Settings > Models page from a reusable row (crates/easyvox-app/src/model_row.rs, for onboarding): size, pick-this-if, Download with progress and Cancel, Use, Delete with confirm and freed size (refused while active or downloading). Switch frees the old model first under MODEL_SWAP. Self-test covers download from 127.0.0.1, cancel, delete, switch (26/26). UI not yet seen by a person: hands-on tuh in the backlog.
+
 ## History
 
-_No activity yet._
+### 2026-10-10 17:51 UTC — edit by `brandon`
+
+description edited · status open→done
