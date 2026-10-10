@@ -24,6 +24,15 @@ Pointers: crates/easyvox-core/src/lib.rs (TranscriptEvent), audio.rs, session.rs
 
 Constraints: keep the level computation reusable: the no-speech gate for the final pass needs the same signal.
 
+Measured 2026-10-10 (implementation agent; details in docs/model-bench.md "Level meter" and DESIGN.md "Overlay animation"): the app replaying the private 5-minute ramble in real time with the overlay up, Parakeet TDT v2, macmon around each run, 2 runs per setting in reverse-order rounds, M4 Mac mini.
+- Meter off (meter_interval_ms = 0): 35.5 J/min of dictation, GPU 0.51 W, app CPU 10.99 % of one core.
+- Meter on at the default 15 ticks/s (66 ms), not drawn: 38.1 J/min, app CPU 11.07 %; it moved 7.2 times/s, overlay redraws 7.9/s (text alone: 0.6/s).
+- Same, overlay drawn at each redraw (layout and paint on the CPU): 35.4 J/min, GPU 0.52 W, app CPU 11.29 %: +0.30 points of a core (+2.7 %), no energy cost distinguishable from the CPU rail's ±0.1 W noise.
+- 30 ticks/s (33 ms), drawn: 42.8 J/min, app CPU 11.42 % (+0.43 points); moved 10.9 times/s.
+Not measured: the screen was locked, so GPUI presented no frames; the GPU's and WindowServer's share of on-screen drawing still needs a person at an unlocked screen (same replay command without --draw, plus macmon).
+
 ## History
 
-_No activity yet._
+### 2026-10-10 19:46 UTC — edit by `brandon`
+
+description edited
