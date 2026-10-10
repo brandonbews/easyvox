@@ -27,6 +27,10 @@ Pointers: crates/easyvox-app/src/settings.rs (permission rows, request_mic_permi
 
 Constraints: the bundle id dev.easyvox.EasyVox must not change; never open the mic before the permission has been asked.
 
+Update 2026-10-10 (orchestrator): the default model is now Parakeet TDT v2 (parakeet-tdt-0.6b-v2-q5_k_m-gguf, 539 MB; RECOMMENDED_MODEL), not Unified, which leaves the app (tuh-01M4K50SHF7C23M85P3F6PXSJ4). Reuse the Settings model row / download flow from tuh-01M4H2EGAHMQ8590ASYQ6FGZ9M rather than building a second one. Downloads: easyvox_core::download (NSURLSession, resume, sha256 while streaming); a LICENSE.txt is written next to each downloaded model (tuh-01M4H2EGCYFBHHG4S9307GK2W3).
+
 ## History
 
-_No activity yet._
+### 2026-10-10 17:21 UTC — edit by `brandon`
+
+description edited
