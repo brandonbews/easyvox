@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 14 ready · 6 blocked · 13 on hold · 9 inbox · 13 done · 0 cancelled
+0 in progress · 13 ready · 6 blocked · 13 on hold · 9 inbox · 14 done · 0 cancelled
 
 ## In progress
 
@@ -12,7 +12,6 @@ _None._
 |---|---|---:|---|
 | [`tuh-1wfq`](tasks/tuh-01M4H2EG840VHRYSSV8KJE1WFQ.md) | Skip the final pass when a recording has no speech | 1 | `engine` |
 | [`tuh-x7tv`](tasks/tuh-01M4H2EG8YM9TXGK81DC6WX7TV.md) | Core: download a model in the app — download, sha256 verify, activate | 1 | `models` `engine` |
-| [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) | Widen the chunk-join slack so soft words at a cut aren't lost | 1 | `engine` |
 | [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) | Make dictation light: tune the preview until the GPU mostly rests while talking | 1 | `engine` `perf` `energy` |
 | [`tuh-aeba`](tasks/tuh-01M4H2EG7A8NGQH489P244AEBA.md) | Core: TranscriptEvent::Level, and a level meter in the overlay | 2 | `engine` `overlay` |
 | [`tuh-y7kh`](tasks/tuh-01M4H2EGBBZHN7RRYYS193Y7KH.md) | Overlay: follow the system light/dark appearance | 2 | `overlay` |
@@ -85,6 +84,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-6htq`](tasks/tuh-01M4HDR40PA99G6HQDAN026HTQ.md) Test chunk cutting on real-voice long recordings; consider a VAD
 - [`tuh-6x7y`](tasks/tuh-01M4HDR41EE6Y4XXYSW3436X7Y.md) Add the long-dictation clip generator to testdata/
 - [`tuh-wa8j`](tasks/tuh-01M4HET091632AY8RKAC4NWA8J.md) Make Parakeet TDT v2 the default model
+- [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) Widen the chunk-join slack so soft words at a cut aren't lost
 
 ## Cancelled
 
