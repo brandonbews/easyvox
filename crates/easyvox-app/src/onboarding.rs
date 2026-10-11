@@ -208,14 +208,14 @@ fn mic_step(mic: MicPermission, asking: bool) -> Step {
         MicPermission::NotDetermined => Step::new(
             id,
             State::ToDo,
-            "EasyVox listens only while you hold the shortcut. macOS asks you once.",
+            "So EasyVox can hear you while you hold the shortcut. Audio stays on this Mac and isn't saved.",
             &[AskMicrophone],
         ),
         MicPermission::Denied => Step::new(
             id,
             State::Problem(Problem::MicDenied),
-            "Microphone access is off, so EasyVox can't hear you. Turn EasyVox on in System Settings → \
-             Privacy & Security → Microphone.",
+            "Microphone access is off, so EasyVox can't hear you. Turn EasyVox on in System Settings › \
+             Privacy & Security › Microphone.",
             &settings,
         ),
         MicPermission::Restricted => Step::new(
@@ -227,8 +227,8 @@ fn mic_step(mic: MicPermission, asking: bool) -> Step {
         MicPermission::Unknown => Step::new(
             id,
             State::Problem(Problem::MicUnknown),
-            "macOS didn't say whether EasyVox may use the microphone. Check System Settings → Privacy & \
-             Security → Microphone.",
+            "macOS didn't say whether EasyVox may use the microphone. Check System Settings › Privacy & \
+             Security › Microphone.",
             &settings,
         ),
     }
@@ -245,15 +245,15 @@ fn accessibility_step(trusted: bool, asked: bool) -> Step {
         (false, true) => Step::new(
             id,
             State::Busy(Busy::AccessibilityPending),
-            "Turn EasyVox on in System Settings → Privacy & Security → Accessibility. This step ticks itself \
+            "Turn EasyVox on in System Settings › Privacy & Security › Accessibility. This step ticks itself \
              off when you do.",
             &[settings],
         ),
         (false, false) => Step::new(
             id,
             State::ToDo,
-            "Lets EasyVox paste the text where you're typing, with ⌘V. Without it, the text waits on the \
-             clipboard for you to paste.",
+            "So EasyVox can paste your words into the app you're using. Without it, they wait on the \
+             clipboard for you to paste with ⌘V.",
             &[AskAccessibility, settings],
         ),
     }

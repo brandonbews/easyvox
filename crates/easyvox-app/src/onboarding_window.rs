@@ -1,8 +1,13 @@
 //! The onboarding window ("Set Up EasyVox"): the four steps of `onboarding.rs`, each with where
 //! it stands and its buttons, and under the model step the same row Settings → Models shows
 //! (`model_row.rs`), with its download, progress, Cancel and Try again. It opens at launch when a
-//! required step is missing, and from Settings → Permissions. It looks like Settings:
-//! the same theme, header and type sizes.
+//! required step is missing, and from Settings → Permissions.
+//!
+//! It's the design's setup (`design/`, boards 10–11) as a checklist: the steps can be done in any
+//! order and the download runs while you answer the prompts, so it stays one page. The header has
+//! the app icon and the design's voice; the steps are rows of one group, the step to do next with
+//! a vermilion number and the only vermilion button, a done step with a tick, a problem in words
+//! with a thin warning glyph; the footer recaps where things stand.
 //!
 //! It only ever asks: the Microphone and Accessibility prompts come up when their button is
 //! clicked, and nothing here opens the microphone.
@@ -13,6 +18,7 @@
 //! goes with the window. The download and the engine come from `AppStatus`, and the controller
 //! redraws the window when they change.
 
+use crate::brand::{self, Colors};
 use crate::controller;
 use crate::model_row::{ModelRow, ModelState};
 use crate::onboarding::{Action, Busy, Facts, LaunchFacts, Onboarding, Pane, State, Step, StepId};
@@ -20,10 +26,11 @@ use crate::platform::{PRIVACY_ACCESSIBILITY, PRIVACY_MICROPHONE};
 use crate::state::{AppSettings, AppStatus};
 use easyvox_core::MicPermission;
 use easyvox_core::models::{self, ModelInfo};
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
 use gpui_kit::component::kbd::Kbd;
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::spinner::Spinner;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, Theme, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use std::time::Duration;
@@ -172,90 +179,131 @@ impl Render for OnboardingView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         #[cfg(feature = "self-test")]
         DRAWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let (background, foreground, border, muted) =
-            (cx.theme().background, cx.theme().foreground, cx.theme().border, cx.theme().muted_foreground);
-        let root = v_flex().size_full().bg(background).text_color(foreground);
+        let c = brand::current(cx);
+        let root =
+            v_flex().size_full().bg(cx.theme().background).text_color(cx.theme().foreground).text_size(brand::TEXT);
         let Some(model) = chosen_model(cx) else {
-            return root.child(div().p_4().text_sm().child("This build offers no speech model."));
+            return root.child(div().p_4().child("This build offers no speech model."));
         };
         let onboarding = Onboarding::new(&self.facts(model, cx));
         let current = onboarding.current();
 
-        // Like a Settings page's header.
         let header = v_flex()
-            .p_4()
-            .gap_1()
-            .border_b_1()
-            .border_color(border)
-            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child("Set up EasyVox"))
-            .child(div().text_sm().text_color(muted).child(
-                "A few things before your first dictation. Speech turns into text on this Mac; the only \
-                 download is the speech model.",
+            .flex_shrink_0()
+            .items_center()
+            .px(px(32.))
+            .pt(px(14.))
+            .pb(px(14.))
+            .child(img(brand::ICON_128).size(px(48.)))
+            .child(
+                div()
+                    .mt(px(8.))
+                    .text_size(brand::TEXT_HERO)
+                    .line_height(px(28.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Talk, and EasyVox types."),
+            )
+            .child(div().mt(px(4.)).max_w(px(456.)).text_center().line_height(px(18.)).text_color(rgb(c.ink2)).child(
+                format!(
+                    "Hold {} in any app, talk, and let go to paste. Four things first, in any order; then \
+                     everything runs on this Mac.",
+                    shortcut_name(cx)
+                ),
             ));
-        let steps = v_flex().id("onboarding-steps").flex_1().min_h_0().overflow_y_scroll().children(
-            onboarding
-                .steps
-                .iter()
-                .enumerate()
-                .map(|(i, step)| step_row(i + 1, step, current == Some(step.id), model, cx)),
-        );
-        root.child(header).child(steps).child(footer(&onboarding, cx))
+        let steps = onboarding
+            .steps
+            .iter()
+            .enumerate()
+            .map(|(i, step)| step_row(i + 1, step, current == Some(step.id), model, c, cx).into_any_element());
+        let steps = v_flex()
+            .flex_1()
+            .w_full()
+            .px(px(32.))
+            .pb(px(12.))
+            .child(brand::group(c, steps))
+            .overflow_y_scrollbar()
+            .id("onboarding-steps");
+        root.child(header).child(steps).child(footer(&onboarding, c, cx))
     }
 }
 
-/// One step: a badge (its number, a tick, a warning, or a spinner during the first load), its
-/// title and words, its buttons, and for the model step the model's row.
-fn step_row(number: usize, step: &Step, current: bool, model: &'static ModelInfo, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
-    let muted = theme.muted_foreground;
+/// The push-to-talk shortcut as macOS writes it: "⌥Space".
+fn shortcut_name(cx: &App) -> String {
+    let shortcut = &cx.global::<AppSettings>().shortcut;
+    Keystroke::parse(shortcut).map_or_else(|_| shortcut.clone(), |ks| Kbd::format(&ks))
+}
+
+/// One step: a badge (its number, vermilion if it's the one to do next; a tick; a warning; or a
+/// spinner during the first load), its title and words, its buttons, and for the model step the
+/// model's row.
+fn step_row(
+    number: usize,
+    step: &Step,
+    current: bool,
+    model: &'static ModelInfo,
+    c: &'static Colors,
+    cx: &App,
+) -> impl IntoElement {
     let badge = h_flex().size(px(22.)).flex_shrink_0().justify_center().items_center().map(|this| match &step.state {
-        State::Done => this.child(Icon::new(IconName::CircleCheck).text_color(theme.success)),
-        State::Problem(_) => this.child(Icon::new(IconName::TriangleAlert).text_color(theme.danger)),
+        State::Done => this.child(brand::glyph(brand::GLYPH_PASTED, px(20.), c.ink)),
+        State::Problem(_) => this.child(brand::glyph(brand::GLYPH_WARNING, px(18.), c.ink)),
         // A spinner redraws the window every frame, so only for the ~15 s load, which has no
         // other sign of life. The download has its progress bar, and the prompts wait on you.
-        State::Busy(Busy::WarmingUp) => this.child(Spinner::new().small().color(theme.primary)),
-        State::ToDo | State::Waiting | State::Busy(_) => {
-            let color = if current { theme.primary } else { muted };
-            this.rounded_full().border_1().border_color(color).text_xs().text_color(color).child(number.to_string())
-        }
+        State::Busy(Busy::WarmingUp) => this.child(Spinner::new().small().color(cx.theme().primary)),
+        // The button's vermilion, which keeps a white number legible (4.6:1).
+        State::ToDo | State::Waiting | State::Busy(_) if current => this
+            .rounded_full()
+            .bg(rgb(c.button_fill))
+            .text_color(rgb(c.button_text))
+            .text_size(brand::TEXT_KEY)
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(number.to_string()),
+        State::ToDo | State::Waiting | State::Busy(_) => this
+            .rounded_full()
+            .border_1()
+            .border_color(rgb(c.keycap_border))
+            .text_color(rgb(c.ink2))
+            .text_size(brand::TEXT_KEY)
+            .child(number.to_string()),
     });
-    // The model row says what went wrong with a download in red; elsewhere the step's words do.
-    let words_color = match step.state {
-        State::Problem(_) if step.id != StepId::Model => theme.danger,
-        _ => muted,
+    // A problem's words are in the text colour, next to the warning glyph. The model row says
+    // what went wrong with a download itself; this step's words say what to do.
+    let words = match step.state {
+        State::Problem(_) => c.ink,
+        _ => c.ink2,
     };
     let buttons = h_flex()
         .flex_shrink_0()
         .gap_2()
-        .children(step.actions.iter().enumerate().filter_map(|(i, action)| action_button(step, i, *action)));
-    h_flex().w_full().items_start().gap_3().px_4().py_4().border_b_1().border_color(theme.border).child(badge).child(
+        .children(step.actions.iter().enumerate().filter_map(|(i, action)| action_button(step, i, *action, current)));
+    // The title shares its line with the buttons, and the words get the row's whole width.
+    h_flex().w_full().items_start().gap_3().py(px(12.)).child(badge).child(
         v_flex()
             .flex_1()
             .min_w_0()
-            .gap_2()
+            .gap(px(2.))
             .child(
                 h_flex()
                     .w_full()
-                    .items_start()
+                    .min_h(px(22.))
                     .justify_between()
                     .gap_4()
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .gap_0p5()
-                            .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(step.id.title()))
-                            .child(div().text_sm().text_color(words_color).child(step.text.clone())),
-                    )
+                    .child(div().font_weight(FontWeight::MEDIUM).child(step.id.title()))
                     .child(buttons),
             )
-            .when(step.id == StepId::Model, |this| this.child(ModelRow::new(model))),
+            .child(
+                div().text_size(brand::TEXT_KEY).line_height(px(16.)).text_color(rgb(words)).child(step.text.clone()),
+            )
+            .when(step.id == StepId::Model, |this| {
+                this.child(div().mt(px(8.)).child(ModelRow::new(model).emphasised(current)))
+            }),
     )
 }
 
-/// A button for one of a step's actions; the first is the primary one. `None` for the download's
-/// own actions, which the model row draws.
-fn action_button(step: &Step, index: usize, action: Action) -> Option<Button> {
+/// A button for one of a step's actions. The first action of the step to do next is the
+/// vermilion one; the others are plain. `None` for the download's own actions, which the model
+/// row draws.
+fn action_button(step: &Step, index: usize, action: Action, current: bool) -> Option<Button> {
     let label = match action {
         Action::AskMicrophone | Action::AskAccessibility => "Allow…",
         Action::OpenSettings(_) => "Open System Settings…",
@@ -263,11 +311,9 @@ fn action_button(step: &Step, index: usize, action: Action) -> Option<Button> {
         Action::WarmUp => "Get ready",
         Action::Download | Action::CancelDownload | Action::RetryDownload => return None,
     };
-    let button = Button::new(ElementId::Name(format!("onboarding-{:?}-{index}", step.id).into()))
-        .small()
-        .label(label)
-        .on_click(move |_, _, cx| act(action, cx));
-    Some(if index == 0 { button.primary() } else { button.outline() })
+    let id = ElementId::Name(format!("onboarding-{:?}-{index}", step.id).into());
+    let button = if current && index == 0 { brand::primary(id, label) } else { brand::button(id, label) };
+    Some(button.on_click(move |_, _, cx| act(action, cx)))
 }
 
 fn act(action: Action, cx: &mut App) {
@@ -287,33 +333,52 @@ fn act(action: Action, cx: &mut App) {
     }
 }
 
-/// How to dictate once everything is done, or where to find this again; and the button that
-/// closes the window.
-fn footer(onboarding: &Onboarding, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
+/// The recap: a dot per step (a done one dark, the one to do next wide), where things stand
+/// and where this window is found again, or once all is done how to dictate; and the button
+/// that closes the window.
+fn footer(onboarding: &Onboarding, c: &'static Colors, cx: &App) -> impl IntoElement {
     let finished = onboarding.finished();
-    let shortcut = Keystroke::parse(&cx.global::<AppSettings>().shortcut).ok();
-    let note = if finished {
-        h_flex()
-            .gap_1()
-            .child("All set. Hold")
-            .when_some(shortcut, |this, ks| this.child(Kbd::new(ks)))
-            .child("and speak; let go to paste.")
+    let current = onboarding.current();
+    let dots = h_flex().flex_shrink_0().gap(px(6.)).children(onboarding.steps.iter().map(|step| {
+        let next = current == Some(step.id);
+        let filled = step.is_done() || next;
+        div().h(px(6.)).w(px(if next { 18. } else { 6. })).rounded(px(3.)).bg(rgb(if filled {
+            c.ink
+        } else {
+            c.keycap_border
+        }))
+    }));
+    let (title, words) = if finished {
+        (
+            "You're all set.".to_string(),
+            format!(
+                "EasyVox lives in the menu bar. Hold {} in any app to talk; click its icon for History and Settings.",
+                shortcut_name(cx)
+            ),
+        )
     } else {
-        h_flex().child(format!("{} of 4 done. Settings → Permissions opens this again.", onboarding.done()))
+        (format!("{} of 4 done.", onboarding.done()), "Settings › Permissions opens this again.".to_string())
     };
-    let close = Button::new("onboarding-close")
-        .small()
-        .label(if finished { "Start dictating" } else { "Finish later" })
-        .on_click(|_, window, _| window.remove_window());
+    let close = if finished {
+        brand::primary("onboarding-close", "Start dictating")
+    } else {
+        brand::button("onboarding-close", "Finish later")
+    };
     h_flex()
-        .px_4()
-        .py_3()
+        .flex_shrink_0()
+        .px(px(32.))
+        .py(px(14.))
         .gap_4()
-        .justify_between()
         .items_center()
         .border_t_1()
-        .border_color(theme.border)
-        .child(note.text_sm().text_color(theme.muted_foreground))
-        .child(if finished { close.primary() } else { close.outline() })
+        .border_color(rgb(c.hairline))
+        .child(dots)
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(div().font_weight(FontWeight::MEDIUM).child(title))
+                .child(div().text_size(brand::TEXT_KEY).line_height(px(16.)).text_color(rgb(c.ink2)).child(words)),
+        )
+        .child(close.on_click(|_, window, _| window.remove_window()))
 }

@@ -1,8 +1,18 @@
-//! The Settings window, built from GPUI Kit's `Settings` component (pages, groups, items), plus a
-//! shortcut recorder and permission rows. Its pages: General, Models (every offered model, to
-//! download, use or delete; see `model_row.rs`), Permissions (with a button that opens
-//! onboarding again) and About (`about.rs`).
+//! The Settings window, in the design's look (`design/`, boards 12–15) with EasyVox's own four
+//! pages: an inset sidebar with each page's icon, and on the right the page as grouped forms.
+//! Every change applies at once.
+//!
+//! - **General**: the shortcut (a keycap and Change…, see [`ShortcutRecorder`]), Hold right ⌥ to
+//!   talk, the speech model in use and Keep model loaded, and the settings file.
+//! - **Models**: every offered model, to download, use or delete (`model_row.rs`), and the
+//!   models folder.
+//! - **Permissions**: the privacy line, the three macOS permissions, and onboarding again.
+//! - **About** (`about.rs`).
+//!
+//! The pages and their groups are plain elements, drawn from the app's state at each render, so
+//! the window needs no state of its own beyond the page shown and the shortcut recorder.
 
+use crate::brand::{self, Colors};
 use crate::controller;
 use crate::model_row::{ModelRow, download_words};
 use crate::platform::{PRIVACY_ACCESSIBILITY, PRIVACY_INPUT_MONITORING, PRIVACY_MICROPHONE};
@@ -11,15 +21,16 @@ use easyvox_core::MicPermission;
 use easyvox_core::download::format_size;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::setting::{SelectIndex, SettingField, SettingGroup, SettingItem, SettingPage, Settings};
-use gpui_kit::component::{ActiveTheme, Sizable, Theme, h_flex, v_flex};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::switch::Switch;
+use gpui_kit::component::{ActiveTheme, Sizable as _, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
-/// The window's pages, in sidebar order. The sidebar picks them by position; code names one
-/// only to open it (the tray's About item, the self-test).
+/// The window's pages, in sidebar order. Code names one to open it: the tray's About item, the
+/// menu bar's fixes, the self-test.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum Page {
     #[default]
     General,
@@ -28,12 +39,35 @@ pub enum Page {
     About,
 }
 
+impl Page {
+    const ALL: [Self; 4] = [Self::General, Self::Models, Self::Permissions, Self::About];
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::General => "General",
+            Self::Models => "Models",
+            Self::Permissions => "Permissions",
+            Self::About => "About",
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            Self::General => brand::ICON_GENERAL,
+            Self::Models => brand::ICON_MODELS,
+            Self::Permissions => brand::ICON_PERMISSIONS,
+            Self::About => brand::ICON_ABOUT,
+        }
+    }
+}
+
+/// The sidebar's width with its 8 pt inset on each side: a 180 pt panel.
+const SIDEBAR: Pixels = px(196.);
+
 pub struct SettingsView {
     recorder: Entity<ShortcutRecorder>,
-    /// The page [`show`](Self::show) asked for, and how many times it was asked. The `Settings`
-    /// component keeps the selected page itself, keyed by its id, so a new id opens it on `page`.
+    /// The page shown: picked in the sidebar, or asked for through [`show`](Self::show).
     page: Page,
-    shown: usize,
     _appearance: Subscription,
 }
 
@@ -42,250 +76,409 @@ impl SettingsView {
         let recorder = cx.new(|cx| ShortcutRecorder::new(window, cx));
         let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
-        Self { recorder, page: Page::default(), shown: 0, _appearance }
+        Self { recorder, page: Page::default(), _appearance }
     }
 
     /// Switches to `page`, as if it were clicked in the sidebar.
     pub fn show(&mut self, page: Page, cx: &mut Context<Self>) {
         self.page = page;
-        self.shown += 1;
         cx.notify();
     }
 
-    /// The page last asked for through [`show`](Self::show).
+    /// The page shown.
     #[cfg(feature = "self-test")]
     pub fn page(&self) -> Page {
         self.page
     }
 
-    fn general_page(&self, cx: &App) -> SettingPage {
-        let recorder = self.recorder.clone();
-        let models_dir = cx.global::<AppStatus>().models_dir.clone();
-        // The models the app offers (default first) that are downloaded and runnable here.
-        let models: Vec<(SharedString, SharedString)> = easyvox_core::models::offered()
-            .into_iter()
-            .filter(|m| m.is_available(&models_dir))
-            .map(|m| (m.id.into(), m.name.into()))
-            .collect();
-        let model_field = if models.is_empty() {
-            SettingField::render(move |_, _, _| div().text_sm().child("None downloaded yet"))
-        } else {
-            SettingField::dropdown(
-                models,
-                |cx: &App| cx.global::<AppSettings>().model.clone().into(),
-                |id: SharedString, cx: &mut App| {
-                    controller::with(cx, |c, cx| c.select_model(&id, cx));
-                },
-            )
-        };
+    /// The inset sidebar: a tinted panel (the design's glass, which GPUI can't draw) with a row
+    /// per page.
+    fn sidebar(&self, c: &'static Colors, cx: &mut Context<Self>) -> impl IntoElement {
+        let hover = Hsla::from(rgb(c.sidebar_selected)).opacity(0.5);
+        let rows = Page::ALL.map(|page| {
+            let selected = page == self.page;
+            h_flex()
+                .id(ElementId::Name(format!("settings-sidebar-{page:?}").into()))
+                .h(px(30.))
+                .px(px(8.))
+                .gap(px(8.))
+                .rounded(px(8.))
+                .cursor_pointer()
+                .map(|this| {
+                    if selected {
+                        this.bg(rgb(c.sidebar_selected)).font_weight(FontWeight::MEDIUM)
+                    } else {
+                        this.hover(|style| style.bg(hover))
+                    }
+                })
+                .child(brand::glyph(page.icon(), px(16.), if selected { c.ink } else { c.ink2 }))
+                .child(page.title())
+                .on_click(cx.listener(move |this, _, _, cx| this.show(page, cx)))
+        });
+        div().flex_shrink_0().w(SIDEBAR).h_full().p(px(8.)).child(
+            v_flex()
+                .size_full()
+                .rounded(px(12.))
+                .bg(rgb(c.sidebar))
+                .text_color(rgb(c.ink))
+                .px(px(10.))
+                .pt(px(12.))
+                .gap(px(2.))
+                .children(rows),
+        )
+    }
+
+    fn general_page(&self, c: &'static Colors, cx: &App) -> Div {
+        let settings = cx.global::<AppSettings>();
         let status = cx.global::<AppStatus>();
-        let unload_after = duration_words(cx.global::<AppSettings>().app.unload_after_secs);
-        let chosen = cx.global::<AppSettings>().model.as_str();
+        let unload_after = duration_words(settings.app.unload_after_secs);
+
+        let right_option = match &status.right_option_error {
+            Some(e) => brand::problem(c, e.clone(), brand::TEXT_SMALL).into_any_element(),
+            None => brand::line(c, "Works alongside the shortcut. Needs Input Monitoring."),
+        };
+        let shortcut = brand::group(
+            c,
+            [
+                self.recorder.clone().into_any_element(),
+                brand::row(
+                    "Hold right ⌥ to talk",
+                    Some(right_option),
+                    Some(switch("hold-right-option", settings.hold_right_option, |on, cx| {
+                        controller::with(cx, |c, cx| c.set_hold_right_option(on, cx));
+                    })),
+                )
+                .into_any_element(),
+            ],
+        );
+
+        let chosen = settings.model.as_str();
         let engine = match &status.engine {
-            EngineStatus::NotLoaded => "Not loaded.".to_string(),
-            EngineStatus::Missing => match status.downloads.get(chosen) {
+            EngineStatus::NotLoaded => Ok("Not loaded yet.".to_string()),
+            EngineStatus::Missing => Ok(match status.downloads.get(chosen) {
                 Some(download) => download_words(download),
                 None => {
                     let size = easyvox_core::models::find(chosen).map(|m| format_size(m.download_bytes));
                     format!("Not downloaded yet ({}).", size.unwrap_or_default())
                 }
-            },
-            EngineStatus::Loading => "Loading… The first load after installing takes about 15 s.".into(),
-            EngineStatus::Ready { load_ms } => {
-                format!(
-                    "Loaded in {:.1} s. Used for both the live preview and the final text.",
-                    *load_ms as f32 / 1000.
-                )
-            }
+            }),
+            EngineStatus::Loading => Ok("Loading… The first load after installing takes about 15 s.".into()),
+            EngineStatus::Ready { load_ms } => Ok(format!(
+                "Loaded in {:.1} s. It writes both the live preview and the final text.",
+                *load_ms as f32 / 1000.
+            )),
             EngineStatus::Unloaded => {
-                format!("Freed after {unload_after} without use. It loads again as you start your next dictation.")
+                Ok(format!("Freed after {unload_after} unused. It loads again as your next dictation starts."))
             }
-            EngineStatus::Failed { error } => format!("Couldn't load: {error}"),
+            EngineStatus::Failed { error } => Err(format!("Couldn't load: {error}")),
+        };
+        let engine = match engine {
+            Ok(words) => {
+                let end = if words.ends_with(['.', '…']) { "" } else { "." };
+                brand::line(c, format!("{words}{end} Download, switch or delete models under Models."))
+            }
+            Err(problem) => brand::problem(c, problem, brand::TEXT_SMALL).into_any_element(),
         };
         let keep_loaded = format!(
-            "Off: after {unload_after} without dictation, EasyVox frees the model's ~600 MB. Your next dictation \
-             records at once while it loads again (about 0.15 s), so nothing you say is lost. On: it stays in \
-             memory."
+            "Off: after {unload_after} without dictation, EasyVox frees the model's ~600 MB. Your next \
+             dictation still starts at once and loses nothing while it loads again (about 0.15 s). On: it \
+             stays in memory."
         );
-        let right_option = status
-            .right_option_error
-            .clone()
-            .unwrap_or_else(|| "Works alongside the shortcut. Needs Input Monitoring.".into());
+        let model = brand::group(
+            c,
+            [
+                brand::row("Speech model", Some(engine), Some(model_picker(c, cx))).into_any_element(),
+                brand::row(
+                    "Keep model loaded",
+                    Some(brand::line(c, keep_loaded)),
+                    Some(switch("keep-model-loaded", settings.keep_model_loaded, |on, cx| {
+                        controller::with(cx, |c, cx| c.set_keep_model_loaded(on, cx));
+                    })),
+                )
+                .into_any_element(),
+            ],
+        );
 
         let config_path = status.config_path.clone();
-        let config_note = match (&status.config_error, status.config_warnings.as_slice()) {
-            (Some(e), _) => {
-                format!("⚠ {e}. Changes made here apply until EasyVox quits, but aren't saved until the file is fixed.")
-            }
-            (None, []) => "Every setting is in this file, including advanced ones this window doesn't show \
-                           (docs/settings.md lists them). Edits to it apply as soon as you save, and changes \
-                           here are written to it."
-                .into(),
-            (None, warnings) => format!("⚠ Some of this file was ignored: {}", warnings.join(" · ")),
-        };
-        let config_row = SettingField::render(move |_, _, _| {
-            let path = config_path.clone();
-            h_flex().gap_2().child(div().text_sm().child(home_relative(&config_path))).child(
-                Button::new("config-file").outline().small().label("Show in Finder").on_click(move |_, _, cx| {
-                    // The folder always exists (the watcher makes it); the file only once written.
-                    let target = if path.exists() { path.clone() } else { path.parent().unwrap_or(&path).into() };
-                    cx.reveal_path(&target);
-                }),
-            )
-        });
-
-        SettingPage::new("General").default_open(true).group(
-            SettingGroup::new()
-                .title("Dictation")
-                .item(SettingItem::new("Model", model_field).description(format!(
-                    "{engine}{} Download, switch or delete models under Models.",
-                    if engine.ends_with(['.', '…']) { "" } else { "." }
-                )))
-                .item(
-                    SettingItem::new(
-                        "Keep model loaded",
-                        SettingField::switch(
-                            |cx: &App| cx.global::<AppSettings>().keep_model_loaded,
-                            |on: bool, cx: &mut App| {
-                                controller::with(cx, |c, cx| c.set_keep_model_loaded(on, cx));
-                            },
-                        ),
-                    )
-                    .description(keep_loaded),
-                )
-                .item(
-                    SettingItem::new("Push-to-talk shortcut", SettingField::render(move |_, _, _| recorder.clone()))
-                        .description("Hold it and speak; let go to paste. Click, then press a new combination."),
-                )
-                .item(
-                    SettingItem::new(
-                        "Hold right ⌥ to talk",
-                        SettingField::switch(
-                            |cx: &App| cx.global::<AppSettings>().hold_right_option,
-                            |on: bool, cx: &mut App| {
-                                controller::with(cx, |c, cx| c.set_hold_right_option(on, cx));
-                            },
-                        ),
-                    )
-                    .description(right_option),
-                )
-                .item(SettingItem::new("Settings file", config_row).description(config_note)),
-        )
-    }
-
-    /// Every model the app offers, downloaded or not, with what you can do with each.
-    fn models_page(&self, cx: &App) -> SettingPage {
-        let models_dir = cx.global::<AppStatus>().models_dir.clone();
-        let mut group = SettingGroup::new()
-            .title("Speech models")
-            .description("EasyVox runs one model at a time, on this Mac. A switch applies from your next dictation.");
-        for m in easyvox_core::models::offered() {
-            group = group.item(SettingItem::render(move |_, _, _| ModelRow::new(m)).keywords([
-                m.name,
-                m.license.name,
-                m.creator,
-                "download",
-                "delete",
-                "use",
-                "license",
-            ]));
-        }
-        let folder = SettingField::render(move |_, _, _| {
-            let dir = models_dir.clone();
-            h_flex().gap_2().child(div().text_sm().child(home_relative(&models_dir))).child(
-                Button::new("models-folder").outline().small().label("Show in Finder").on_click(move |_, _, cx| {
-                    // The folder exists once something was downloaded into it.
-                    let target = if dir.exists() { dir.clone() } else { dir.parent().unwrap_or(&dir).into() };
-                    cx.reveal_path(&target);
-                }),
-            )
-        });
-        group = group.item(
-            SettingItem::new("Models folder", folder)
-                .description("Each model is saved here with a LICENSE.txt that credits it."),
-        );
-        SettingPage::new("Models").group(group)
-    }
-
-    fn permissions_page(&self, cx: &mut Context<Self>) -> SettingPage {
-        let requesting = cx.global::<AppStatus>().mic_asking;
-        let mic = easyvox_core::mic_permission_status();
-        let accessibility = easyvox_core::accessibility_trusted();
-        let input_monitoring = crate::platform::input_monitoring_granted();
-
-        let setup = SettingField::render(|_, _, _| {
-            Button::new("open-onboarding").outline().small().label("Open setup…").on_click(|_, _, cx| {
-                controller::with(cx, |c, cx| c.open_onboarding(cx));
-            })
-        });
-        let setup =
-            SettingGroup::new()
-                .title("Setup")
-                .item(SettingItem::new("Set up EasyVox", setup).description(
-                    "The first launch's steps again: the Microphone, Accessibility and the speech model.",
-                ));
-        SettingPage::new("Permissions").group(setup).group(
-            SettingGroup::new()
-                .title("macOS privacy")
-                .item(
-                    SettingItem::new(
-                        "Microphone",
-                        SettingField::render(move |_, _, _| {
-                            let (label, button) = match (mic, requesting) {
-                                (_, true) => ("Waiting for your answer…", None),
-                                (MicPermission::Authorized, _) => ("Allowed", None),
-                                (MicPermission::NotDetermined, _) => ("Not asked yet", Some("Allow…")),
-                                (MicPermission::Denied, _) => ("Denied", Some("Open System Settings…")),
-                                (MicPermission::Restricted, _) => ("Restricted by this Mac's policy", None),
-                                (MicPermission::Unknown, _) => ("Unknown", Some("Open System Settings…")),
+        let reveal = config_path.clone();
+        let file = brand::group(
+            c,
+            [brand::row(
+                "Settings file",
+                Some(brand::line(c, home_relative(&config_path))),
+                Some(
+                    brand::button("config-file", "Show in Finder")
+                        .on_click(move |_, _, cx| {
+                            // The folder always exists (the watcher makes it); the file only once written.
+                            let target = if reveal.exists() {
+                                reveal.clone()
+                            } else {
+                                reveal.parent().unwrap_or(&reveal).into()
                             };
-                            status_row(
-                                label,
-                                button.map(|text| {
-                                    Button::new("microphone").outline().small().label(text).on_click(move |_, _, cx| {
-                                        if mic == MicPermission::NotDetermined {
-                                            controller::with(cx, |c, cx| c.request_mic(cx));
-                                        } else {
-                                            cx.open_url(PRIVACY_MICROPHONE);
-                                        }
-                                    })
-                                }),
-                            )
-                        }),
-                    )
-                    .description("Needed for dictation. EasyVox listens only while you hold the shortcut."),
-                )
-                .item(
-                    SettingItem::new(
-                        "Accessibility",
-                        SettingField::render(move |_, _, _| system_settings_row(accessibility, PRIVACY_ACCESSIBILITY)),
-                    )
-                    .description("Pastes the text at the cursor. Without it, the text is on the clipboard for ⌘V."),
-                )
-                .item(
-                    SettingItem::new(
-                        "Input Monitoring",
-                        SettingField::render(move |_, _, _| {
-                            system_settings_row(input_monitoring, PRIVACY_INPUT_MONITORING)
-                        }),
-                    )
-                    .description("Only for holding right ⌥ to talk. Relaunch EasyVox after allowing it."),
+                            cx.reveal_path(&target);
+                        })
+                        .into_any_element(),
                 ),
-        )
+            )
+            .into_any_element()],
+        );
+        let config_note = match (&status.config_error, status.config_warnings.as_slice()) {
+            (Some(e), _) => brand::problem(
+                c,
+                format!("{e}. Changes made here apply until EasyVox quits, but aren't saved until the file is fixed."),
+                brand::TEXT_SMALL,
+            )
+            .mt(px(6.))
+            .mx(px(12.)),
+            (None, []) => brand::footnote(
+                c,
+                "Every setting is in this file, including advanced ones this window doesn't show (docs/settings.md \
+                 lists them). Edits to it apply as soon as you save, and changes here are written to it.",
+            ),
+            (None, warnings) => {
+                brand::problem(c, format!("Some of this file was ignored: {}", warnings.join(" · ")), brand::TEXT_SMALL)
+                    .mt(px(6.))
+                    .mx(px(12.))
+            }
+        };
+
+        v_flex()
+            .child(shortcut)
+            .child(div().h(px(20.)))
+            .child(model)
+            .child(div().h(px(20.)))
+            .child(file)
+            .child(config_note)
     }
+}
+
+/// Every model the app offers, downloaded or not, with what you can do with each; then the
+/// folder they're saved in.
+fn models_page(c: &'static Colors, cx: &App) -> Div {
+    let models_dir = cx.global::<AppStatus>().models_dir.clone();
+    let rows = easyvox_core::models::offered()
+        .into_iter()
+        .map(|m| div().py(px(10.)).child(ModelRow::new(m)).into_any_element());
+    let reveal = models_dir.clone();
+    let folder = brand::row(
+        "Models folder",
+        Some(brand::line(c, home_relative(&models_dir))),
+        Some(
+            brand::button("models-folder", "Show in Finder")
+                .on_click(move |_, _, cx| {
+                    // The folder exists once something was downloaded into it.
+                    let target =
+                        if reveal.exists() { reveal.clone() } else { reveal.parent().unwrap_or(&reveal).into() };
+                    cx.reveal_path(&target);
+                })
+                .into_any_element(),
+        ),
+    );
+    v_flex()
+        .child(brand::group(c, rows))
+        .child(brand::footnote(
+            c,
+            "EasyVox runs one model at a time, on this Mac. A switch applies from your next dictation.",
+        ))
+        .child(div().h(px(20.)))
+        .child(brand::group(c, [folder.into_any_element()]))
+        .child(brand::footnote(c, "Each model is saved here with a LICENSE.txt that credits it."))
+}
+
+/// What EasyVox does with your audio, the three macOS permissions it uses, and the first
+/// launch's steps again.
+fn permissions_page(c: &'static Colors, cx: &App) -> Div {
+    let requesting = cx.global::<AppStatus>().mic_asking;
+    let mic = easyvox_core::mic_permission_status();
+    let accessibility = easyvox_core::accessibility_trusted();
+    let input_monitoring = crate::platform::input_monitoring_granted();
+
+    let (mic_state, mic_button) = match (mic, requesting) {
+        (_, true) => (Granted::Waiting("Waiting for your answer…"), None),
+        (MicPermission::Authorized, _) => (Granted::Yes, None),
+        (MicPermission::NotDetermined, _) => (Granted::Waiting("Not asked yet"), Some("Allow…")),
+        (MicPermission::Denied, _) => (Granted::No("Not allowed"), Some("Open System Settings…")),
+        (MicPermission::Restricted, _) => (Granted::No("Restricted on this Mac"), None),
+        (MicPermission::Unknown, _) => (Granted::No("Unknown"), Some("Open System Settings…")),
+    };
+    let mic_button = mic_button.map(|label| {
+        brand::button("microphone", label).on_click(move |_, _, cx| {
+            if mic == MicPermission::NotDetermined {
+                controller::with(cx, |c, cx| c.request_mic(cx));
+            } else {
+                cx.open_url(PRIVACY_MICROPHONE);
+            }
+        })
+    });
+    let privacy = brand::group(
+        c,
+        [
+            brand::row_with(
+                div()
+                    .text_size(brand::TEXT)
+                    .child("Audio is processed on this Mac and never saved.")
+                    .into_any_element(),
+                None,
+            )
+            .into_any_element(),
+            brand::row(
+                "Microphone",
+                Some(brand::line(c, "Needed to dictate. Used only while you hold the shortcut.")),
+                Some(permission(c, mic_state, mic_button)),
+            )
+            .into_any_element(),
+            brand::row(
+                "Accessibility",
+                Some(brand::line(c, "Pastes your words where you're typing. Without it, you paste them with ⌘V.")),
+                Some(system_permission(c, accessibility, PRIVACY_ACCESSIBILITY)),
+            )
+            .into_any_element(),
+            brand::row(
+                "Input Monitoring",
+                Some(brand::line(c, "Only for holding right ⌥ to talk. Relaunch EasyVox after allowing it.")),
+                Some(system_permission(c, input_monitoring, PRIVACY_INPUT_MONITORING)),
+            )
+            .into_any_element(),
+        ],
+    );
+    let setup = brand::row(
+        "Set up EasyVox",
+        Some(brand::line(c, "The first launch's steps again: the Microphone, Accessibility and the speech model.")),
+        Some(
+            brand::button("open-onboarding", "Open setup…")
+                .on_click(|_, _, cx| {
+                    controller::with(cx, |c, cx| c.open_onboarding(cx));
+                })
+                .into_any_element(),
+        ),
+    );
+    v_flex()
+        .child(privacy)
+        .child(brand::footnote(c, "You can change these permissions in System Settings › Privacy & Security."))
+        .child(brand::section("Setup"))
+        .child(brand::group(c, [setup.into_any_element()]))
 }
 
 impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // In sidebar order: the same as `Page`.
-        let pages = vec![self.general_page(cx), self.models_page(cx), self.permissions_page(cx), crate::about::page()];
-        let opened_on = SelectIndex { page_ix: self.page as usize, group_ix: None };
-        v_flex()
+        let c = brand::current(cx);
+        let page = self.page;
+        let content = match page {
+            Page::General => self.general_page(c, cx),
+            Page::Models => models_page(c, cx),
+            Page::Permissions => permissions_page(c, cx),
+            Page::About => crate::about::page(c, cx),
+        };
+        h_flex()
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .child(Settings::new(("easyvox-settings", self.shown)).default_selected_index(opened_on).pages(pages))
+            .text_size(brand::TEXT)
+            .child(self.sidebar(c, cx))
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .pl(px(8.))
+                            .pr(px(20.))
+                            .pt(px(14.))
+                            .pb(px(10.))
+                            .text_size(brand::TEXT_TITLE)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(page.title()),
+                    )
+                    .child(
+                        // One scroll area per page, so each opens at its top.
+                        v_flex()
+                            .flex_1()
+                            .w_full()
+                            .pl(px(8.))
+                            .pr(px(20.))
+                            .pb(px(20.))
+                            .child(content)
+                            .overflow_y_scrollbar()
+                            .id(ElementId::Name(format!("settings-page-{page:?}").into())),
+                    ),
+            )
     }
+}
+
+/// A switch that calls `set` with its new state.
+fn switch(id: &'static str, on: bool, set: impl Fn(bool, &mut App) + 'static) -> AnyElement {
+    Switch::new(id).checked(on).on_click(move |checked: &bool, _, cx| set(*checked, cx)).into_any_element()
+}
+
+/// A pop-up button with the downloaded models, the one in use ticked.
+fn model_picker(c: &'static Colors, cx: &App) -> AnyElement {
+    let models_dir = &cx.global::<AppStatus>().models_dir;
+    // The models the app offers (default first) that are downloaded and runnable here.
+    let models: Vec<(SharedString, SharedString)> = easyvox_core::models::offered()
+        .into_iter()
+        .filter(|m| m.is_available(models_dir))
+        .map(|m| (m.id.into(), m.short_name().into()))
+        .collect();
+    if models.is_empty() {
+        return div().text_color(rgb(c.ink2)).child("None downloaded yet").into_any_element();
+    }
+    let chosen: SharedString = cx.global::<AppSettings>().model.clone().into();
+    let label = models.iter().find(|(id, _)| *id == chosen).map_or_else(|| chosen.clone(), |(_, name)| name.clone());
+    Button::new("model-picker")
+        .small()
+        .outline()
+        .rounded(px(6.))
+        .label(label)
+        .dropdown_caret(true)
+        .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {
+            models.iter().fold(menu, |menu, (id, name)| {
+                let id = id.clone();
+                menu.item(PopupMenuItem::new(name.clone()).checked(id == chosen).on_click(move |_, _, cx| {
+                    controller::with(cx, |c, cx| c.select_model(&id, cx));
+                }))
+            })
+        })
+        .into_any_element()
+}
+
+/// Where a permission stands, in words.
+#[derive(Clone, Copy)]
+enum Granted {
+    Yes,
+    No(&'static str),
+    /// Not answered yet: no glyph, nothing is wrong.
+    Waiting(&'static str),
+}
+
+/// A permission's state, in words with a thin glyph (a tick, or a warning), and the button that
+/// fixes it.
+fn permission(c: &'static Colors, granted: Granted, button: Option<Button>) -> AnyElement {
+    let (glyph, words) = match granted {
+        Granted::Yes => (Some(brand::GLYPH_ALLOWED), "Allowed"),
+        Granted::No(words) => (Some(brand::GLYPH_WARNING), words),
+        Granted::Waiting(words) => (None, words),
+    };
+    h_flex()
+        .gap_3()
+        .child(
+            h_flex()
+                .gap(px(6.))
+                .text_color(rgb(c.ink2))
+                .when_some(glyph, |this, glyph| this.child(brand::glyph(glyph, px(15.), c.ink2)))
+                .child(words),
+        )
+        .when_some(button, |this, button| this.child(button))
+        .into_any_element()
+}
+
+/// A permission only System Settings can grant: allowed, or not with the button that opens its
+/// pane.
+fn system_permission(c: &'static Colors, granted: bool, url: &'static str) -> AnyElement {
+    let button =
+        (!granted).then(|| brand::button(url, "Open System Settings…").on_click(move |_, _, cx| cx.open_url(url)));
+    permission(c, if granted { Granted::Yes } else { Granted::No("Not allowed") }, button)
 }
 
 /// "10 minutes", "45 seconds".
@@ -306,19 +499,10 @@ fn home_relative(path: &std::path::Path) -> String {
     }
 }
 
-fn status_row(label: &'static str, button: Option<Button>) -> impl IntoElement {
-    h_flex().gap_2().child(div().text_sm().child(label)).when_some(button, |this, b| this.child(b))
-}
-
-fn system_settings_row(granted: bool, url: &'static str) -> impl IntoElement {
-    let button = (!granted).then(|| {
-        Button::new(url).outline().small().label("Open System Settings…").on_click(move |_, _, cx| cx.open_url(url))
-    });
-    status_row(if granted { "Allowed" } else { "Not allowed" }, button)
-}
-
-/// Click, then press a combination: it becomes the push-to-talk shortcut. The OS hot key is
-/// suspended while recording, or Carbon would swallow the combination.
+/// The Shortcut row of General: the shortcut as a keycap with Change…, which waits for a new
+/// combination (Cancel or Esc keeps the old one). It becomes the push-to-talk shortcut as soon as
+/// it's pressed; a taken or modifier-less one is refused in words, and the old one stays. The OS
+/// hot key is suspended while waiting, or Carbon would swallow the combination.
 pub struct ShortcutRecorder {
     focus: FocusHandle,
     recording: bool,
@@ -378,39 +562,49 @@ impl ShortcutRecorder {
 
 impl Render for ShortcutRecorder {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = brand::current(cx);
         let current = Keystroke::parse(&cx.global::<AppSettings>().shortcut).ok();
         let error = self.error.clone().or_else(|| cx.global::<AppStatus>().shortcut_error.clone().map(Into::into));
-        let border = if self.recording { cx.theme().ring } else { cx.theme().border };
-        v_flex()
-            .items_end()
-            .gap_1()
-            .child(
-                h_flex()
-                    .id("shortcut-recorder")
-                    .track_focus(&self.focus)
-                    .min_w(px(140.))
-                    .h(px(30.))
+        let line = match (error, self.recording) {
+            (Some(e), _) => brand::problem(c, e, brand::TEXT_SMALL).into_any_element(),
+            (None, true) => brand::line(c, "Press the keys you want to hold down. Esc keeps the current one."),
+            (None, false) => brand::line(c, "Hold it in any app and talk; let go to paste."),
+        };
+        let field = h_flex()
+            .id("shortcut-recorder")
+            .track_focus(&self.focus)
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, window, cx| this.start(window, cx)))
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+                if this.recording {
+                    cx.stop_propagation();
+                    this.handle_keystroke(&ev.keystroke, cx);
+                }
+            }))
+            .map(|this| match (self.recording, current) {
+                // Waiting for keys: a field with the focus ring's vermilion.
+                (true, _) => this
+                    .h(px(22.))
+                    .min_w(px(128.))
                     .px_2()
                     .justify_center()
-                    .rounded_md()
+                    .rounded(px(6.))
                     .border_1()
-                    .border_color(border)
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, window, cx| this.start(window, cx)))
-                    .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
-                        if this.recording {
-                            cx.stop_propagation();
-                            this.handle_keystroke(&ev.keystroke, cx);
-                        }
-                    }))
-                    .map(|this| match (self.recording, current) {
-                        (true, _) => {
-                            this.child(div().text_sm().text_color(cx.theme().muted_foreground).child("Press shortcut…"))
-                        }
-                        (false, Some(ks)) => this.child(Kbd::new(ks)),
-                        (false, None) => this.child(div().text_sm().child("Not set")),
-                    }),
-            )
-            .when_some(error, |this, e| this.child(div().text_xs().text_color(cx.theme().danger).child(e)))
+                    .border_color(cx.theme().ring)
+                    .text_color(rgb(c.ink2))
+                    .child("Type a shortcut"),
+                (false, Some(ks)) => this.child(brand::keycap(c, Kbd::format(&ks))),
+                (false, None) => this.text_color(rgb(c.ink2)).child("Not set"),
+            });
+        let button = if self.recording {
+            brand::button("shortcut-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| {
+                this.error = None;
+                this.stop(cx);
+            }))
+        } else {
+            brand::button("shortcut-change", "Change…")
+                .on_click(cx.listener(|this, _, window, cx| this.start(window, cx)))
+        };
+        brand::row("Shortcut", Some(line), Some(h_flex().gap_2().child(field).child(button).into_any_element()))
     }
 }

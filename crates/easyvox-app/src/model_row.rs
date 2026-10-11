@@ -6,8 +6,11 @@
 //! [`ModelRow`] is a plain element. It reads the app's state from the globals (never from the
 //! controller, which may be mid-update while a window draws) and acts through
 //! [`controller::with`], so any window can show it. Its only state of its own, the "Delete?"
-//! confirmation and a delete error, lives in the window, keyed by the model's id.
+//! confirmation and a delete error, lives in the window, keyed by the model's id. It's drawn in
+//! the windows' look (`brand.rs`): pill buttons, vermilion only for Download, and problems in
+//! words with a thin glyph.
 
+use crate::brand;
 use crate::controller;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
 use easyvox_core::download::{DownloadError, Progress, format_size};
@@ -15,8 +18,7 @@ use easyvox_core::models::ModelInfo;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::link::Link;
 use gpui_kit::component::progress::Progress as ProgressBar;
-use gpui_kit::component::tag::Tag;
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use std::collections::HashMap;
@@ -103,11 +105,20 @@ struct RowUi {
 #[derive(IntoElement)]
 pub struct ModelRow {
     model: &'static ModelInfo,
+    /// Download is the vermilion button.
+    emphasised: bool,
 }
 
 impl ModelRow {
     pub fn new(model: &'static ModelInfo) -> Self {
-        Self { model }
+        Self { model, emphasised: true }
+    }
+
+    /// Whether Download is the vermilion button (it is unless this says otherwise). Onboarding
+    /// keeps vermilion for the step to do next.
+    pub fn emphasised(mut self, emphasised: bool) -> Self {
+        self.emphasised = emphasised;
+        self
     }
 }
 
@@ -127,7 +138,8 @@ impl RenderOnce for ModelRow {
             let ui = ui.read(cx);
             (ui.confirm_delete, ui.error.clone())
         };
-        let muted = cx.theme().muted_foreground;
+        let c = brand::current(cx);
+        let muted: Hsla = rgb(c.ink2).into();
 
         let size = match &state {
             ModelState::Downloaded { bytes } => format!("{} on this Mac", format_size(*bytes)),
@@ -147,14 +159,19 @@ impl RenderOnce for ModelRow {
 
         let actions = h_flex().flex_shrink_0().gap_2().map(|this| match &state {
             ModelState::Downloading(_) => {
-                this.child(Button::new(key("cancel")).outline().small().label("Cancel").on_click(move |_, _, cx| {
+                this.child(brand::button(key("cancel"), "Cancel").on_click(move |_, _, cx| {
                     controller::with(cx, |c, _| c.cancel_download(id));
                 }))
             }
             ModelState::NotDownloaded | ModelState::Failed(_) => {
                 let label = if matches!(state, ModelState::Failed(_)) { "Try again" } else { "Download" };
                 let ui = ui.clone();
-                this.child(Button::new(key("download")).primary().small().label(label).on_click(move |_, _, cx| {
+                let button = if self.emphasised {
+                    brand::primary(key("download"), label)
+                } else {
+                    brand::button(key("download"), label)
+                };
+                this.child(button.on_click(move |_, _, cx| {
                     ui.update(cx, |ui, cx| {
                         *ui = RowUi::default();
                         cx.notify();
@@ -163,16 +180,13 @@ impl RenderOnce for ModelRow {
                 }))
             }
             ModelState::Downloaded { .. } if active => this.child(
-                Button::new(key("delete"))
-                    .outline()
-                    .small()
-                    .label("Delete")
+                brand::button(key("delete"), "Delete")
                     .disabled(true)
                     .tooltip("This is the model in use. Use another one first."),
             ),
             ModelState::Downloaded { bytes } if confirm_delete => {
                 let (keep, delete) = (ui.clone(), ui.clone());
-                this.child(Button::new(key("keep")).outline().small().label("Keep").on_click(move |_, _, cx| {
+                this.child(brand::button(key("keep"), "Keep").on_click(move |_, _, cx| {
                     keep.update(cx, |ui, cx| {
                         ui.confirm_delete = false;
                         cx.notify();
@@ -182,6 +196,8 @@ impl RenderOnce for ModelRow {
                     Button::new(key("confirm-delete"))
                         .danger()
                         .small()
+                        .rounded(px(12.))
+                        .px_3()
                         .label(format!("Delete {}", format_size(*bytes)))
                         .on_click(move |_, _, cx| {
                             let result = controller::with(cx, |c, cx| c.delete_model(id, cx))
@@ -196,37 +212,56 @@ impl RenderOnce for ModelRow {
             }
             ModelState::Downloaded { .. } => {
                 let (use_it, ask) = (ui.clone(), ui.clone());
-                this.child(Button::new(key("use")).primary().small().label("Use").on_click(move |_, _, cx| {
+                this.child(brand::button(key("use"), "Use").on_click(move |_, _, cx| {
                     use_it.update(cx, |ui, cx| {
                         *ui = RowUi::default();
                         cx.notify();
                     });
                     controller::with(cx, |c, cx| c.select_model(id, cx));
                 }))
-                .child(Button::new(key("delete")).outline().small().label("Delete").on_click(
-                    move |_, _, cx| {
-                        ask.update(cx, |ui, cx| {
-                            ui.confirm_delete = true;
-                            ui.error = None;
-                            cx.notify();
-                        });
-                    },
-                ))
+                .child(brand::button(key("delete"), "Delete").on_click(move |_, _, cx| {
+                    ask.update(cx, |ui, cx| {
+                        ui.confirm_delete = true;
+                        ui.error = None;
+                        cx.notify();
+                    });
+                }))
             }
         });
 
         let heading = v_flex()
             .flex_1()
             .min_w_0()
-            .gap_0p5()
+            .gap(px(2.))
             .child(
                 h_flex()
                     .gap_2()
-                    .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(model.name))
-                    .when(active, |this| this.child(Tag::success().small().child("Active")))
-                    .when_some(engine_note, |this, note| this.child(div().text_xs().text_color(muted).child(note))),
+                    .child(div().text_size(brand::TEXT).font_weight(FontWeight::MEDIUM).child(model.name))
+                    .when(active && matches!(state, ModelState::Downloaded { .. }), |this| {
+                        // A quiet label, not a colour: vermilion is for actions.
+                        this.child(
+                            h_flex()
+                                .h(px(18.))
+                                .px(px(7.))
+                                .rounded(px(9.))
+                                .bg(rgb(c.keycap))
+                                .text_size(brand::TEXT_SMALL)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(c.ink))
+                                .child("In use"),
+                        )
+                    })
+                    .when_some(engine_note, |this, note| {
+                        this.child(div().text_size(brand::TEXT_SMALL).text_color(muted).child(note))
+                    }),
             )
-            .child(div().text_sm().text_color(muted).child(format!("{size} · Pick this if {}", model.pick_if)));
+            .child(
+                div()
+                    .text_size(brand::TEXT_SMALL)
+                    .line_height(px(15.))
+                    .text_color(muted)
+                    .child(format!("{size} · Pick this if {}", model.pick_if)),
+            );
 
         v_flex()
             .w_full()
@@ -248,11 +283,13 @@ impl RenderOnce for ModelRow {
                                     .value(percent(&progress))
                                     .loading(progress == Progress::Verifying),
                             )
-                            .child(div().text_xs().text_color(muted).child(progress_words(&progress))),
+                            .child(
+                                div().text_size(brand::TEXT_SMALL).text_color(muted).child(progress_words(&progress)),
+                            ),
                     )
                 },
             )
-            .when_some(error, |this, e| this.child(div().text_sm().text_color(cx.theme().danger).child(e)))
+            .when_some(error, |this, e| this.child(brand::problem(c, e, brand::TEXT_SMALL)))
             .child(credits(model, muted))
     }
 }
@@ -262,7 +299,8 @@ impl RenderOnce for ModelRow {
 fn credits(model: &'static ModelInfo, color: Hsla) -> impl IntoElement {
     let id = model.id;
     v_flex()
-        .text_xs()
+        .text_size(brand::TEXT_SMALL)
+        .line_height(px(15.))
         .text_color(color)
         .child(linked_text(format!("{id}-credit"), &format!("{}.", credit_with_link(model)), px(3.)))
         .child(linked_text(
