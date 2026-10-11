@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 0 ready · 2 blocked · 20 on hold · 9 inbox · 34 done · 0 cancelled
+0 in progress · 0 ready · 2 blocked · 23 on hold · 9 inbox · 34 done · 0 cancelled
 
 ## In progress
 
@@ -43,6 +43,9 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-8fhp`](tasks/tuh-01M4KGHG3AMCQVBMYVQEJB8FHP.md) | Hands-on: first-launch onboarding from a clean slate | 1 | `human` `hands-on` |
 | [`tuh-qjqs`](tasks/tuh-01M4KNXEYGGE3QSN96GHNXQJQS.md) | Hands-on: overlay level meter, 'Can't hear you', live light/dark | 2 | `human` `hands-on` |
 | [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) | Hands-on: overlay animation (open and close, words fading in, Reduce motion) | 2 | `human` `hands-on` `overlay` |
+| [`tuh-q8rd`](tasks/tuh-01M4MFZG1M3EDBMEC1NPD6Q8RD.md) | Decide: delete Parakeet Unified and v3 from the real models folder (1.1 GB, bench-only) | 4 | `decision` `human` `models` |
+| [`tuh-tynb`](tasks/tuh-01M4MFZG2KBAWFT6A7AZ5STYNB.md) | Decide: file the GPUI Kit issue about the block 0.1.6 warning | 4 | `decision` `human` `upstream` |
+| [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) | Decide: onboarding at every launch when Accessibility is off on purpose | 4 | `decision` `human` `app` |
 
 ## Inbox
 
