@@ -15,6 +15,8 @@ Progress (11 Oct, 02:40, agent): 14 models run on build 93fc164 plus bench-only 
 
 Progress (11 Oct, 06:40, agent): all 77 runs done (14 clip benches, 42 read-aloud sessions, 21 ramble energy runs: 2 for tier 1 and Cohere, 1 for the rest), none hung or crashed. Read aloud word errors: Cohere 0.84 %, v2 1.68, Unified and v3 2.10, turbo and Canary-Qwen 2.52, Distil 3.36, Granite 4.1 4.20, Moonshine 4.62, Qwen3-ASR 5.88, base.en 6.72, Granite 5.0 9.24, Nemotron 9.66, Canary 180M 11.76. Turbo: text 1.3-2.2 s after release, ~795 J/min on the ramble (v2 40), because Whisper encodes a 30 s window per preview pass. Writing docs and CSVs next.
 
+Done (11 Oct, 07:10, agent): docs/model-bench.md 'Every candidate, one pipeline (11 October)', new rows in docs/bench/*.csv (study candidates, via extract.py --s3), DESIGN.md 'Other models we looked at' facts, 9 bench-only catalog + fetch-script entries. Gates green (fmt, clippy, test). Uncommitted; the orchestrator commits.
+
 ## History
 
 ### 2026-10-11 09:32 UTC — edit by `brandon`
@@ -22,5 +24,9 @@ Progress (11 Oct, 06:40, agent): all 77 runs done (14 clip benches, 42 read-alou
 description edited
 
 ### 2026-10-11 13:34 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 13:41 UTC — edit by `brandon`
 
 description edited
