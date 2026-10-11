@@ -2,6 +2,8 @@
 
 Researched 10 October 2026 from the working tree (including uncommitted overlay changes), `DESIGN.md`, `README.md`, `packaging/`, `scripts/bundle.sh` and the tuhdoo ledger. Line numbers are as of that tree. No recording or transcript content is used; sample dictation text is made up.
 
+**The designs came back on 11 October 2026:** the full hand-off is in [`design/`](../design/README.md) (mockups, tokens, the mark, the app icon, the menu bar glyphs, web and DMG assets). This brief stays as the request it answered.
+
 **Release tiers:** **v1** = needed for the first public release (the notarized DMG). **Later** = can wait.
 
 **Where things stand:** EasyVox has **no app icon at all** (no `CFBundleIconFile` in `packaging/Info.plist`, and `scripts/bundle.sh:70-75` copies no icon, so Finder, Gatekeeper and the permission prompts show the generic app icon). The menu bar icon is a **placeholder microphone drawn in code, with one state** (`tray.rs:53-78`). The overlay pill uses Apple's system colours. Settings, History and onboarding use GPUI Kit's **stock neutral theme**, with no brand colour, logo or icon anywhere in the app.

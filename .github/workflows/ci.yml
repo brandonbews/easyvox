@@ -1,13 +1,13 @@
 name: CI
 
-# The website (site/) can't affect the app, so it never starts a macOS run; site.yml checks it
-# on Linux instead.
+# The website (site/) and the design files (design/) can't affect the app, so they never start a
+# macOS run; site.yml checks the website on Linux instead.
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
+    paths-ignore: ["**.md", "docs/**", "design/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
   pull_request:
-    paths-ignore: ["**.md", "docs/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
+    paths-ignore: ["**.md", "docs/**", "design/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
   workflow_dispatch:
 
 permissions:
