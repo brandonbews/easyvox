@@ -13,8 +13,14 @@ Brandon accepted every recommendation of the design triage on 11 October (scratc
 
 Part 1 (A1, A2) done in worktree agent-a5c0f787750044b9e, uncommitted: brand.rs (tokens, branded GPUI Kit light/dark theme, brand::Assets), assets/brand/ (icon 128/256, mark and knot SVGs, menu bar glyphs as 1x/2x PNGs; Getting ready is a static whole ring), window sizes 560x540 / 760x540 / 760x520, packaging/AppIcon.icns via iconutil + CFBundleIconFile + bundle.sh copy, the new mic string, DESIGN.md Brand section. fmt, both clippys and tests pass; the bundle builds. Self-test not run: Brandon's EasyVox was running.
 
+Part 2 (A3-A6) done in the same worktree, uncommitted (Part 1 is b66996e). A3: menu bar states (Ready, Listening static vermilion, Finishing, Pasted 1 s, Getting ready, Needs attention) as 30x16 pt images through a small ns_status_item shim, VoiceOver labels, status rows and problem rows with fixes, Cmd-, and Cmd-Q, refreshed on events only. A4: pill 44 pt, 240-560 wide, 92 % fill, hairline, GPUI shadow, 15 pt text, three strokes, grey dots on release (Mode::Finishing), check fading in, hints. A5: two-line text-only notices with glyphs, 4 s, "no default input device" mapped to No microphone found. A6: 24 pt above the Dock on NSScreen.mainScreen, set at each fresh show. New [advanced] keys menubar_pasted_ms and overlay_dock_gap_pt; docs/settings.md regenerated; DESIGN.md Menu bar and The pill sections. fmt, both clippys, tests pass; bundle builds. Self-test and captures not run: Brandon's EasyVox (pid 24522) was running the whole time.
+
 ## History
 
 ### 2026-10-11 15:23 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 16:05 UTC — edit by `brandon`
 
 description edited
