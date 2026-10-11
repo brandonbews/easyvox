@@ -1,4 +1,4 @@
-# Create the Vercel project for the website (root site/, no domain)
+# Create the Cloudflare Pages project for the website (root site/, no domain)
 
 `tuh-01M4MTMN0H5XNND5TMTCRT4ETD`
 
@@ -19,6 +19,14 @@ Plan step 7 (docs/plans/website.md). About 5 minutes in the Vercel dashboard:
 
 The domain (easyvox.dev, apex canonical) and removing noindex happen at launch, with the repo going public (plan step 10).
 
+Brandon, 11 Oct: Cloudflare Pages instead of Vercel (he's moving tuhdoo there too). Settings given to him: Git-connected project on the private repo; framework preset Astro or none; root directory site; build command npm run build; output directory dist; env NODE_VERSION=24 (package.json engines >=24); production branch main; preview branches exclude tuhdoo (the ledger's data branch has no site/) and dependabot/*; build watch paths site/* and docs/*. No domain until launch. When he sends the pages.dev link: update .github/workflows/site.yml's comment and docs/plans/website.md's hosting notes, and add site/public/_headers (tuh: security headers task).
+
 ## History
 
-_No activity yet._
+### 2026-10-11 22:42 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 22:42 UTC — edit by `brandon`
+
+retitled

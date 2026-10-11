@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 19 on hold · 40 inbox · 53 done · 1 cancelled
+0 in progress · 3 ready · 2 blocked · 19 on hold · 40 inbox · 53 done · 1 cancelled
 
 ## In progress
 
@@ -12,6 +12,7 @@ _None._
 |---|---|---:|---|
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
 | [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) | Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once | — | `test` `flaky` `overlay` |
+| [`tuh-p4hy`](tasks/tuh-01M4PJ2XQ4RGDWGY6CJB0XP4HY.md) | Site: a _headers file for Cloudflare Pages (security headers; X-Robots-Tag noindex while NOINDEX is on) | — | `website` |
 
 ## Blocked / waiting
 
@@ -42,7 +43,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-q8rd`](tasks/tuh-01M4MFZG1M3EDBMEC1NPD6Q8RD.md) | Decide: delete Parakeet Unified and v3 from the real models folder (1.1 GB, bench-only) | 4 | `decision` `human` `models` |
 | [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
-| [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
+| [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Cloudflare Pages project for the website (root site/, no domain) | 3 | `human` `website` |
 | [`tuh-82ya`](tasks/tuh-01M4NQE2KBMZ8WST33GWHJ82YA.md) | Hands-on: the DMG window on macOS 26 in light and dark (do Finder labels stay black over the background?) | — | `design` `hands-on` `human` `release` |
 | [`tuh-3m33`](tasks/tuh-01M4PG20BW9EH44AS97E1J3M33.md) | Decide: move internal docs (DESIGN.md process notes, plans, branding, research notes, design hand-off, the tuhdoo ledger branch) to a private companion repo before EasyVox goes public | — | `human` `decision` `release` `repo` |
 
