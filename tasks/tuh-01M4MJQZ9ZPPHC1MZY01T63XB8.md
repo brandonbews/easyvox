@@ -28,6 +28,8 @@ Plan (10 Oct, from studying tuhdoo; full plan in the session scratchpad, website
 
 Scaffold (11 Oct, agent; uncommitted, for review): steps 2-6 and 8 done. ci.yml ignores site/** and site.yml. site/ is Astro 7.3.5, static, no JavaScript (CI fails on any <script> or .js). Docs: unified/remark pipeline ported from tuhdoo, nav.ts is the publish list (building, settings, model-bench, bench data); links to unpublished repo files are plain text while REPO_PUBLIC is false; the build fails on a broken link or #anchor (it found one: model-bench.md linked #the-eased-meter-and-the-softer-glide, now a heading). Homepage from plan section 5 with a CSS-only pill; noindex on every page and a disallow-all robots.txt behind NOINDEX in site/src/config.ts. site.yml (Linux, path-filtered) and an npm Dependabot entry. Build from source moved to docs/building.md, README keeps a pointer. Weight, gzipped HTML+CSS: home 5.2 KB, settings 12.5 KB, model bench 39.4 KB; 0 JS. Gates green: biome, astro check, build, cargo fmt, cargo test. Next (Brandon): review and commit; create the Vercel project with root directory site/, no domain.
 
+Committed as 93fc164 (plan steps 2–6 and 8; site lint, check, build, cargo fmt and test passed). Next, Brandon: create the Vercel project with root directory site/, no domain (plan step 7). Then: the results page (step 9), and launch with the repo going public (step 10).
+
 ## History
 
 ### 2026-10-11 04:43 UTC — edit by `brandon`
@@ -39,5 +41,9 @@ description edited
 depends_on +tuh-h1mn
 
 ### 2026-10-11 06:30 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 06:32 UTC — edit by `brandon`
 
 description edited
