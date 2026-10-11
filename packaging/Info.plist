@@ -10,6 +10,9 @@
 	<string>dev.easyvox.EasyVox</string>
 	<key>CFBundleExecutable</key>
 	<string>easyvox</string>
+	<!-- AppIcon.icns, which scripts/bundle.sh copies into Resources. -->
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<!-- scripts/bundle.sh replaces both versions with the easyvox-app crate's version. -->
@@ -26,6 +29,6 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Brandon Bews. MIT License.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>EasyVox listens while you hold the push-to-talk shortcut and turns your speech into text, on this Mac only.</string>
+	<string>EasyVox hears you only while you hold your dictation shortcut. Audio is processed on this Mac and never saved.</string>
 </dict>
 </plist>

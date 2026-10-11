@@ -176,12 +176,16 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
     );
     onboarding_at_launch(&controller, &mut report, cx);
 
-    let (theme_dark, system) = cx.update(|cx| (cx.theme().is_dark(), cx.window_appearance()));
-    let system_dark = matches!(system, WindowAppearance::Dark | WindowAppearance::VibrantDark);
+    let (theme_dark, theme_name, button, system) = cx.update(|cx| {
+        let theme = cx.theme();
+        (theme.is_dark(), theme.theme_name().to_string(), theme.button_primary, cx.window_appearance())
+    });
+    let system_dark = crate::brand::is_dark(system);
+    let brand_name = if system_dark { crate::brand::THEME_DARK } else { crate::brand::THEME_LIGHT };
     report.check(
-        "theme follows the system appearance",
-        theme_dark == system_dark,
-        json!({"theme_dark": theme_dark, "system": format!("{system:?}")}),
+        "the branded theme follows the system appearance",
+        theme_dark == system_dark && theme_name == brand_name && button == rgb(crate::brand::LIGHT.button_fill).into(),
+        json!({"theme_dark": theme_dark, "theme": theme_name, "system": format!("{system:?}")}),
     );
 
     let at_rest = panel_state(&controller, cx);

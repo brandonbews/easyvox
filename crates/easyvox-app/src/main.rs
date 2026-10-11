@@ -11,6 +11,7 @@
 //! `EASYVOX_LOG=debug` shows more.
 
 mod about;
+mod brand;
 mod config;
 mod controller;
 mod curve;
@@ -29,7 +30,6 @@ mod state;
 mod tray;
 
 use controller::{Controller, ControllerGlobal, UiEvent};
-use gpui_kit::component::Theme;
 use gpui_kit::*;
 use state::{AppSettings, AppStatus};
 
@@ -85,11 +85,11 @@ fn main() {
         log::error!("settings file: {e}; using the defaults");
     }
 
-    application().with_assets(assets::Assets).run(move |cx: &mut App| {
+    application().with_assets(brand::Assets).run(move |cx: &mut App| {
         gpui_kit::init(cx);
-        // gpui-kit's init picks the light theme; follow the system instead. Each window keeps
-        // it in sync from then on.
-        Theme::sync_system_appearance(None, cx);
+        // gpui-kit's init picks its own light theme. Switch to the branded pair, at the system's
+        // appearance; each window keeps it in sync from then on (`Theme::sync_system_appearance`).
+        brand::install_theme(cx);
         // A menu bar app: no Dock icon and no app menu (Info.plist sets LSUIElement too).
         cx.set_activation_policy(ActivationPolicy::Accessory);
         cx.set_global(loaded.settings);

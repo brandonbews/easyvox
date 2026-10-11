@@ -70,6 +70,10 @@ rm -rf dist/.staging
 mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources"
 cp "target/$out_dir/easyvox" "$staging/Contents/MacOS/easyvox"
 cp packaging/Info.plist "$staging/Contents/Info.plist"
+# The app icon (Info.plist's CFBundleIconFile). Made with the Command Line Tools from the design
+# hand-off's Default-appearance PNGs, a renamed copy of design/assets/app-icon/AppIcon.appiconset:
+#   iconutil -c icns -o packaging/AppIcon.icns AppIcon.iconset
+cp packaging/AppIcon.icns "$staging/Contents/Resources/"
 # The About page opens these. The notices come from scripts/notices.sh (see the file's top).
 cp packaging/THIRD_PARTY_NOTICES.html "$staging/Contents/Resources/"
 cp LICENSE "$staging/Contents/Resources/LICENSE.txt"

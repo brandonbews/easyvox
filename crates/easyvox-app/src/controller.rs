@@ -962,7 +962,7 @@ impl Controller {
         if Self::bring_forward(self.onboarding_window, cx) {
             return;
         }
-        let options = window_options("Set Up EasyVox", size(px(640.), px(640.)), cx);
+        let options = window_options("Set Up EasyVox", size(px(560.), px(540.)), cx);
         match gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| OnboardingView::new(window, cx))) {
             Ok((handle, view)) => {
                 self.onboarding_window = Some(handle);
@@ -999,7 +999,7 @@ impl Controller {
         if Self::bring_forward(self.settings_window, cx) {
             return;
         }
-        let options = window_options("EasyVox Settings", size(px(880.), px(560.)), cx);
+        let options = window_options("EasyVox Settings", size(px(760.), px(540.)), cx);
         match gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| SettingsView::new(window, cx))) {
             Ok((handle, view)) => {
                 self.settings_window = Some(handle);
@@ -1023,7 +1023,7 @@ impl Controller {
         if Self::bring_forward(self.history_window, cx) {
             return;
         }
-        let options = window_options("EasyVox History", size(px(560.), px(640.)), cx);
+        let options = window_options("EasyVox History", size(px(760.), px(520.)), cx);
         let store = self.history.clone();
         match gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| HistoryView::new(store, window, cx))) {
             Ok((handle, _)) => {
@@ -1057,6 +1057,8 @@ impl Controller {
     }
 }
 
+/// A standard window, centred. The sizes callers pass are the design hand-off's: setup 560 × 540,
+/// Settings 760 × 540 and History 760 × 520 (`design/`, boards 10, 12 and 16).
 fn window_options(title: &str, window_size: Size<Pixels>, cx: &mut App) -> WindowOptions {
     // The appearance may have changed while no window was open to notice.
     Theme::sync_system_appearance(None, cx);
