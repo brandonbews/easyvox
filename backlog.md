@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 3 ready · 2 blocked · 19 on hold · 40 inbox · 52 done · 1 cancelled
+0 in progress · 2 ready · 2 blocked · 19 on hold · 40 inbox · 53 done · 1 cancelled
 
 ## In progress
 
@@ -11,7 +11,6 @@ _None._
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
-| [`tuh-4140`](tasks/tuh-01M4MGCF0JZW3A508YWHTS4140.md) | Website: a condensed, visual page of our benchmark and efficiency findings | — | `website` `docs` |
 | [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) | Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once | — | `test` `flaky` `overlay` |
 
 ## Blocked / waiting
@@ -136,6 +135,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-94ns`](tasks/tuh-01M4K926MM34Y3SX6H399294NS.md) Hands-on: 'Didn't catch anything' on silence, and quick first words
 - [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) Hands-on: overlay animation (pop in and out, eased bars, words fading in, Reduce motion)
 - [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) Decide: onboarding at every launch when Accessibility is off on purpose
+- [`tuh-4140`](tasks/tuh-01M4MGCF0JZW3A508YWHTS4140.md) Website: a condensed, visual page of our benchmark and efficiency findings
 - [`tuh-h1mn`](tasks/tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) Decide: website plan questions (stack, hosting, domain, public docs)
 - [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap
 - [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo)
