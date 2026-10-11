@@ -20,7 +20,12 @@
 //! skipped.
 //!
 //! Light and dark are checked by giving EasyVox its own appearance for a moment (as a system
-//! change would reach it), never by changing the system's.
+//! change would reach it), never by changing the system's. Reduce motion is answered by the
+//! self-test (off, unless a check says otherwise), never read from or written to the system.
+//!
+//! GPUI doesn't draw while the screen is locked, so during the dictation and the motion checks
+//! the self-test draws the overlay at each redraw and animation frame it asks for, as the screen
+//! would, and its animations run as they would on screen.
 //!
 //! `--self-test --replay <wav> [--draw]` runs no checks: one real-time dictation of the file with
 //! the overlay up, then a JSON report of what it cost the app (CPU, redraws), for measuring the
@@ -130,6 +135,8 @@ impl Report {
 }
 
 async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp) {
+    // The overlay's slide and glide run, whatever this Mac's Reduce motion says.
+    platform::force_reduce_motion(Some(false));
     if let Some(wav) = options.replay.clone() {
         return replay(&controller, &options, &wav, cx).await;
     }
@@ -201,6 +208,9 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
         }
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
+    reduce_motion(&controller, &mut report, cx).await;
+    reopen_during_close(&controller, &mut report, cx).await;
+    platform::force_reduce_motion(None);
 
     config_live_reload(&controller, &mut report, cx).await;
     windows(&controller, &mut report, cx).await;
@@ -269,6 +279,8 @@ async fn dictation(
     };
     let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
     let clipboard_before = platform::clipboard_change_count();
+    draw_each_redraw(controller, true, cx);
+    let frames_before = cx.update(|cx| overlay_counts(controller, cx).3);
 
     let status = platform::post_hotkey_event(hotkey_id, true);
     let pressed = Instant::now();
@@ -279,8 +291,11 @@ async fn dictation(
         json!({"carbon_status": status, "ms": started}),
     );
     if started.is_none() {
+        draw_each_redraw(controller, false, cx);
         return;
     }
+    sleep(cx, 40).await; // into the open's fade and slide
+    let opening = cx.update(|cx| controller.read(cx).overlay.panel.motion_state());
     let shown = panel_state(controller, cx);
     report.check(
         "overlay shows without taking focus",
@@ -336,6 +351,15 @@ async fn dictation(
 
     let status = platform::post_hotkey_event(hotkey_id, false);
     let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
+    // The final text fades in for `overlay_words_ms`; then the pill, still up for a moment,
+    // asks for nothing more.
+    sleep(cx, 300).await;
+    let (settled, animating_after_final, up_after_final) = cx.update(|cx| {
+        let c = controller.read(cx);
+        (overlay_counts(controller, cx), c.overlay.view.read(cx).is_animating(), c.overlay.panel.is_visible())
+    });
+    sleep(cx, 200).await;
+    let still = cx.update(|cx| overlay_counts(controller, cx));
     let final_text = cx.update(|cx| {
         let entries = &controller.read(cx).history.read(cx).entries;
         (entries.len() > history_before).then(|| entries[0].text.clone())
@@ -365,6 +389,162 @@ async fn dictation(
 
     let hidden = wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).overlay.panel.state().visible).await;
     report.check("overlay hides after the final text", hidden.is_some(), json!({"ms": hidden}));
+
+    // Hidden, nothing runs: no frames, no draws, no animation left on the layer.
+    let rest_before = cx.update(|cx| overlay_counts(controller, cx));
+    sleep(cx, 1000).await;
+    let (rest_after, animating_hidden, resting) = cx.update(|cx| {
+        let c = controller.read(cx);
+        (overlay_counts(controller, cx), c.overlay.view.read(cx).is_animating(), c.overlay.panel.motion_state())
+    });
+    draw_each_redraw(controller, false, cx);
+    let motion = cx.update(|cx| controller.read(cx).overlay.view.read(cx).motion);
+    let frames = settled.3 - frames_before;
+    // Each change of the text animates for the longer of the words' fade and the glide, a frame
+    // every `frame`: a bound, with room for a few changes the polling above didn't see.
+    let per_change = motion.words.max(motion.glide).as_millis() / motion.frame.as_millis().max(1) + 2;
+    let frames_cap = (partials.len() as u128 + 6) * per_change;
+    let moved = |secs: Option<f64>| secs.is_some_and(|s| s > 0.);
+    report.check(
+        "the overlay's animations stop when they end, and nothing runs while it's hidden",
+        moved(opening.fade_secs)
+            && moved(opening.slide_secs)
+            && opening.offset_down > 0.
+            && frames > 0
+            && u128::from(frames) <= frames_cap
+            && up_after_final
+            && !animating_after_final
+            && still.3 == settled.3
+            && still.2 == settled.2
+            && hidden.is_some()
+            && rest_after == rest_before
+            && !animating_hidden
+            && resting.fade_secs.is_none()
+            && resting.slide_secs.is_none()
+            && resting.resting_opacity == 0.,
+        json!({"open": motion_json(&opening), "animation_frames": frames, "frames_cap": frames_cap,
+               "text_updates_seen": partials.len(), "after_final": {"up": up_after_final,
+               "animating": animating_after_final, "frames_in_200_ms": still.3 - settled.3,
+               "renders_in_200_ms": still.2 - settled.2},
+               "hidden_1_s": {"frames": rest_after.3 - rest_before.3, "renders": rest_after.2 - rest_before.2,
+               "redraws": rest_after.1 - rest_before.1, "animating": animating_hidden,
+               "layer": motion_json(&resting)}}),
+    );
+}
+
+/// Reduce motion on, then off, as the self-test's answer (the system's setting is never
+/// touched): on, the open and close only fade and the pill's glide is a jump; off, they slide
+/// and glide. The words fade either way, and every animation ends.
+async fn reduce_motion(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    draw_each_redraw(controller, true, cx);
+    let moved = |secs: Option<f64>| secs.is_some_and(|s| s > 0.);
+    let mut steps = vec![];
+    for on in [true, false] {
+        platform::force_reduce_motion(Some(on));
+        cx.update(|cx| {
+            controller.update(cx, |c, cx| {
+                c.overlay.view.update(cx, |v, cx| v.reset(cx));
+                c.overlay.show(cx);
+            })
+        });
+        sleep(cx, 40).await;
+        let (opening, motion) = cx.update(|cx| {
+            let c = controller.read(cx);
+            (c.overlay.panel.motion_state(), c.overlay.view.read(cx).motion)
+        });
+        // Words long enough to grow the pill: they fade in, and it glides unless motion is
+        // reduced. The draw this asks for runs before the next update.
+        cx.update(|cx| {
+            let view = controller.read(cx).overlay.view.clone();
+            view.update(cx, |v, cx| v.set_partial("Checking how the overlay".into(), "moves for you".into(), cx));
+        });
+        let (fading, gliding) = cx.update(|cx| controller.read(cx).overlay.view.read(cx).animations());
+        let settled =
+            wait_for(cx, Duration::from_secs(2), |cx| !controller.read(cx).overlay.view.read(cx).is_animating()).await;
+        cx.update(|cx| controller.update(cx, |c, cx| c.overlay.hide(cx)));
+        sleep(cx, 40).await;
+        let closing = cx.update(|cx| controller.read(cx).overlay.panel.motion_state());
+        let hidden = wait_for(cx, Duration::from_secs(2), |cx| !controller.read(cx).overlay.panel.is_visible()).await;
+        let resting = cx.update(|cx| controller.read(cx).overlay.panel.motion_state());
+        let movement = if on {
+            motion.slide == 0.
+                && motion.glide.is_zero()
+                && opening.slide_secs.is_none()
+                && closing.slide_secs.is_none()
+                && opening.offset_down.abs() < 0.01
+                && !gliding
+        } else {
+            motion.slide > 0.
+                && !motion.glide.is_zero()
+                && moved(opening.slide_secs)
+                && moved(closing.slide_secs)
+                && opening.offset_down > 0.
+                && gliding
+        };
+        let ok = movement
+            && moved(opening.fade_secs)
+            && moved(closing.fade_secs)
+            && fading
+            && settled.is_some()
+            && hidden.is_some()
+            && resting.fade_secs.is_none()
+            && resting.slide_secs.is_none();
+        steps.push(json!({"reduce_motion": on, "slide_pt": motion.slide, "glide_ms": motion.glide.as_millis(),
+                          "open": motion_json(&opening), "close": motion_json(&closing), "words_fading": fading,
+                          "gliding": gliding, "settled_ms": settled, "hidden_ms": hidden, "ok": ok}));
+    }
+    platform::force_reduce_motion(Some(false));
+    draw_each_redraw(controller, false, cx);
+    report.check(
+        "Reduce motion swaps the open and close's slide and the pill's glide for plain fades",
+        steps.iter().all(|s| s["ok"] == true),
+        json!(steps),
+    );
+}
+
+/// A press during the close (here, the show it makes) brings the pill straight back, from
+/// where the fade had got to, and the close's order-out never comes.
+async fn reopen_during_close(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    let show = |cx: &mut AsyncApp| {
+        cx.update(|cx| {
+            controller.update(cx, |c, cx| {
+                c.overlay.view.update(cx, |v, cx| v.set_notice("Checking the close".into(), cx));
+                c.overlay.show(cx);
+            })
+        })
+    };
+    let motion = |cx: &mut AsyncApp| cx.update(|cx| controller.read(cx).overlay.panel.motion_state());
+    let open_close = cx.update(|cx| {
+        let app = &cx.global::<AppSettings>().app;
+        (u64::from(app.overlay_open_ms), u64::from(app.overlay_close_ms))
+    });
+    show(cx);
+    sleep(cx, open_close.0 + 50).await;
+    cx.update(|cx| controller.update(cx, |c, cx| c.overlay.hide(cx)));
+    sleep(cx, open_close.1 / 2).await;
+    let fading = motion(cx);
+    show(cx);
+    sleep(cx, 20).await;
+    let back = motion(cx);
+    let closing_after = cx.update(|cx| controller.read(cx).overlay.is_closing());
+    // Well past when the close would have ordered it out.
+    sleep(cx, open_close.0.max(open_close.1) + 150).await;
+    let (up, settled) = (cx.update(|cx| controller.read(cx).overlay.panel.is_visible()), motion(cx));
+    cx.update(|cx| controller.update(cx, |c, cx| c.overlay.hide(cx)));
+    let hidden = wait_for(cx, Duration::from_secs(2), |cx| !controller.read(cx).overlay.panel.is_visible()).await;
+    report.check(
+        "a press during the close brings the overlay straight back",
+        fading.opacity < 0.99
+            && fading.fade_secs.is_some()
+            && back.fade_secs.is_some()
+            && !closing_after
+            && up
+            && settled.opacity > 0.99
+            && settled.offset_down.abs() < 0.01
+            && hidden.is_some(),
+        json!({"mid_close": motion_json(&fading), "reopened": motion_json(&back), "close_cancelled": !closing_after,
+               "up_after": up, "settled": motion_json(&settled), "hidden_after_ms": hidden}),
+    );
 }
 
 /// The idle timeout (shortened to 1 s) frees the model; the next press records at once while
@@ -1317,17 +1497,34 @@ fn draw_overlay(controller: &Entity<Controller>, cx: &mut App) -> bool {
     window.update(cx, |_, window, cx| window.draw(cx).clear(cx)).is_ok()
 }
 
-/// The overlay's counters: levels received, redraws asked for, draws.
-fn overlay_counts(controller: &Entity<Controller>, cx: &App) -> (u32, u32, u32) {
+/// The overlay's counters: levels received, redraws asked for, draws, animation frames asked for.
+fn overlay_counts(controller: &Entity<Controller>, cx: &App) -> (u32, u32, u32, u32) {
     let view = controller.read(cx).overlay.view.read(cx);
-    (view.levels, view.redraws_asked, view.renders)
+    (view.levels, view.redraws_asked, view.renders, view.frames_asked)
+}
+
+/// Draws the overlay at each redraw and animation frame it asks for, as the screen would (GPUI
+/// doesn't draw while the screen is locked), or stops.
+fn draw_each_redraw(controller: &Entity<Controller>, on: bool, cx: &mut AsyncApp) {
+    cx.update(|cx| {
+        let overlay = &controller.read(cx).overlay;
+        let (view, window) = (overlay.view.clone(), overlay.window);
+        view.update(cx, |v, _| v.draw_each_redraw = on.then_some(window));
+    });
+}
+
+fn motion_json(m: &platform::MotionState) -> Value {
+    json!({"opacity": m.opacity, "offset_down_pt": m.offset_down, "resting_opacity": m.resting_opacity,
+           "fade_secs": m.fade_secs, "slide_secs": m.slide_secs})
 }
 
 /// `--replay <wav>`: one real-time dictation of `wav` with the overlay up, nothing else, then a
-/// report of what it cost the app: its CPU time and the overlay's redraws, with the wall-clock
-/// times of the session's start and end so `macmon`'s samples can be cut to it
-/// (`docs/model-bench.md`, "Level meter"). Whether the meter is on comes from the settings file
-/// (`meter_interval_ms = 0` turns it off).
+/// report of what it cost the app: its CPU time and the overlay's redraws and animation frames,
+/// with the wall-clock times of the session's start and end so `macmon`'s samples can be cut to
+/// it (`docs/model-bench.md`, "Level meter" and "Overlay animation"). Whether the meter and the
+/// animations are on comes from the settings file (`meter_interval_ms = 0` turns the meter off,
+/// `overlay_words_ms = 0` and `overlay_glide_ms = 0` the pill's animations). Reduce motion is
+/// taken as off.
 async fn replay(controller: &Entity<Controller>, options: &Options, wav: &Path, cx: &mut AsyncApp) {
     let unix_ms = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
     let waited = wait_for(cx, Duration::from_secs(120), |cx| {
@@ -1349,6 +1546,8 @@ async fn replay(controller: &Entity<Controller>, options: &Options, wav: &Path, 
         // A moment for the load's after-effects to settle, as a person would take.
         sleep(cx, 5000).await;
         let before = cx.update(|cx| overlay_counts(controller, cx));
+        let drawing = || crate::overlay::DRAWING_NANOS.load(Ordering::Relaxed) as f64 / 1e9;
+        let drawing0 = drawing();
         let (cpu0, start_ms, t0) = (easyvox_core::metrics::proc_stats().cpu_secs, unix_ms(), Instant::now());
         cx.update(|cx| {
             controller.update(cx, |c, cx| {
@@ -1360,13 +1559,19 @@ async fn replay(controller: &Entity<Controller>, options: &Options, wav: &Path, 
             wait_for(cx, Duration::from_secs_f64(audio_secs + 60.), |cx| controller.read(cx).is_idle()).await;
         let (cpu, end_ms, wall) = (easyvox_core::metrics::proc_stats().cpu_secs - cpu0, unix_ms(), t0.elapsed());
         let after = cx.update(|cx| overlay_counts(controller, cx));
-        let tuning = cx.update(|cx| cx.global::<AppSettings>().tuning);
+        let drawing_secs = drawing() - drawing0;
+        let (tuning, app) = cx.update(|cx| (cx.global::<AppSettings>().tuning, cx.global::<AppSettings>().app));
         out = json!({
             "wav": wav, "audio_secs": audio_secs, "model_ready_ms": waited, "finished_ms": finished,
             "start_unix_ms": start_ms, "end_unix_ms": end_ms, "wall_secs": wall.as_secs_f64(),
             "cpu_secs": cpu, "cpu_pct_of_one_core": 100. * cpu / wall.as_secs_f64(),
             "meter_interval_ms": tuning.meter_interval_ms, "draw_each_redraw": options.draw,
             "levels_received": after.0 - before.0, "redraws_asked": after.1 - before.1, "renders": after.2 - before.2,
+            "animation_frames": after.3 - before.3, "drawing_secs": drawing_secs,
+            "drawing_pct_of_one_core": 100. * drawing_secs / wall.as_secs_f64(),
+            "drawing_ms_per_render": 1e3 * drawing_secs / f64::from((after.2 - before.2).max(1)),
+            "overlay_words_ms": app.overlay_words_ms,
+            "overlay_glide_ms": app.overlay_glide_ms, "overlay_frame_ms": app.overlay_frame_ms,
         });
     }
     match std::fs::write(&options.out, serde_json::to_string_pretty(&out).unwrap_or_default()) {

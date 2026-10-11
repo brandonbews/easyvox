@@ -17,7 +17,7 @@ The file holds no permissions. Microphone, Accessibility and Input Monitoring ar
 - **The defaults live in the app; the file only overrides them.** Any key you leave out follows its default, so when a release improves a default, you get it. Set only what you want different, and don't paste the whole reference below into your file: every key you copy stays at that value from then on.
 - **The top of the file is what the Settings window shows:** `model`, `shortcut`, `hold_right_option` and `keep_model_loaded`. When you change one in the window, EasyVox writes that key and nothing else. Your comments, your order and your other keys stay as you wrote them.
 - **`[advanced]` holds everything else.** EasyVox never writes these: they're yours to set by hand.
-- **Edits apply within a second of saving,** with no restart. EasyVox watches the file (with FSEvents, so it costs nothing while the file doesn't change). A new shortcut or model takes effect at once. The numbers for the live preview, the chunks and the pauses apply from your next dictation, without reloading the model; a dictation already under way finishes with the values it started with.
+- **Edits apply within a second of saving,** with no restart. EasyVox watches the file (with FSEvents, so it costs nothing while the file doesn't change). A new shortcut or model takes effect at once. The numbers for the live preview, the chunks and the pauses apply from your next dictation, without reloading the model; a dictation already under way finishes with the values it started with. The overlay's animation timings apply from the next time it opens.
 - **The same keys apply to every model.** There's one pipeline, so there are no per-model sections.
 
 ## When something's wrong
@@ -89,6 +89,23 @@ meter_interval_ms = 33
 meter_no_input_ms = 3000
 ```
 
+The overlay fades in and out with a short slide, new words fade in, and it grows and scrolls in a glide rather than a jump. With macOS's Reduce motion on, it fades without sliding or gliding. Slower, softer animations; or none at all, for the lightest overlay (it then appears, changes and goes at once):
+
+```toml
+[advanced]
+overlay_open_ms = 250
+overlay_close_ms = 200
+overlay_words_ms = 200
+```
+
+```toml
+[advanced]
+overlay_open_ms = 0
+overlay_close_ms = 0
+overlay_words_ms = 0
+overlay_glide_ms = 0
+```
+
 ## Every key
 
 Each key, at its default, with its unit, its range and what raising or lowering it trades off. The app prints the same text: `easyvox --print-default-config` (in a build, `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config`; from source, `cargo run -p easyvox-app -- --print-default-config`). A test keeps this page in step with the code.
@@ -101,7 +118,8 @@ Each key, at its default, with its unit, its range and what raising or lowering 
 # you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
 # that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
 # save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
-# meter from your next dictation, the same for every model.
+# meter from your next dictation, the same for every model, and the overlay's animations from
+# the next time it opens.
 
 # The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them
 # default or alternative). Settings → Models downloads it, and the next dictation uses it.
@@ -119,9 +137,9 @@ hold_right_option = false
 keep_model_loaded = false
 
 [advanced]
-# Settings the window doesn't show: how long the overlay stays up and the model stays
-# loaded, then the numbers behind the live preview, the chunks, what counts as speech
-# or a pause, and the overlay's level meter.
+# Settings the window doesn't show: how long the model stays loaded, how long the
+# overlay stays up and how it moves, then the numbers behind the live preview, the
+# chunks, what counts as speech or a pause, and the overlay's level meter.
 
 # How long EasyVox keeps the speech model in memory after your last dictation, unless
 # "Keep model loaded" is on. Freeing it takes the app from about 670 MB to about
@@ -141,11 +159,52 @@ overlay_hide_after_final_ms = 600
 # In milliseconds, from 500 to 30000.
 overlay_hide_after_notice_ms = 2500
 
-# The most text the overlay shows: longer text keeps only its end, so the newest words
-# stay in view. Higher shows more of what came before, but past about 72 the newest
-# words can run past the edge of the overlay and be cut off.
+# The most of the transcript the overlay lays out. The pill shows the end of it, as
+# much as fits, and scrolls as words come so the newest stay in view; this caps the
+# text kept out of sight past its left edge, where it's cut. Lower draws a little less
+# each frame, but under about 120 the cut (an "…") can come into view; higher costs
+# more to lay out for nothing you'd see.
 # In characters, from 10 to 500.
-overlay_max_chars = 72
+overlay_max_chars = 200
+
+# How long the overlay takes to fade in (sliding up `overlay_slide_pt`) when you press
+# the shortcut. It shows at once and never waits for the model; this is only how it
+# appears. Core Animation runs it, so it costs no redraws. Higher is gentler; lower is
+# snappier. 0 shows it at once.
+# In milliseconds, from 0 to 1000.
+overlay_open_ms = 150
+
+# How long the overlay takes to fade out (sliding down `overlay_slide_pt`) once it
+# hides. The paste has happened by then, and a press during the fade brings the
+# overlay straight back, so it never delays you. Higher is gentler; lower gets it out
+# of the way sooner. 0 hides it at once.
+# In milliseconds, from 0 to 1000.
+overlay_close_ms = 120
+
+# How far the overlay slides as it opens and closes. With macOS's Reduce motion on, it
+# doesn't slide at all and only fades. Higher is more noticeable; 0 only fades.
+# In points, from 0 to 16.
+overlay_slide_pt = 8
+
+# How long new words take to fade in, and provisional words (drawn fainter) to firm
+# up once they're confirmed. Each change draws the overlay every `overlay_frame_ms`
+# for this long. Higher is softer but redraws more; lower is cheaper and more abrupt.
+# 0 changes the text at once.
+# In milliseconds, from 0 to 1000.
+overlay_words_ms = 120
+
+# How long the overlay takes to grow to fit new words, and to scroll long text so the
+# newest words stay in view, instead of jumping. With Reduce motion on, both jump.
+# Higher is smoother but redraws for longer; lower is cheaper. 0 jumps.
+# In milliseconds, from 0 to 1000.
+overlay_glide_ms = 150
+
+# Time between the frames of the overlay's words fading and gliding, while one runs;
+# nothing is drawn once it ends. The open and close don't use it. Lower is smoother
+# (16 is 60 frames a second; 8 suits a 120 Hz screen) but draws more often; higher is
+# lighter and choppier.
+# In milliseconds, from 8 to 100.
+overlay_frame_ms = 16
 
 # How often the preview re-decodes the newest audio while the key is held. 0 turns the
 # preview off (long dictations are still polished in chunks). Lower shows words sooner

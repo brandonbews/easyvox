@@ -1,11 +1,20 @@
-//! macOS: the System Settings deep links, the overlay panel shim and key guard, and the right-⌥
-//! event tap. Small helpers the self-test needs sit at the bottom, behind the `self-test` feature.
+//! macOS: the System Settings deep links, the overlay panel shim, key guard and open and close
+//! animations, Reduce motion, and the right-⌥ event tap. Small helpers the self-test needs sit
+//! at the bottom, behind the `self-test` feature.
 
 use anyhow::Context as _;
+use objc2::Message as _;
 use objc2::rc::Retained;
-use objc2_app_kit::{NSPanel, NSView, NSWindow, NSWindowStyleMask};
+use objc2::runtime::AnyObject;
+use objc2_app_kit::{NSPanel, NSView, NSWindow, NSWindowAnimationBehavior, NSWindowStyleMask, NSWorkspace};
+use objc2_foundation::{NSNumber, NSString};
+use objc2_quartz_core::{
+    CABasicAnimation, CALayer, CAMediaTiming as _, CAMediaTimingFunction, CAMediaTimingFunctionName, CATransaction,
+    kCAFillModeForwards, kCAMediaTimingFunctionEaseIn, kCAMediaTimingFunctionEaseOut,
+};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
+use std::time::Duration;
 
 // ───────────────────────── System Settings ─────────────────────────
 
@@ -17,27 +26,47 @@ pub const PRIVACY_INPUT_MONITORING: &str =
 
 // ───────────────────────── Overlay panel ─────────────────────────
 
-/// The overlay's native window, set up so it can never take keyboard focus or clicks.
+/// The overlay's native window, set up so it can never take keyboard focus or clicks, and its
+/// open and close.
 ///
 /// GPUI's `WindowKind::PopUp` is already most of what the overlay needs: a `GPUIPanel` (an
 /// NSPanel subclass) with the non-activating style bit, the pop-up level (101), and
 /// `CanJoinAllSpaces | FullScreenAuxiliary`. What it lacks: click-through, a truly borderless
 /// style mask (GPUI always adds Titled), no shadow, `hidesOnDeactivate = NO`, and a panel that
 /// refuses key status (see [`key_guard`]).
+///
+/// The open and close are Core Animation on the layer of GPUI's view: a fade and a slide that
+/// the window server runs, so the app neither redraws nor wakes up for them. Moving the window
+/// instead would make GPUI redraw the pill at every step (it redraws whenever its window
+/// moves). Each animation starts from the layer as it's drawn at that moment, so a show during
+/// a close turns it around without a jump.
+#[derive(Clone)]
 pub struct OverlayPanel {
     win: Retained<NSWindow>,
+    /// GPUI's view. Its layer is what the open and close animate; its `alphaValue` is the
+    /// layer's resting opacity (AppKit owns the layer of a view that only wants one).
+    view: Retained<NSView>,
 }
 
 /// `NSWindowStyleMaskNonactivatingPanel`, which objc2-app-kit doesn't name.
 const NONACTIVATING_PANEL: usize = 1 << 7;
 
+/// The keys of the open and close's animations on the layer. Adding one under the same key
+/// replaces the one running.
+const FADE: &str = "easyvox-fade";
+const SLIDE: &str = "easyvox-slide";
+
 impl OverlayPanel {
     /// Configures the window GPUI created for the overlay. Call it inside `open_window`.
     pub fn attach(window: &gpui_kit::Window, cx: &mut gpui_kit::App) -> anyhow::Result<Self> {
-        let win = ns_window_of(window).context("no NSWindow behind the overlay")?;
+        let view = ns_view_of(window).context("no NSView behind the overlay")?;
+        let win = view.window().context("no NSWindow behind the overlay")?;
         win.setIgnoresMouseEvents(true);
         win.setHasShadow(false);
         win.setHidesOnDeactivate(false);
+        // GPUI gives a pop-up a utility window's ordering animation; the open and close here
+        // are the only ones.
+        win.setAnimationBehavior(NSWindowAnimationBehavior::None);
         if let Some(panel) = win.downcast_ref::<NSPanel>() {
             panel.setBecomesKeyOnlyIfNeeded(true);
         }
@@ -50,24 +79,83 @@ impl OverlayPanel {
         // class no longer matches (AppKit throws). Until then the panel is hidden and unfocused
         // (`show: false`, `focus: false`), so it can't become key.
         let deferred = win.clone();
+        let hidden = view.clone();
         cx.spawn(async move |_| {
             deferred.setStyleMask(NSWindowStyleMask(NSWindowStyleMask::Borderless.0 | NONACTIVATING_PANEL));
             if let Err(e) = key_guard::install(&deferred) {
                 // The overlay still works; it just isn't protected against becoming key.
                 log::error!("overlay key guard not installed: {e}");
             }
+            // At rest the layer is transparent, as a close leaves it (see `order_out`).
+            without_implicit_animations(|| hidden.setAlphaValue(0.));
         })
         .detach();
-        Ok(Self { win })
+        Ok(Self { win, view })
     }
 
-    /// Shows the panel without activating the app or making the panel key.
-    pub fn show(&self) {
+    /// Shows the panel without activating the app or making the panel key: at once, fading in
+    /// over `duration` as it slides up `slide` points into place. Part-way through a close, it
+    /// turns back from where it is, in the share of `duration` that's left.
+    pub fn show(&self, duration: Duration, slide: f64) {
+        if let Some(layer) = self.view.layer() {
+            let (opacity, offset) = if self.win.isVisible() { drawn(&layer) } else { (0., self.down() * slide) };
+            let secs = duration.as_secs_f64() * (1. - opacity).clamp(0., 1.);
+            // SAFETY: AppKit's constant timing function names, valid for the life of the process.
+            let ease_out = unsafe { kCAMediaTimingFunctionEaseOut };
+            without_implicit_animations(|| {
+                self.view.setAlphaValue(1.);
+                animate(&layer, FADE, "opacity", (opacity, 1.), secs, ease_out, false);
+                animate(&layer, SLIDE, "transform.translation.y", (offset, 0.), secs, ease_out, false);
+            });
+        }
         self.win.orderFrontRegardless();
     }
 
-    pub fn hide(&self) {
+    /// Starts the close: fades the panel out over `duration` as it slides `slide` points down,
+    /// from wherever it is. It stays ordered in, held transparent, until [`order_out`]. Returns
+    /// how long the fade takes: the share of `duration` that the opacity left calls for.
+    ///
+    /// [`order_out`]: Self::order_out
+    pub fn fade_out(&self, duration: Duration, slide: f64) -> Duration {
+        let Some(layer) = self.view.layer() else { return Duration::ZERO };
+        let (opacity, offset) = drawn(&layer);
+        let secs = duration.as_secs_f64() * opacity.clamp(0., 1.);
+        if secs <= 0. {
+            return Duration::ZERO;
+        }
+        // SAFETY: as in `show`.
+        let ease_in = unsafe { kCAMediaTimingFunctionEaseIn };
+        without_implicit_animations(|| {
+            animate(&layer, FADE, "opacity", (opacity, 0.), secs, ease_in, true);
+            animate(&layer, SLIDE, "transform.translation.y", (offset, self.down() * slide), secs, ease_in, true);
+        });
+        Duration::from_secs_f64(secs)
+    }
+
+    /// Takes the panel off screen, and leaves its layer transparent with nothing animating, so
+    /// the next show fades in from nothing.
+    pub fn order_out(&self) {
         self.win.orderOut(None);
+        if let Some(layer) = self.view.layer() {
+            without_implicit_animations(|| {
+                self.view.setAlphaValue(0.);
+                layer.removeAnimationForKey(&NSString::from_str(FADE));
+                layer.removeAnimationForKey(&NSString::from_str(SLIDE));
+            });
+        }
+    }
+
+    /// Whether the panel is on screen (ordered in), closing included.
+    pub fn is_visible(&self) -> bool {
+        self.win.isVisible()
+    }
+
+    /// Down along the layer's y axis: AppKit's y goes up, unless the view GPUI's sits in is
+    /// flipped.
+    fn down(&self) -> f64 {
+        // SAFETY: a plain getter, on the main thread like every overlay call.
+        let flipped = unsafe { self.view.superview() }.is_some_and(|s| s.isFlipped());
+        if flipped { 1. } else { -1. }
     }
 
     #[cfg(feature = "self-test")]
@@ -83,15 +171,98 @@ impl OverlayPanel {
             nonactivating: style & NONACTIVATING_PANEL != 0,
         }
     }
+
+    /// The open and close as Core Animation has them now.
+    #[cfg(feature = "self-test")]
+    pub fn motion_state(&self) -> MotionState {
+        let Some(layer) = self.view.layer() else { return MotionState::default() };
+        let (opacity, offset) = drawn(&layer);
+        let animation = |key: &str| {
+            // SAFETY: only read for whether it exists, and its duration.
+            unsafe { layer.animationForKey(&NSString::from_str(key)) }.map(|a| a.duration())
+        };
+        MotionState {
+            opacity,
+            offset_down: offset * self.down(),
+            resting_opacity: self.view.alphaValue(),
+            fade_secs: animation(FADE),
+            slide_secs: animation(SLIDE),
+        }
+    }
 }
 
-/// The NSWindow behind a GPUI window, through raw-window-handle's NSView.
-fn ns_window_of(window: &gpui_kit::Window) -> Option<Retained<NSWindow>> {
+/// The layer's opacity and slide (its y translation) as drawn now, part-way through an
+/// animation or not.
+fn drawn(layer: &CALayer) -> (f64, f64) {
+    // SAFETY: `presentationLayer` returns a copy of this layer, of its own class; it's `nil`
+    // until the layer has been committed once, and then the layer itself is what's drawn.
+    let shown = unsafe { layer.presentationLayer() }.unwrap_or_else(|| layer.retain());
+    (f64::from(shown.opacity()), shown.transform().m42)
+}
+
+/// Runs `f` in a Core Animation transaction with implicit animations off, so a change made there
+/// only moves if an explicit animation moves it.
+fn without_implicit_animations(f: impl FnOnce()) {
+    CATransaction::begin();
+    CATransaction::setDisableActions(true);
+    f();
+    CATransaction::commit();
+}
+
+/// Animates the layer's `path` from `from` to `to` over `secs`, under `key`, replacing what ran
+/// there. `hold` keeps the end value until the animation is removed; otherwise the layer's own
+/// value shows once it ends. Nothing to animate removes the key's animation.
+fn animate(
+    layer: &CALayer,
+    key: &str,
+    path: &str,
+    (from, to): (f64, f64),
+    secs: f64,
+    timing: &CAMediaTimingFunctionName,
+    hold: bool,
+) {
+    let key = NSString::from_str(key);
+    if secs <= 0. || (from - to).abs() < 1e-3 {
+        layer.removeAnimationForKey(&key);
+        return;
+    }
+    let animation = CABasicAnimation::animationWithKeyPath(Some(&NSString::from_str(path)));
+    let (from, to) = (NSNumber::new_f64(from), NSNumber::new_f64(to));
+    let (from, to): (&AnyObject, &AnyObject) = (&from, &to);
+    // SAFETY: an opacity and a translation both animate between NSNumbers.
+    unsafe {
+        animation.setFromValue(Some(from));
+        animation.setToValue(Some(to));
+    }
+    animation.setDuration(secs);
+    animation.setTimingFunction(Some(&CAMediaTimingFunction::functionWithName(timing)));
+    if hold {
+        // SAFETY: Core Animation's constant fill mode name.
+        animation.setFillMode(unsafe { kCAFillModeForwards });
+        animation.setRemovedOnCompletion(false);
+    }
+    layer.addAnimation_forKey(&animation, Some(&key));
+}
+
+/// The NSView GPUI draws a window into, through raw-window-handle.
+fn ns_view_of(window: &gpui_kit::Window) -> Option<Retained<NSView>> {
     let handle = HasWindowHandle::window_handle(window).ok()?;
     let RawWindowHandle::AppKit(appkit) = handle.as_raw() else { return None };
     // SAFETY: GPUI hands out its own live content view, valid while `window` is borrowed.
     let view: &NSView = unsafe { appkit.ns_view.cast::<NSView>().as_ref() };
-    view.window()
+    Some(view.retain())
+}
+
+// ───────────────────────── Reduce motion ─────────────────────────
+
+/// Whether macOS's Reduce motion is on (System Settings → Accessibility → Display). The overlay
+/// reads it at each open, so a change applies from the next one.
+pub fn reduce_motion() -> bool {
+    #[cfg(feature = "self-test")]
+    if let Some(forced) = self_test_reduce_motion::forced() {
+        return forced;
+    }
+    NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
 }
 
 /// `GPUIPanel` answers YES to `canBecomeKeyWindow`. A non-activating panel that becomes key
@@ -259,6 +430,47 @@ pub mod modifier_tap {
 }
 
 // ───────────────────────── Self-test helpers ─────────────────────────
+
+/// Lets the self-test give [`reduce_motion`] an answer instead of the system's.
+#[cfg(feature = "self-test")]
+mod self_test_reduce_motion {
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    /// 0: the system's answer; 1: off; 2: on.
+    static FORCED: AtomicU8 = AtomicU8::new(0);
+
+    pub fn forced() -> Option<bool> {
+        match FORCED.load(Ordering::Relaxed) {
+            0 => None,
+            v => Some(v == 2),
+        }
+    }
+
+    pub fn force(on: Option<bool>) {
+        FORCED.store(on.map_or(0, |on| 1 + u8::from(on)), Ordering::Relaxed);
+    }
+}
+
+/// Makes [`reduce_motion`] answer `Some(on)`, as if the system's setting were that, or follow the
+/// system again (`None`). The system's setting is never touched.
+#[cfg(feature = "self-test")]
+pub fn force_reduce_motion(on: Option<bool>) {
+    self_test_reduce_motion::force(on);
+}
+
+/// The overlay's open and close as Core Animation has them: what's drawn now (part-way through
+/// an animation or not), the layer's resting opacity, and the animations on it.
+#[cfg(feature = "self-test")]
+#[derive(Debug, Default)]
+pub struct MotionState {
+    pub opacity: f64,
+    /// How far below its place the pill is drawn, in points.
+    pub offset_down: f64,
+    pub resting_opacity: f64,
+    /// The durations of the fade and the slide on the layer, if there are any.
+    pub fade_secs: Option<f64>,
+    pub slide_secs: Option<f64>,
+}
 
 /// What AppKit says about the overlay panel.
 #[cfg(feature = "self-test")]

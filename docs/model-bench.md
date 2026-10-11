@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk. [Whisper's preview](#whispers-preview) re-measured Whisper base.en's flickering, costly preview on those defaults, and lines the preview's passes up by text as well as time.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk. [Overlay animation](#overlay-animation) measured what the overlay's fades and glides cost. [Whisper's preview](#whispers-preview) re-measured Whisper base.en's flickering, costly preview on those defaults, and lines the preview's passes up by text as well as time.
 
 ## Results
 
@@ -479,6 +479,35 @@ sleep 60; kill %1
 ```
 
 - **Where the numbers come from:** `run.json` has the app's CPU (`cpu_pct_of_one_core`), the meter's levels (`levels_received`), the overlay's redraws (`redraws_asked`) and draws (`renders`), and the session's start and end (`start_unix_ms`, `end_unix_ms`), which cut `macmon`'s samples. Energy is computed as in [Lightness](#lightness).
+
+## Overlay animation
+
+Run in the evening of 10 October 2026, same M4, for the overlay's open and close, its words fading in and its glides (`DESIGN.md`, "Overlay animation"). The bar, as for the meter: it mustn't undo [Lightness](#lightness).
+
+**What it does.** The open and close are Core Animation on the panel's layer, run by the window server, so they don't touch the app. Inside the pill, each change of the text starts a fade of the words (120 ms) and maybe a glide of the pill's width or the text's scroll (150 ms), and GPUI draws a frame every `overlay_frame_ms` (16) until both end.
+
+**The runs.** As in [Level meter](#level-meter): `dist/EasyVox.app` (release, `self-test` feature) with `--self-test --replay testdata/longform/clips/lf_3m.wav --draw`, which dictates the 3-minute text-to-speech clip in real time with the overlay up and draws it at every redraw and animation frame it asks for, as the screen would (the screen was locked, so GPUI drew nothing on its own). "Before" is the build from commit fc7c60a, before the animations; "off" is this build with `overlay_open_ms`, `overlay_close_ms`, `overlay_words_ms` and `overlay_glide_ms` at 0. The draws' own time (layout and paint, on the CPU) comes from timing each forced draw, which the before build can't report. No `macmon` this time: the meter's runs showed energy can't resolve a few tenths of a point of CPU.
+
+| Build and setting | Runs | Draws a second (animation frames) | The app's CPU, share of one core | Of which drawing | Per draw |
+|---|---:|---:|---:|---:|---:|
+| Before | 4 | 6.98 (–) | 12.46 % (12.33–12.52) | – | – |
+| This build, animations off | 2 | 7.04 (0) | 12.29 % (12.27–12.30) | 0.22 % | 0.32 ms |
+| **This build, the defaults (a frame every 16 ms)** | 2 | **12.58 (5.60)** | **12.68 % (12.66–12.69)** | **0.37 %** | 0.29 ms |
+| A frame every 33 ms (`overlay_frame_ms = 33`) | 1 | 10.01 (3.04) | 12.66 % | 0.34 % | 0.34 ms |
+
+- **5.6 more draws a second**, about 9 frames for each change of the text (0.6 a second on this clip): 150 ms of glide at one frame every 16 ms, plus the timer's slack. None while nothing changes, and none once the pill is hidden (the self-test checks both).
+- **About 0.2 points of a core**, 12.5 % to 12.7 % (1.8 % more), or 0.4 points against the same build with the animations off; both are about the spread between runs of one build (0.2 points). The part that can be timed directly, drawing the frames, is 0.14 points.
+- **30 frames a second instead of 60** saved 2.6 draws a second and 0.02 points of drawing, and nothing measurable in the app's CPU, so the default stays at 60 for a smoother glide.
+- **Not measured: putting the frames on screen.** The GPU presenting the extra frames, WindowServer compositing them, and the open and close (which run there entirely) need a person at an unlocked screen: the same command without `--draw` (it's on the task).
+
+```sh
+# One run. The settings file picks the setting: empty (the defaults), or [advanced]
+# overlay_frame_ms = 33, or the four timings at 0 (off). The app quits after the final text.
+open -W --env EASYVOX_CONFIG=$PWD/overlay.toml dist/EasyVox.app \
+  --args --self-test --replay $PWD/testdata/longform/clips/lf_3m.wav --draw --out $PWD/run.json
+```
+
+- **Where the numbers come from:** `run.json` has the app's CPU (`cpu_pct_of_one_core`), the draws (`renders`), the animation frames (`animation_frames`) and the forced draws' own time (`drawing_pct_of_one_core`, `drawing_ms_per_render`).
 
 ## Whisper's preview
 

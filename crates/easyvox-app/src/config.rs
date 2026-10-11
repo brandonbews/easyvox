@@ -205,7 +205,8 @@ pub struct ConfigFile {
 pub enum Reload {
     /// The text is what the app last read or wrote: its own save, or a repeated event.
     Unchanged,
-    Changed(Loaded),
+    /// Boxed: the settings are far bigger than the other variants.
+    Changed(Box<Loaded>),
     /// Not TOML: keep the settings in force.
     Invalid(String),
 }
@@ -233,7 +234,7 @@ impl ConfigFile {
         self.last_text = None;
         let defaults = || Loaded { settings: AppSettings::default(), warnings: vec![] };
         match self.reload() {
-            Reload::Changed(loaded) => (loaded, None),
+            Reload::Changed(loaded) => (*loaded, None),
             Reload::Invalid(error) => (defaults(), Some(error)),
             Reload::Unchanged => (defaults(), None), // can't happen: nothing was read before
         }
@@ -252,7 +253,7 @@ impl ConfigFile {
         // Remember broken text too, so repeated events for it don't log the error again.
         self.last_text = Some(text);
         match result {
-            Ok(loaded) => Reload::Changed(loaded),
+            Ok(loaded) => Reload::Changed(Box::new(loaded)),
             Err(e) => Reload::Invalid(e),
         }
     }
@@ -382,7 +383,8 @@ pub fn default_config_text() -> String {
 # you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
 # that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
 # save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
-# meter from your next dictation, the same for every model.
+# meter from your next dictation, the same for every model, and the overlay's animations from
+# the next time it opens.
 ",
     );
     // Doc comments come one line per source line, each starting with a space.
@@ -406,9 +408,9 @@ pub fn default_config_text() -> String {
         out.push_str(&format!("{key} = {value}\n"));
     }
     out.push_str(&format!(
-        "\n[{ADVANCED}]\n# Settings the window doesn't show: how long the overlay stays up and the model stays\n\
-         # loaded, then the numbers behind the live preview, the chunks, what counts as speech\n\
-         # or a pause, and the overlay's level meter.\n"
+        "\n[{ADVANCED}]\n# Settings the window doesn't show: how long the model stays loaded, how long the\n\
+         # overlay stays up and how it moves, then the numbers behind the live preview, the\n\
+         # chunks, what counts as speech or a pause, and the overlay's level meter.\n"
     ));
     for field in defaults.app.fields().into_iter().chain(defaults.tuning.fields()) {
         out.push('\n');
@@ -566,10 +568,12 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 37);
+        assert_eq!(keys.len(), 43);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
+            assert!(!easyvox_core::tuning::unit_of(key).is_empty(), "{key}: end the key in a unit");
         }
+        assert!(text.contains("# In points, from 0 to 16.\noverlay_slide_pt = 8\n"));
         assert!(
             text.contains("# In dBFS (decibels relative to full scale), from -120 to 0.\ngate_silence_dbfs = -55\n")
         );

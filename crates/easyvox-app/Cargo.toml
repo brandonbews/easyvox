@@ -41,6 +41,18 @@ notify = "8.2.0"
 objc2.workspace = true
 objc2-foundation = "0.3"
 objc2-app-kit = "0.3"
+# The overlay's open and close run on Core Animation. Already in the build through GPUI and
+# objc2-app-kit; these are the parts the overlay uses.
+objc2-quartz-core = { version = "0.3", default-features = false, features = [
+  "std",
+  "objc2-core-foundation",
+  "CAAnimation",
+  "CALayer",
+  "CAMediaTiming",
+  "CAMediaTimingFunction",
+  "CATransaction",
+  "CATransform3D",
+] }
 raw-window-handle = "0.6"
 
 [lints]

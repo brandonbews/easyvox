@@ -57,10 +57,39 @@ easyvox_core::tunables! {
         /// How long a notice (no microphone access, nothing heard, the model still loading)
         /// stays up. Higher leaves more time to read it.
         overlay_hide_after_notice_ms: u32 = 2_500, 500..=30_000;
-        /// The most text the overlay shows: longer text keeps only its end, so the newest words
-        /// stay in view. Higher shows more of what came before, but past about 72 the newest
-        /// words can run past the edge of the overlay and be cut off.
-        overlay_max_chars: u32 = 72, 10..=500;
+        /// The most of the transcript the overlay lays out. The pill shows the end of it, as
+        /// much as fits, and scrolls as words come so the newest stay in view; this caps the
+        /// text kept out of sight past its left edge, where it's cut. Lower draws a little less
+        /// each frame, but under about 120 the cut (an "…") can come into view; higher costs
+        /// more to lay out for nothing you'd see.
+        overlay_max_chars: u32 = 200, 10..=500;
+        /// How long the overlay takes to fade in (sliding up `overlay_slide_pt`) when you press
+        /// the shortcut. It shows at once and never waits for the model; this is only how it
+        /// appears. Core Animation runs it, so it costs no redraws. Higher is gentler; lower is
+        /// snappier. 0 shows it at once.
+        overlay_open_ms: u32 = 150, 0..=1_000;
+        /// How long the overlay takes to fade out (sliding down `overlay_slide_pt`) once it
+        /// hides. The paste has happened by then, and a press during the fade brings the
+        /// overlay straight back, so it never delays you. Higher is gentler; lower gets it out
+        /// of the way sooner. 0 hides it at once.
+        overlay_close_ms: u32 = 120, 0..=1_000;
+        /// How far the overlay slides as it opens and closes. With macOS's Reduce motion on, it
+        /// doesn't slide at all and only fades. Higher is more noticeable; 0 only fades.
+        overlay_slide_pt: u32 = 8, 0..=16;
+        /// How long new words take to fade in, and provisional words (drawn fainter) to firm
+        /// up once they're confirmed. Each change draws the overlay every `overlay_frame_ms`
+        /// for this long. Higher is softer but redraws more; lower is cheaper and more abrupt.
+        /// 0 changes the text at once.
+        overlay_words_ms: u32 = 120, 0..=1_000;
+        /// How long the overlay takes to grow to fit new words, and to scroll long text so the
+        /// newest words stay in view, instead of jumping. With Reduce motion on, both jump.
+        /// Higher is smoother but redraws for longer; lower is cheaper. 0 jumps.
+        overlay_glide_ms: u32 = 150, 0..=1_000;
+        /// Time between the frames of the overlay's words fading and gliding, while one runs;
+        /// nothing is drawn once it ends. The open and close don't use it. Lower is smoother
+        /// (16 is 60 frames a second; 8 suits a 120 Hz screen) but draws more often; higher is
+        /// lighter and choppier.
+        overlay_frame_ms: u32 = 16, 8..=100;
     }
 }
 

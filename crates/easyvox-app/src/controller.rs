@@ -341,8 +341,9 @@ impl Controller {
             cx.global_mut::<AppStatus>().engine = EngineStatus::Loading;
             cx.refresh_windows();
         }
+        // At once, without waiting for the model; a press during the last close turns it back.
         self.overlay.view.update(cx, |v, cx| v.reset(cx));
-        self.overlay.show();
+        self.overlay.show(cx);
         log::info!("session {seq}: started ({source}){}", if reloading { ", reloading the model" } else { "" });
     }
 
@@ -439,17 +440,19 @@ impl Controller {
 
     fn show_notice(&mut self, message: String, cx: &mut Context<Self>) {
         self.overlay.view.update(cx, |v, cx| v.set_notice(message, cx));
-        self.overlay.show();
+        self.overlay.show(cx);
         let after = cx.global::<AppSettings>().app.overlay_hide_after_notice_ms;
         self.schedule_hide(Duration::from_millis(after.into()), cx);
     }
 
+    /// Hides the pill after `after`, unless a dictation started meanwhile. The close's fade
+    /// starts then and runs on its own: the paste is done, and the next press doesn't wait.
     fn schedule_hide(&mut self, after: Duration, cx: &mut Context<Self>) {
         self.hide_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(after).await;
-            let _ = this.update(cx, |c, _| {
+            let _ = this.update(cx, |c, cx| {
                 if c.is_idle() {
-                    c.overlay.hide();
+                    c.overlay.hide(cx);
                 }
             });
         }));
@@ -863,7 +866,7 @@ impl Controller {
 
     /// Puts `new` in force, acting on whatever differs from the settings now. The pipeline's
     /// tuning needs nothing more: the next dictation takes it. Neither do the overlay's
-    /// numbers, which it reads as it draws and hides.
+    /// numbers, which it reads as it draws, opens and hides.
     fn apply_settings(&mut self, new: AppSettings, cx: &mut Context<Self>) {
         let old = cx.global::<AppSettings>().clone();
         {
