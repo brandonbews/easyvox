@@ -1,0 +1,35 @@
+# EasyVox website
+
+Static HTML and CSS built with Astro, with no JavaScript on any page. The plan behind it is `../docs/plans/website.md`.
+
+**Astro 7 is newer than your training data.** It changed the compiler (stricter HTML: close every tag, no `<div>` in a `<p>`), made Sätteri the default Markdown processor, and defaults `compressHTML` to `'jsx'`, which this site turns back to `true`. Read https://docs.astro.build/en/guides/upgrade-to/v7/ and the config types in `node_modules/astro/dist/types/public/config.d.ts` before relying on what you remember.
+
+## Commands
+
+Run them from `site/`. The build reads `../docs`, so it must run inside the repo.
+
+```sh
+npm ci              # install exactly what package-lock.json says (no install scripts run: .npmrc)
+npm run dev         # dev server at http://localhost:4321
+npm run lint        # Biome: lint and format check (npm run format fixes)
+npm run check       # astro check: types in .astro and .ts files
+npm run build       # writes dist/; fails on a broken link or #anchor in a published doc
+npm run preview     # serves dist/
+```
+
+When Astro detects an agent, `dev` and `preview` start in the background and return. Stop them when you're done: `npx astro dev stop`, `npx astro preview stop`.
+
+To preview from another machine over Tailscale: `npm run dev -- --host --allowed-hosts <machine>.<tailnet>.ts.net`.
+
+The npm scripts set `ASTRO_TELEMETRY_DISABLED=1`. Calling `npx astro …` directly doesn't, so set it yourself.
+
+## Rules
+
+- **No JavaScript on any page.** No client components, no `<script>`, no prefetch. CI fails if a built page has a `<script>` or the build writes a `.js` file. If a page ever needs some, it goes in an island on that page only, and this rule changes on purpose.
+- **The docs stay in `../docs`,** as plain GitHub-flavoured Markdown: never copied into `site/`, never MDX, no frontmatter. A doc is published only if it's listed in `src/lib/nav.ts`, which also holds its title, description and place in the sidebar. Relative links work on GitHub first; `src/lib/markdown.ts` maps them for the site.
+- **`docs/settings.md` is generated** by `easyvox --print-default-config` and checked by a test in `crates/easyvox-app`. Don't hand-edit it to suit the site.
+- **Launch switches** live in `src/config.ts`: `NOINDEX` (noindex on every page and a disallow-all robots.txt) and `REPO_PUBLIC` (GitHub links, and links from the docs to unpublished repo files). Both stay as they are until the repo goes public.
+- **No transcript text, ever.** `../recordings/` holds private voice recordings: the site never reads it. Sample dictation text (the pill demo) is invented.
+- **Numbers on the homepage** come from `../DESIGN.md` and `../docs/model-bench.md`, with their caveats (one M4 Mac mini, one speaker). Change them there first.
+- **Colours** are tokens at the top of `src/styles/global.css`, light and dark. Every text pair clears WCAG AA (4.5:1); the computed ratios are in the comment there. Recompute them when a colour changes.
+- **Dependencies** are pinned to exact versions at least two weeks old. Add one only when the site needs it.

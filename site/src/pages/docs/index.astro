@@ -1,0 +1,19 @@
+---
+// The docs index, built from nav.ts (there's no docs/README.md to render).
+import Docs from "../../layouts/Docs.astro";
+import { docsNav, routeFor } from "../../lib/nav";
+---
+
+<Docs title="Docs" description="EasyVox's documentation: building it from source, its settings file, and the model bench.">
+  <h1>Docs</h1>
+  <ul class="doc-index">
+    {
+      docsNav.map((entry) => (
+        <li>
+          <a href={routeFor(entry)}>{entry.title}</a>
+          <p>{entry.description}</p>
+        </li>
+      ))
+    }
+  </ul>
+</Docs>

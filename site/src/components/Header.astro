@@ -1,0 +1,15 @@
+---
+import { REPO_PUBLIC, REPO_URL, SITE_NAME } from "../config";
+
+const inDocs = Astro.url.pathname.startsWith("/docs");
+---
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="wordmark-link" href="/">{SITE_NAME}</a>
+    <nav aria-label="Site">
+      <a href="/docs" aria-current={inDocs ? "true" : undefined}>Docs</a>
+      {REPO_PUBLIC && <a href={REPO_URL}>GitHub</a>}
+    </nav>
+  </div>
+</header>

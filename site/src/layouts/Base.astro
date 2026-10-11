@@ -1,0 +1,43 @@
+---
+// Every page: head, header, footer. No JavaScript: nothing here (or anywhere on the site)
+// renders a client component, so Astro emits no <script>.
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { NOINDEX, SITE_NAME } from "../config";
+import "../styles/global.css";
+
+interface Props {
+  // The page's own title; " · EasyVox" is added. Omit it for the homepage.
+  title?: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const fullTitle = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME}: voice to text for macOS`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {NOINDEX && <meta name="robots" content="noindex" />}
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    {
+      /* Favicon and social card: none yet. They come from the brand work (docs/branding.md).
+         Put the files in public/ and their tags here: <link rel="icon">, apple-touch-icon,
+         og:title, og:description, og:image and twitter:card. A canonical URL and og:url
+         wait for the domain (https://easyvox.dev) at launch. */
+    }
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <Header />
+    <slot />
+    <Footer />
+  </body>
+</html>

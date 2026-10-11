@@ -1,0 +1,19 @@
+---
+import { docsNav, routeFor } from "../lib/nav";
+
+const here = Astro.url.pathname.replace(/\/$/, "");
+---
+
+<nav class="docs-sidebar" aria-label="Docs">
+  <ul>
+    {
+      docsNav.map((entry) => (
+        <li>
+          <a href={routeFor(entry)} aria-current={routeFor(entry) === here ? "page" : undefined}>
+            {entry.title}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>

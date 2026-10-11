@@ -1,0 +1,22 @@
+---
+// The docs shell: the sidebar from nav.ts beside the page. The current page is marked when the
+// page is built, so the sidebar needs no JavaScript.
+import Sidebar from "../components/Sidebar.astro";
+import Base from "./Base.astro";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<Base title={title} description={description}>
+  <div class="docs-shell">
+    <Sidebar />
+    <main id="main" class="doc">
+      <slot />
+    </main>
+  </div>
+</Base>

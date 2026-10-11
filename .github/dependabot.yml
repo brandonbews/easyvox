@@ -1,8 +1,9 @@
-# Keeps the GitHub Actions pins in .github/workflows current. Each action is pinned to a commit
-# SHA with its release in a comment (`@<sha> # v7.0.1`); Dependabot updates the two together.
+# Keeps the GitHub Actions pins in .github/workflows, and the website's npm packages, current.
+# Each action is pinned to a commit SHA with its release in a comment (`@<sha> # v7.0.1`);
+# Dependabot updates the two together.
 #
-# Monthly, and grouped into one pull request per run: every Dependabot PR runs CI on macOS,
-# which bills at 10x while the repository is private. Revisit if it goes public.
+# Monthly, and grouped into one pull request per run: every Actions PR runs CI on macOS, which
+# bills at 10x while the repository is private. Revisit if it goes public.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -11,4 +12,14 @@ updates:
       interval: monthly
     groups:
       github-actions:
+        patterns: ["*"]
+
+  # The website (site/). Its PRs run only the Linux site job (site.yml), never macOS. The
+  # versions are exact pins (site/.npmrc), and Dependabot keeps them exact.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: monthly
+    groups:
+      site-npm:
         patterns: ["*"]

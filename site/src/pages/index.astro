@@ -1,0 +1,146 @@
+---
+// The homepage (docs/plans/website.md §5). Every number here comes from DESIGN.md and
+// docs/model-bench.md, with the same caveats: one Mac, one speaker. Change them there first.
+import Pill from "../components/Pill.astro";
+import Base from "../layouts/Base.astro";
+---
+
+<Base description="EasyVox is a free, open source voice-to-text app for macOS. Hold a shortcut and speak; when you let go, the text is pasted where your cursor is. The speech model runs on your Mac.">
+  <main id="main" class="landing">
+    <p class="notice">
+      <strong>Early development.</strong> EasyVox isn't usable yet, and there's nothing to install. You can
+      <a href="/docs/building">build it from source</a>.
+    </p>
+
+    <section class="hero">
+      <div>
+        <h1>EasyVox</h1>
+        <p class="tagline">A free, open source voice-to-text app for macOS.</p>
+        <p class="lede">
+          Hold a shortcut and speak. EasyVox shows the words as it hears them, and when you let go it pastes the
+          text where your cursor is.
+        </p>
+        <div class="actions">
+          <span class="button button-soon">Download: coming soon</span>
+          <a class="button button-primary" href="/docs/building">Build from source</a>
+        </div>
+      </div>
+      <Pill />
+    </section>
+
+    <section class="section" aria-labelledby="private">
+      <h2 id="private">Private</h2>
+      <ul>
+        <li>The speech model runs on your Mac. No audio or text leaves it.</li>
+        <li>
+          The only time EasyVox goes online is to download a model, which it checks against its sha256 before
+          using it.
+        </li>
+        <li>History keeps the text of each dictation, never the audio.</li>
+      </ul>
+    </section>
+
+    <section class="section" aria-labelledby="light">
+      <h2 id="light">Light</h2>
+      <ul>
+        <li>Idle, it does nothing: it wakes about once every 3 seconds and uses no measurable CPU.</li>
+        <li>
+          While you dictate, it adds about 0.65 W to what the Mac draws. Drawing the overlay's animations on
+          screen adds roughly 0.15–0.2 W more.
+        </li>
+        <li>
+          The model is freed after 10 minutes without use, which takes EasyVox from about 670 MB of memory to
+          about 90 MB. Your next dictation still starts recording at once.
+        </li>
+      </ul>
+      <p class="caveat">
+        Measured in October 2026 on one Mac (an M4 Mac mini), with the default model and one speaker's voice.
+        The methods and every number are in the <a href="/docs/model-bench">model bench</a>.
+      </p>
+    </section>
+
+    <section class="section" aria-labelledby="how">
+      <h2 id="how">How it works</h2>
+      <ol class="cards">
+        <li class="card">
+          <h3><span class="step">1</span>Hold <kbd>⌥ Space</kbd></h3>
+          <p>Hold the shortcut and speak. You can pick another shortcut, or hold the right Option key on its own.</p>
+        </li>
+        <li class="card">
+          <h3><span class="step">2</span>Watch the words</h3>
+          <p>
+            A small pill near the bottom of the screen shows what EasyVox hears. Fainter words are provisional and
+            may still change; the rest are confirmed.
+          </p>
+        </li>
+        <li class="card">
+          <h3><span class="step">3</span>Let go</h3>
+          <p>EasyVox finishes the text and pastes it where your cursor is. It stays on the clipboard too.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section" aria-labelledby="models">
+      <h2 id="models">Models</h2>
+      <p>
+        You choose a model in the app, and EasyVox downloads it from Hugging Face. Each one is credited with its
+        license.
+      </p>
+      <ul class="cards">
+        <li class="card">
+          <h3>Parakeet TDT 0.6B v2</h3>
+          <p>The default: the best all-round model. A 539 MB download.</p>
+          <p>
+            By NVIDIA, under CC BY 4.0.
+            <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2">Model card</a>
+          </p>
+        </li>
+        <li class="card">
+          <h3>Whisper base.en</h3>
+          <p>The smallest: for an 8 GB Mac, or when memory matters more than the last bit of accuracy. 85 MB.</p>
+          <p>
+            By OpenAI, under Apache 2.0.
+            <a href="https://huggingface.co/openai/whisper-base.en">Model card</a>
+          </p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="section" aria-labelledby="tinkerers">
+      <h2 id="tinkerers">For tinkerers</h2>
+      <p>
+        Every setting is in one TOML file, and an edit applies as soon as you save it, with no restart. The
+        Settings window writes the same file, and leaves your comments alone.
+        <a href="/docs/settings">Every key, with its default and what it trades off</a>.
+      </p>
+    </section>
+
+    <section class="section" aria-labelledby="requirements">
+      <h2 id="requirements">Requirements</h2>
+      <ul>
+        <li>A Mac with Apple silicon</li>
+        <li>macOS 26 or later</li>
+        <li>English, for now</li>
+      </ul>
+    </section>
+
+    <section class="section" aria-labelledby="install">
+      <h2 id="install">Install</h2>
+      <ul>
+        <li>A DMG from the GitHub releases: coming soon.</li>
+        <li>A Homebrew cask: coming soon.</li>
+        <li><a href="/docs/building">Build from source</a>: the only way for now. You need Xcode, cmake and Rust.</li>
+      </ul>
+    </section>
+
+    <section class="section" aria-labelledby="open-source">
+      <h2 id="open-source">Open source</h2>
+      <p>
+        EasyVox is MIT licensed, and its code will be public on GitHub by the first release. It runs its models on
+        <a href="https://github.com/handy-computer/transcribe.cpp">transcribe.cpp</a>, from the team behind
+        <a href="https://github.com/cjpais/Handy">Handy</a>, another open source dictation app. The same team makes
+        the GGUF builds of both models.
+      </p>
+    </section>
+  </main>
+</Base>

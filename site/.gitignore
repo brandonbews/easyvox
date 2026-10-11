@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.astro/
+
+# Local settings, never committed
+.env
+.env*.local

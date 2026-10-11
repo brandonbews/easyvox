@@ -541,7 +541,9 @@ Run in the evening of 10 October 2026, same M4, with the screen unlocked: GPUI d
 - **The app does nothing for them:** the same draws and CPU time either way (the 5 s more is the 40 closes and their waits).
 - **WindowServer does it all:** 60–75 ms of CPU for each open and close, about 20 frames of the pill changing size and opacity, so 3–4 ms a frame, captured for Jump Desktop included. That's 0.07 s for a dictation, against the 2.7 s that the text's animations cost it over the 3-minute clip above. The GPU spent about 0.1 J for each, with the capture.
 
-**The eased meter and the softer glide.** After the runs above, the meter's bars ease to each level (120 ms, a frame every 33 ms while only they move), the words fade in over 200 ms and the pill glides over 250 ms, on CSS's ease-out, and the frame timer wakes a quarter of a frame early so frames land at every screen refresh (`DESIGN.md`, "Overlay animation"). The 3-minute clip again, on the pop build, against the build of 5bd95f9. These runs fell either side of the Jump Desktop session's end and start, so they come in two setups:
+#### The eased meter and the softer glide
+
+After the runs above, the meter's bars ease to each level (120 ms, a frame every 33 ms while only they move), the words fade in over 200 ms and the pill glides over 250 ms, on CSS's ease-out, and the frame timer wakes a quarter of a frame early so frames land at every screen refresh (`DESIGN.md`, "Overlay animation"). The 3-minute clip again, on the pop build, against the build of 5bd95f9. These runs fell either side of the Jump Desktop session's end and start, so they come in two setups:
 
 | Build and setting | Draws a second (animation frames) | The app's CPU | WindowServer, over idle | GPU over idle: power / active |
 |---|---:|---:|---:|---:|

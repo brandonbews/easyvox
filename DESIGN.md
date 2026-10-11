@@ -341,7 +341,7 @@ Learned the hard way in the spike. The code handles each one; they're here so no
 - Three ways to install:
   - a DMG on GitHub Releases, with auto-updates (updater not chosen yet);
   - a Homebrew cask pointing at that same DMG;
-  - build-from-source steps in the README.
+  - build-from-source steps in [`docs/building.md`](docs/building.md), which the README points to.
 - The DMG holds only the app, about 25 MB with the engine (10 MB zipped). Models are downloaded in the app (see "Models").
 - No App Store. Its sandbox gets in the way of simulated paste and global key monitoring, so most apps like this skip it.
 - **Linux later.** On Wayland (the default on most current Linux desktops), global shortcuts and simulated paste are restricted for security reasons, and GNOME has no layer-shell for overlays. Linux support will take real per-desktop work, not just a rebuild. Handy documents how it handles this. X11 is workable today.

@@ -1,0 +1,34 @@
+---
+// A still of the overlay as you dictate, animated in CSS only: the pill pops open and the words
+// fade in once, then it stops. No loop, and with Reduce motion on it's a static frame.
+//
+// The sample sentence is invented for this demo. Never use text from real recordings here.
+const confirmed = ["Let's", "move", "the", "design", "review"];
+const provisional = ["to", "Thursday", "at", "two"];
+const words = [
+  ...confirmed.map((word) => ({ word, provisional: false })),
+  ...provisional.map((word) => ({ word, provisional: true })),
+];
+// Bar heights, in pixels, for the five-bar level meter (a still: it doesn't move).
+const bars = [6, 11, 16, 12, 7];
+---
+
+<figure class="demo">
+  <div class="demo-stage">
+    <div class="pill">
+      <span class="meter" aria-hidden="true">
+        {bars.map((h) => <span style={`height:${h}px`} />)}
+      </span>
+      <p class="pill-text">
+        <span class="pill-words">
+          {
+            words.map(({ word, provisional }, i) => (
+              <span class={provisional ? "provisional" : undefined} style={`--i:${i}`}>{word} </span>
+            ))
+          }
+        </span>
+      </p>
+    </div>
+  </div>
+  <figcaption>The overlay while you speak: fainter words may still change. The sentence is made up.</figcaption>
+</figure>

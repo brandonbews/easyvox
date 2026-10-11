@@ -1,0 +1,24 @@
+---
+// One page per doc in nav.ts, rendered from ../docs at build time. Any other /docs route is a
+// 404: there's no server.
+import type { GetStaticPaths } from "astro";
+import PrevNext from "../../components/PrevNext.astro";
+import Docs from "../../layouts/Docs.astro";
+import { docHtml } from "../../lib/docs";
+import { docsNav, type NavEntry } from "../../lib/nav";
+
+export const getStaticPaths = (() =>
+  docsNav.map((entry) => ({ params: { slug: entry.slug }, props: { entry } }))) satisfies GetStaticPaths;
+
+interface Props {
+  entry: NavEntry;
+}
+
+const { entry } = Astro.props;
+const html = await docHtml(entry);
+---
+
+<Docs title={entry.title} description={entry.description}>
+  <article set:html={html} />
+  <PrevNext entry={entry} />
+</Docs>

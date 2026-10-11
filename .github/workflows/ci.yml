@@ -1,11 +1,13 @@
 name: CI
 
+# The website (site/) can't affect the app, so it never starts a macOS run; site.yml checks it
+# on Linux instead.
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+    paths-ignore: ["**.md", "docs/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
   pull_request:
-    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+    paths-ignore: ["**.md", "docs/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
   workflow_dispatch:
 
 permissions:

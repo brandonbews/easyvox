@@ -1,0 +1,62 @@
+name: Site
+
+# The website's gate: lint, type-check and build site/ on Linux. Vercel builds and deploys on its
+# own, so this job only checks. It runs when the site or the docs it renders change, and never
+# starts the macOS app CI (ci.yml ignores these paths).
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/**", ".github/workflows/site.yml"]
+  pull_request:
+    paths: ["site/**", "docs/**", ".github/workflows/site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ASTRO_TELEMETRY_DISABLED: 1
+
+# Actions are pinned to commit SHAs (tags can be moved); the comment names the release.
+
+jobs:
+  site:
+    name: lint, check, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      # site/.npmrc sets ignore-scripts, so no dependency runs an install script.
+      - run: npm ci
+      - name: Biome (lint and format)
+        run: npm run lint
+      - name: astro check (types)
+        run: npm run check
+      # The build renders every published doc and fails on a broken link or anchor.
+      - name: Build
+        run: npm run build
+      - name: No JavaScript on any page
+        run: |
+          if grep -rl '<script' dist --include='*.html'; then
+            echo "::error::a page ships a <script>; the site is meant to have none"
+            exit 1
+          fi
+          if find dist -name '*.js' | grep .; then
+            echo "::error::the build wrote JavaScript files"
+            exit 1
+          fi
