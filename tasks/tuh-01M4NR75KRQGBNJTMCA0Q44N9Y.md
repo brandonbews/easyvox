@@ -2,7 +2,7 @@
 
 `tuh-01M4NR75KRQGBNJTMCA0Q44N9Y`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `design` `website`
 - **Created:** 2026-10-11 15:10 UTC by `brandon`
@@ -15,8 +15,18 @@ Done (11 October, uncommitted in the main checkout). B1: brand tokens and recomp
 Deviations: no menu button on the homepage header on phones (two links fit, and a CSS-only menu can't close after a same-page jump to #install); header CTA is "Install" → /#install until a DMG exists; no "On this page" rail, search, edit links or version number (Later items); links in running text are underlined (dark link vs text is 2.8:1).
 Checks: npm ci, lint, check, build pass; no <script>, no .js. Gzipped HTML+CSS: home 5.3 → 11.6 KB, docs pages +4.2 KB each. Screenshots: scratchpad site-restyle/screenshots/.
 
+Committed as c59cc72 after the orchestrator re-ran npm ci, lint, check, build and the no-script check, and the leak check (one 5-word common phrase from the design mockups' sample text matched the private script; the site's sample was reworded so nothing overlaps).
+
 ## History
 
 ### 2026-10-11 15:38 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 15:40 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 15:40 UTC — edit by `brandon`
+
+status open→done
