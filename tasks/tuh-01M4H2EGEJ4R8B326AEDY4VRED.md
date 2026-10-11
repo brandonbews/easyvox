@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGEJ4R8B326AEDY4VRED`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 3
 - **Labels:** `overlay`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -32,8 +32,14 @@ Agent notes, 2026-10-10 (built, uncommitted in the working tree; DESIGN.md "Over
 - Self-test: 36 checks, all pass (new: animations stop and nothing runs hidden; Reduce motion swaps movement for fades; a press during the close brings it back).
 - Still needed (hands-on, a person at the screen): 1) hold the shortcut over TextEdit: the pill fades in and rises into place, narrow, widening smoothly as words fade in; 2) talk past its width: text glides left, oldest words fade at the left edge; 3) release: paste, green dot ~0.6 s, fade out sliding down; press during the fade: it comes straight back; 4) with Reduce motion on: fades in place, widens/scrolls in jumps, words still fade.
 
+Committed and pushed as 5bd95f9 after the orchestrator re-ran the 5 gates, bundle and self-test (36/36). The visual check moved to its own held hands-on task.
+
 ## History
 
 ### 2026-10-11 01:32 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 01:35 UTC — edit by `brandon`
+
+description edited · status open→done

@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 19 on hold · 9 inbox · 33 done · 0 cancelled
+0 in progress · 0 ready · 2 blocked · 20 on hold · 9 inbox · 34 done · 0 cancelled
 
 ## In progress
 
@@ -8,9 +8,7 @@ _None._
 
 ## Ready
 
-| ID | Task | Priority | Labels |
-|---|---|---:|---|
-| [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) | Overlay animation: open and close, words easing in, Reduce motion | 3 | `overlay` |
+_None._
 
 ## Blocked / waiting
 
@@ -44,6 +42,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-tqbf`](tasks/tuh-01M4KF1V8BMQ8SGXH92HDSTQBF.md) | Hands-on: Settings Models page, downloads, and About | 1 | `human` `hands-on` |
 | [`tuh-8fhp`](tasks/tuh-01M4KGHG3AMCQVBMYVQEJB8FHP.md) | Hands-on: first-launch onboarding from a clean slate | 1 | `human` `hands-on` |
 | [`tuh-qjqs`](tasks/tuh-01M4KNXEYGGE3QSN96GHNXQJQS.md) | Hands-on: overlay level meter, 'Can't hear you', live light/dark | 2 | `human` `hands-on` |
+| [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) | Hands-on: overlay animation (open and close, words fading in, Reduce motion) | 2 | `human` `hands-on` `overlay` |
 
 ## Inbox
 
@@ -75,6 +74,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-stg4`](tasks/tuh-01M4H2EGC4XDQT10EWCXX1STG4.md) Settings file: ~/.config/easyvox/config.toml, applied live
 - [`tuh-k2w3`](tasks/tuh-01M4H2EGCYFBHHG4S9307GK2W3.md) Show each model's license and attribution in the app (NVIDIA notice for Parakeet Unified)
 - [`tuh-bdnm`](tasks/tuh-01M4H2EGDR663G3XGTBA14BDNM.md) Bench the model list on the real-voice clips
+- [`tuh-vred`](tasks/tuh-01M4H2EGEJ4R8B326AEDY4VRED.md) Overlay animation: open and close, words easing in, Reduce motion
 - [`tuh-mc0t`](tasks/tuh-01M4H2EGFCA1P8SKK5HCASMC0T.md) Unload the speech model after a stretch of no use
 - [`tuh-ksmt`](tasks/tuh-01M4H2EGG52WC4E29B82S4KSMT.md) Idle wake-ups from ggml-metal's residency loop
 - [`tuh-ckcx`](tasks/tuh-01M4H2EGH07D79BJEV7Y3NCKCX.md) Quiet the gpui "RefCell already borrowed" error logged at every launch
