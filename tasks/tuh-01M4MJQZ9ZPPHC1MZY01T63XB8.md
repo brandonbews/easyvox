@@ -2,9 +2,10 @@
 
 `tuh-01M4MJQZ9ZPPHC1MZY01T63XB8`
 
-- **Status:** open — ready
+- **Status:** open — blocked on dependencies
 - **Priority:** 3
 - **Labels:** `website` `repo`
+- **Depends on:** [`tuh-h1mn`](tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) (on hold)
 - **Created:** 2026-10-11 04:15 UTC by `brandon`
 
 ## Description
@@ -30,3 +31,7 @@ Plan (10 Oct, from studying tuhdoo; full plan in the session scratchpad, website
 ### 2026-10-11 04:43 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 04:44 UTC — edit by `brandon`
+
+depends_on +tuh-h1mn
