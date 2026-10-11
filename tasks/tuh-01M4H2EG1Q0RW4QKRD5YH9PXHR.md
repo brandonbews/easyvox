@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EG1Q0RW4QKRD5YH9PXHR`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `human` `hands-on`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -20,6 +20,14 @@ Setup: `scripts/bundle.sh && open dist/EasyVox.app` at an unlocked screen. The a
 
 Pointers: crates/easyvox-app/src/controller.rs (RightOption), hotkey.rs; DESIGN.md "Push-to-talk shortcut".
 
+Brandon, 11 Oct, hands-on round on b31d2c4 (permissions reset, fresh install), walked through step by step: turning on Hold right ⌥ put EasyVox in Input Monitoring (b31d2c4); after allowing it, right ⌥ dictated with no relaunch.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+status held→done

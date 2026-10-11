@@ -5,7 +5,7 @@
 - **Status:** on hold — deliberately paused
 - **Priority:** 1
 - **Labels:** `human` `hands-on`
-- **Depends on:** [`tuh-ddry`](tuh-01M4H2EFYGPNFDBVW9HGYWDDRY.md) (on hold)
+- **Depends on:** [`tuh-ddry`](tuh-01M4H2EFYGPNFDBVW9HGYWDDRY.md) (done)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description

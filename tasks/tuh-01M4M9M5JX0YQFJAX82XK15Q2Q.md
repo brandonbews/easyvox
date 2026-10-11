@@ -2,7 +2,7 @@
 
 `tuh-01M4M9M5JX0YQFJAX82XK15Q2Q`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `human` `hands-on` `overlay`
 - **Created:** 2026-10-11 01:35 UTC by `brandon`
@@ -20,6 +20,8 @@ Brandon's check at an unlocked screen; agents never take it. Built in c87dd40 (s
 
 11 October: the pill was restyled in c2e8837 (44 pt, 92 % fill, three vermilion strokes, grey dots then a check) and now sits 24 pt above the Dock. The motion is unchanged, so these steps still apply; do them together with the restyle check above (green dot → now a check).
 
+Brandon, 11 Oct, hands-on round on b31d2c4 (permissions reset, fresh install), walked through step by step: the pop, the bars, words fading in and Reduce motion (fades only, bars jump) all looked good. The bars' easing decision is tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.
+
 ## History
 
 ### 2026-10-11 04:59 UTC — edit by `brandon`
@@ -29,3 +31,11 @@ retitled · description edited
 ### 2026-10-11 16:50 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+status held→done

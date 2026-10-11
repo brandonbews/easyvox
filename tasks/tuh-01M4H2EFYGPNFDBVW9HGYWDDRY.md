@@ -2,10 +2,10 @@
 
 `tuh-01M4H2EFYGPNFDBVW9HGYWDDRY`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 0
 - **Labels:** `human` `hands-on`
-- **Depends on:** [`tuh-py6m`](tuh-01M4H2EFXEY2V2A097BVAVPY6M.md) (on hold)
+- **Depends on:** [`tuh-py6m`](tuh-01M4H2EFXEY2V2A097BVAVPY6M.md) (done)
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
 
 ## Description
@@ -23,6 +23,14 @@ With a TextEdit document focused:
 
 Pointers: docs/ui-stack-spike.md "Hands-on checks (pending)"; DESIGN.md "Paste at cursor".
 
+Brandon, 11 Oct, hands-on round on b31d2c4 (permissions reset, fresh install), walked through step by step: dictation into TextEdit: preview streamed, the paste landed, it felt good.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+status held→done

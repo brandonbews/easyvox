@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 27 on hold · 41 inbox · 43 done · 1 cancelled
+0 in progress · 1 ready · 2 blocked · 19 on hold · 41 inbox · 51 done · 1 cancelled
 
 ## In progress
 
@@ -25,11 +25,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
-| [`tuh-py6m`](tasks/tuh-01M4H2EFXEY2V2A097BVAVPY6M.md) | Hands-on: Microphone permission prompt, then real mic dictation | 0 | `human` `hands-on` |
-| [`tuh-ddry`](tasks/tuh-01M4H2EFYGPNFDBVW9HGYWDDRY.md) | Hands-on: ⌥Space into TextEdit — focus stays, preview streams, paste lands | 0 | `human` `hands-on` |
 | [`tuh-v4xx`](tasks/tuh-01M4H2EFZA72VNDBQ1G6FHV4XX.md) | Hands-on: Settings and History come to the front; model dropdown and shortcut recorder | 0 | `human` `hands-on` |
-| [`tuh-zft3`](tasks/tuh-01M4H2EG0XAV06KW9567DVZFT3.md) | Hands-on: live light/dark switch | 1 | `human` `hands-on` |
-| [`tuh-pxhr`](tasks/tuh-01M4H2EG1Q0RW4QKRD5YH9PXHR.md) | Hands-on: hold right ⌥ as the shortcut (Input Monitoring, relaunch) | 1 | `human` `hands-on` |
 | [`tuh-dw5x`](tasks/tuh-01M4H2EG2HY0EK9T9EFHSEDW5X.md) | Hands-on: overlay and paste over full-screen apps and in other Spaces | 1 | `human` `hands-on` |
 | [`tuh-h9ja`](tasks/tuh-01M4H2EG3AT1WSW8YRH9DXH9JA.md) | Hands-on: the debug "Test dictation" menu item | 1 | `human` `hands-on` |
 | [`tuh-2645`](tasks/tuh-01M4H2EGM7TG4S96QNRQHV2645.md) | Create a Developer ID Application certificate and a notarization key | 3 | `human` `release` |
@@ -39,19 +35,15 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-b8rb`](tasks/tuh-01M4HDR400G242K017BJ1HB8RB.md) | Energy spike: GPU vs cheaper preview vs Neural Engine | 2 | `engine` `perf` `energy` `spike` |
 | [`tuh-h2jj`](tasks/tuh-01M4HDR43KDP1NSH6C16DFH2JJ.md) | Offer the ggml-metal idle-loop patch upstream | 4 | `human` `engine` `upstream` |
 | [`tuh-x9cd`](tasks/tuh-01M4HN1AWAEEECAS8SWAJ5X9CD.md) | Hands-on: 'Keep model loaded' switch, and first words after an unload | 1 | `human` `hands-on` |
-| [`tuh-xq3v`](tasks/tuh-01M4JNRWA7PCN1YSN2PBY4XQ3V.md) | Hands-on: does the lighter preview feel OK? | 2 | `human` `hands-on` |
-| [`tuh-94ns`](tasks/tuh-01M4K926MM34Y3SX6H399294NS.md) | Hands-on: 'Didn't catch anything' on silence, and quick first words | 2 | `human` `hands-on` |
 | [`tuh-tqbf`](tasks/tuh-01M4KF1V8BMQ8SGXH92HDSTQBF.md) | Hands-on: Settings Models page, downloads, and About | 1 | `human` `hands-on` |
 | [`tuh-8fhp`](tasks/tuh-01M4KGHG3AMCQVBMYVQEJB8FHP.md) | Hands-on: first-launch onboarding from a clean slate | 1 | `human` `hands-on` |
 | [`tuh-qjqs`](tasks/tuh-01M4KNXEYGGE3QSN96GHNXQJQS.md) | Hands-on: overlay level meter, 'Can't hear you', live light/dark | 2 | `human` `hands-on` |
-| [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) | Hands-on: overlay animation (pop in and out, eased bars, words fading in, Reduce motion) | 2 | `human` `hands-on` `overlay` |
 | [`tuh-q8rd`](tasks/tuh-01M4MFZG1M3EDBMEC1NPD6Q8RD.md) | Decide: delete Parakeet Unified and v3 from the real models folder (1.1 GB, bench-only) | 4 | `decision` `human` `models` |
 | [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) | Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap | 2 | `decision` `human` `overlay` `energy` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
 | [`tuh-82ya`](tasks/tuh-01M4NQE2KBMZ8WST33GWHJ82YA.md) | Hands-on: the DMG window on macOS 26 in light and dark (do Finder labels stay black over the background?) | — | `design` `hands-on` `human` `release` |
-| [`tuh-p403`](tasks/tuh-01M4NXYZ58FXM7E0GC7W4VP403.md) | Hands-on: the restyled app in light and dark (menu bar, pill, notices, Settings, setup, History, Reduce motion) | 0 | `human` `hands-on` `design` |
 
 ## Inbox
 
@@ -101,7 +93,11 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 
 ## Done
 
+- [`tuh-py6m`](tasks/tuh-01M4H2EFXEY2V2A097BVAVPY6M.md) Hands-on: Microphone permission prompt, then real mic dictation
+- [`tuh-ddry`](tasks/tuh-01M4H2EFYGPNFDBVW9HGYWDDRY.md) Hands-on: ⌥Space into TextEdit — focus stays, preview streams, paste lands
 - [`tuh-1xne`](tasks/tuh-01M4H2EG038JCXHPQYECTZ1XNE.md) Multi-minute dictations: preview and final text hold up when the key is held for minutes
+- [`tuh-zft3`](tasks/tuh-01M4H2EG0XAV06KW9567DVZFT3.md) Hands-on: live light/dark switch
+- [`tuh-pxhr`](tasks/tuh-01M4H2EG1Q0RW4QKRD5YH9PXHR.md) Hands-on: hold right ⌥ as the shortcut (Input Monitoring, relaunch)
 - [`tuh-838p`](tasks/tuh-01M4H2EG449Q4HK90B08MQ838P.md) Hands-on: compare Parakeet Unified, TDT v2 and Unified at 160 ms chunks, and pick the default
 - [`tuh-h9ae`](tasks/tuh-01M4H2EG4X1ZDTHE9QVGJ5H9AE.md) Hands-on: record a few real-voice clips for benching
 - [`tuh-vcqs`](tasks/tuh-01M4H2EG5RQG3TVM45KP1CVCQS.md) Decide: make the GitHub repo public, or set an Actions spending limit
@@ -132,9 +128,12 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-2bj9`](tasks/tuh-01M4HT8MER13BDAFEFBZG62BJ9.md) Widen the chunk-join slack so soft words at a cut aren't lost
 - [`tuh-z7dr`](tasks/tuh-01M4HVK6QMYNHCMAGZ57G0Z7DR.md) Make dictation light: tune the preview until the GPU mostly rests while talking
 - [`tuh-w7y9`](tasks/tuh-01M4JNRW9D3CBNF5X80JPWW7Y9.md) Show first words sooner: run the first preview pass early
+- [`tuh-xq3v`](tasks/tuh-01M4JNRWA7PCN1YSN2PBY4XQ3V.md) Hands-on: does the lighter preview feel OK?
 - [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) Drop Parakeet Unified from the app (keep it bench-only)
 - [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) Bench Parakeet TDT v3 on Brandon's voice
 - [`tuh-xbek`](tasks/tuh-01M4K8HZ2NA22EC4M7XF1RXBEK.md) Flaky test: download range_ignored sometimes restarts from 0
+- [`tuh-94ns`](tasks/tuh-01M4K926MM34Y3SX6H399294NS.md) Hands-on: 'Didn't catch anything' on silence, and quick first words
+- [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) Hands-on: overlay animation (pop in and out, eased bars, words fading in, Reduce motion)
 - [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) Decide: onboarding at every launch when Accessibility is off on purpose
 - [`tuh-h1mn`](tasks/tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) Decide: website plan questions (stack, hosting, domain, public docs)
 - [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo)
@@ -143,6 +142,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-4n9y`](tasks/tuh-01M4NR75KRQGBNJTMCA0Q44N9Y.md) Restyle the website to the design hand-off, plus the README lockup and DMG background (lanes B and C)
 - [`tuh-n2hd`](tasks/tuh-01M4NR75PPG1ZFEZ3ZNXQEN2HD.md) Restyle Settings, setup and History to the design hand-off (lane A7-A9)
 - [`tuh-svbn`](tasks/tuh-01M4NXG7XGT9V9TPESKKJESVBN.md) Flaky test: session::tests::speech_moves_the_level_meter_at_up_to_its_rate failed once under load
+- [`tuh-p403`](tasks/tuh-01M4NXYZ58FXM7E0GC7W4VP403.md) Hands-on: the restyled app in light and dark (menu bar, pill, notices, Settings, setup, History, Reduce motion)
 - [`tuh-g2rd`](tasks/tuh-01M4PCSBAE8V7WCK4G2PTKG2RD.md) Permissions: Settings watches them live; ask for Input Monitoring so EasyVox appears in its list
 
 ## Cancelled

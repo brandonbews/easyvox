@@ -2,7 +2,7 @@
 
 `tuh-01M4NXYZ58FXM7E0GC7W4VP403`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 0
 - **Labels:** `human` `hands-on` `design`
 - **Created:** 2026-10-11 16:50 UTC by `brandon`
@@ -21,8 +21,18 @@ Anything that looks off: say which screen, light or dark.
 
 Added 11 Oct (from Brandon's first feedback; fixed for the next build): Settings › Permissions shows Accessibility allowed within a second of the switch; turning on Hold right ⌥ shows macOS's Input Monitoring prompt and EasyVox appears in that list; after allowing it, right ⌥ works in TextEdit without a relaunch (if not, the copy must ask for a relaunch again).
 
+Brandon, 11 Oct, hands-on round on b31d2c4 (permissions reset, fresh install), walked through step by step: all ten steps fine: setup (Mic prompt wording, Accessibility detected live), the menu bar icon and menu, a dictation (pill position, pop, bars, words, dots, check; menu bar states), the silent-hold notice (4 s feels right), Settings General (shortcut refusal and Cancel), right ⌥ with Input Monitoring (EasyVox listed after the prompt; worked without a relaunch), Models/Permissions/About, History, light and dark (light pill looked right), Reduce motion. Copy changes he asked for: About tagline 'Simple, local voice-to-text.'; History footer 'N dictations · Stored locally'.
+
 ## History
 
 ### 2026-10-11 21:18 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 21:49 UTC — edit by `brandon`
+
+status held→done
