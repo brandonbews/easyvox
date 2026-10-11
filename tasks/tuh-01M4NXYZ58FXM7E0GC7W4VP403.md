@@ -19,6 +19,10 @@ Brandon's check at an unlocked screen, built from c214eb7 (dist/EasyVox.app in t
 7. Switch light and dark while windows are open; then Reduce motion (only fades).
 Anything that looks off: say which screen, light or dark.
 
+Added 11 Oct (from Brandon's first feedback; fixed for the next build): Settings › Permissions shows Accessibility allowed within a second of the switch; turning on Hold right ⌥ shows macOS's Input Monitoring prompt and EasyVox appears in that list; after allowing it, right ⌥ works in TextEdit without a relaunch (if not, the copy must ask for a relaunch again).
+
 ## History
 
-_No activity yet._
+### 2026-10-11 21:18 UTC — edit by `brandon`
+
+description edited
