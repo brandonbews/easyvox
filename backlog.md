@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 26 on hold · 11 inbox · 35 done · 0 cancelled
+0 in progress · 1 ready · 2 blocked · 27 on hold · 11 inbox · 35 done · 0 cancelled
 
 ## In progress
 
@@ -51,6 +51,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) | Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap | 2 | `decision` `human` `overlay` `energy` |
+| [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
 
 ## Inbox
 
