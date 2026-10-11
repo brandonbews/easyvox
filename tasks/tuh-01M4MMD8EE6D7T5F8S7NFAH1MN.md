@@ -23,6 +23,10 @@ The website plan (docs/plans/website.md, section 10) has 11 questions. Each has 
 10. Results page: static SVG charts drawn at build time, each with a table, pinned to named studies (recommended).
 11. A path-filtered site CI job (about 1 minute per run) plus site/** in ci.yml's paths-ignore: yes (recommended).
 
+Answers so far (Brandon, 10 Oct): 3. He owns easyvox.dev. 1. Doesn't need Next; unsure about Astro only because he doesn't know it, and his other projects are on Vercel (Astro deploys to Vercel too, so hosting stays the same). Stack still open.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 04:57 UTC — edit by `brandon`
+
+description edited
