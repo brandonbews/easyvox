@@ -10,9 +10,10 @@
 //! it back as it was. The model download checks never touch the internet: they download from a
 //! server of their own on 127.0.0.1 into the temporary folder, and delete only from there.
 //!
-//! Onboarding is checked without touching a permission: the self-test reads the real ones
-//! (onboarding must have opened at launch exactly when one is missing), and otherwise shows the
-//! window injected answers. It never clicks a button that would bring up a macOS prompt.
+//! Onboarding and Settings › Permissions are checked without touching a permission: the
+//! self-test reads the real ones (onboarding must have opened at launch exactly when one is
+//! missing), and otherwise shows the windows injected answers. It never clicks a button that
+//! would bring up a macOS prompt.
 //!
 //! The speech models come from the models folder (`EASYVOX_MODELS_DIR` moves it). Nothing here
 //! writes to it or deletes from it; onboarding's download check reads the chosen model from it
@@ -36,8 +37,9 @@
 
 use crate::controller::Controller;
 use crate::onboarding::{Busy, LaunchFacts, Onboarding, Problem, State, StepId};
-use crate::onboarding_window::{Permissions, chosen_model};
+use crate::onboarding_window::chosen_model;
 use crate::overlay::{CANT_HEAR, Glyph, Mode, Notice};
+use crate::permissions::{AllPermissions, Permissions};
 use crate::platform::{self, PanelState};
 use crate::settings::Page;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
@@ -235,6 +237,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
     windows(&controller, &mut report, cx).await;
     models_page(&controller, &mut report, cx).await;
     about_page(&controller, &mut report, cx).await;
+    settings_permissions(&controller, &mut report, cx).await;
     model_download(&controller, &options, &mut report, cx).await;
     match (engine_ready, hotkey_id) {
         (true, Some(id)) => {
@@ -531,7 +534,7 @@ fn rest_glyph(status: &tray::Status) -> tray::Glyph {
 /// chosen in the menu.
 fn menu_bar_at_rest(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
     let snapshot = cx.update(|cx| {
-        controller.update(cx, |c, cx| c.recheck_tray(cx));
+        controller.update(cx, |c, cx| c.recheck_permissions(cx));
         let tray = controller.read(cx).tray.as_ref()?;
         Some((tray.status().clone(), platform::menu_bar_image(&tray.icon), platform::menu_items(&tray.menu)))
     });
@@ -1041,6 +1044,88 @@ async fn about_page(controller: &Entity<Controller>, report: &mut Report, cx: &m
             view.update(cx, |v, cx| v.show(Page::General, cx));
         }
     });
+}
+
+/// Settings › Permissions draws its rows for every state the three permissions can show (pinned
+/// in the view: the real ones aren't touched, and no button is clicked). Its watch reads the
+/// permissions every second while one is missing, not at all once all are allowed, and goes
+/// with the window, which this closes.
+async fn settings_permissions(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::platform::InputMonitoring;
+    let name = "Settings › Permissions draws every state, and watches the permissions only while one is missing";
+    let Some(view) = cx.update(|cx| controller.read(cx).settings_view()) else {
+        return report.check(name, false, json!("the Settings window isn't open"));
+    };
+    let allowed = AllPermissions {
+        mic: MicPermission::Authorized,
+        accessibility: true,
+        input_monitoring: InputMonitoring::Allowed,
+    };
+    let missing = AllPermissions { input_monitoring: InputMonitoring::NotAsked, ..allowed };
+    let cases = [
+        ("all allowed", allowed),
+        ("Input Monitoring not asked", missing),
+        ("Input Monitoring denied", AllPermissions { input_monitoring: InputMonitoring::Denied, ..allowed }),
+        ("Accessibility off", AllPermissions { accessibility: false, ..allowed }),
+        (
+            "nothing asked",
+            AllPermissions {
+                mic: MicPermission::NotDetermined,
+                accessibility: false,
+                input_monitoring: InputMonitoring::NotAsked,
+            },
+        ),
+        ("Microphone denied", AllPermissions { mic: MicPermission::Denied, ..allowed }),
+    ];
+    let mut draws = vec![];
+    for (case, permissions) in cases {
+        let drawn = cx.update(|cx| {
+            view.update(cx, |v, cx| {
+                v.show(Page::Permissions, cx);
+                v.pin_permissions(Some(permissions), cx);
+            });
+            draw_settings(controller, cx)
+        });
+        draws.push(json!({"case": case, "drawn": drawn}));
+    }
+    // Pinning reads them once, then the watch goes on (or not) as if they were the system's.
+    // Timers on time, as with the screen on: App Nap would stretch the one-second reads.
+    let _awake = cx.background_executor().prevent_app_nap("EasyVox self-test");
+    let reads = |cx: &mut AsyncApp| cx.update(|cx| view.read(cx).permission_reads());
+    let watch = |pinned: AllPermissions, cx: &mut AsyncApp| {
+        cx.update(|cx| view.update(cx, |v, cx| v.pin_permissions(Some(pinned), cx)));
+    };
+    watch(allowed, cx);
+    let before = reads(cx);
+    sleep(cx, 3000).await;
+    let reads_all_allowed = reads(cx) - before;
+    watch(missing, cx);
+    let before = reads(cx);
+    sleep(cx, 3000).await;
+    let reads_one_missing = reads(cx) - before;
+    cx.update(|cx| {
+        view.update(cx, |v, cx| {
+            v.pin_permissions(None, cx);
+            v.show(Page::General, cx);
+        })
+    });
+    drop(view);
+    // Closed, the view and its watch are gone.
+    cx.update(|cx| {
+        if let Some(handle) = controller.read(cx).windows()[0] {
+            let _ = handle.update(cx, |_, window, _| window.remove_window());
+        }
+    });
+    let released = wait_for(cx, Duration::from_secs(3), |cx| controller.read(cx).settings_view().is_none()).await;
+    report.check(
+        name,
+        draws.iter().all(|d| d["drawn"] == true)
+            && reads_all_allowed == 0
+            && (2..=4).contains(&reads_one_missing)
+            && released.is_some(),
+        json!({"draws": draws, "reads_in_3s_all_allowed": reads_all_allowed,
+               "reads_in_3s_one_missing": reads_one_missing, "released_after_close_ms": released}),
+    );
 }
 
 /// A model download through the controller, the way onboarding and Settings start one, from a

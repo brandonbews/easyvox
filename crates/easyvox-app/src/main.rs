@@ -22,6 +22,7 @@ mod model_row;
 mod onboarding;
 mod onboarding_window;
 mod overlay;
+mod permissions;
 mod platform;
 #[cfg(feature = "self-test")]
 mod selftest;
@@ -154,9 +155,9 @@ fn main() {
                 watch_path.display()
             ),
         }
-        if cx.global::<AppSettings>().hold_right_option {
-            controller.update(cx, |c, cx| c.ensure_right_option_tap(cx));
-        }
+        // Hold right ⌥: its event tap, if Input Monitoring is allowed (otherwise Settings says
+        // it's waiting, and the tap comes once it is).
+        controller.update(cx, |c, cx| c.apply_right_option(cx));
 
         let target = controller.clone();
         cx.spawn(async move |cx| {

@@ -133,8 +133,8 @@ pub struct AppStatus {
     pub accessibility_prompted: bool,
     /// Why the push-to-talk shortcut couldn't be registered, if it couldn't.
     pub shortcut_error: Option<String>,
-    /// Why the right-⌥ tap couldn't be installed, if it couldn't.
-    pub right_option_error: Option<String>,
+    /// Why "hold right ⌥ to talk" is on but doesn't work yet, if it doesn't.
+    pub right_option_problem: Option<RightOptionProblem>,
     /// The settings file; why it couldn't be read or written, if it couldn't; and the keys in
     /// it that were ignored or put back to their defaults.
     pub config_path: std::path::PathBuf,
@@ -143,6 +143,16 @@ pub struct AppStatus {
 }
 
 impl Global for AppStatus {}
+
+/// Why "hold right ⌥ to talk" is on but doesn't work yet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RightOptionProblem {
+    /// Input Monitoring isn't allowed. The key works as soon as it is: the controller installs
+    /// the event tap when it next reads the permission (`Controller::recheck_permissions`).
+    NeedsInputMonitoring,
+    /// The event tap couldn't be installed.
+    Failed(String),
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum EngineStatus {

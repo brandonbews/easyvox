@@ -12,19 +12,19 @@
 //! It only ever asks: the Microphone and Accessibility prompts come up when their button is
 //! clicked, and nothing here opens the microphone.
 //!
-//! The permissions are read from the system as the window draws. While one is missing, the
-//! window reads them again every second, and whenever it's brought forward, so a switch turned on
-//! in System Settings shows here without a relaunch; the timer stops once both are allowed, and
-//! goes with the window. The download and the engine come from `AppStatus`, and the controller
-//! redraws the window when they change.
+//! The window keeps a watch on the two permissions (`permissions::Watch`, shared with Settings):
+//! it reads them when it opens, whenever it's brought forward, and every second while one is
+//! missing, so a switch turned on in System Settings shows here without a relaunch; the timer
+//! stops once both are allowed, and goes with the window. The download and the engine come from
+//! `AppStatus`, and the controller redraws the window when they change.
 
 use crate::brand::{self, Colors};
 use crate::controller;
 use crate::model_row::{ModelRow, ModelState};
 use crate::onboarding::{Action, Busy, Facts, LaunchFacts, Onboarding, Pane, State, Step, StepId};
+use crate::permissions::{Permissions, Watch};
 use crate::platform::{PRIVACY_ACCESSIBILITY, PRIVACY_MICROPHONE};
 use crate::state::{AppSettings, AppStatus};
-use easyvox_core::MicPermission;
 use easyvox_core::models::{self, ModelInfo};
 use gpui_kit::component::button::Button;
 use gpui_kit::component::kbd::Kbd;
@@ -33,28 +33,6 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, Theme, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use std::time::Duration;
-
-/// How often the permissions are read again while one is missing.
-const PERMISSION_POLL: Duration = Duration::from_secs(1);
-
-/// What the system says about the two permissions onboarding asks for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Permissions {
-    pub mic: MicPermission,
-    pub accessibility: bool,
-}
-
-impl Permissions {
-    /// Never prompts.
-    pub fn read() -> Self {
-        Self { mic: easyvox_core::mic_permission_status(), accessibility: easyvox_core::accessibility_trusted() }
-    }
-
-    fn all_allowed(self) -> bool {
-        self.mic == MicPermission::Authorized && self.accessibility
-    }
-}
 
 /// The model onboarding sets up: the chosen one, which is the default unless the settings file
 /// picks another offered model.
@@ -79,76 +57,25 @@ pub fn launch_facts(cx: &App) -> LaunchFacts {
 pub static DRAWN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 pub struct OnboardingView {
-    /// The permissions when last read, to redraw when they change.
-    seen: Permissions,
-    /// Reads them again every [`PERMISSION_POLL`] while one is missing.
-    poll: Option<Task<()>>,
-    /// Self-test only: permissions to show instead of the system's, which it never changes.
-    #[cfg(feature = "self-test")]
-    pinned: Option<Permissions>,
-    _subscriptions: [Subscription; 2],
+    /// The Microphone and Accessibility, read again while one is missing.
+    permissions: Watch<Permissions>,
+    _appearance: Subscription,
 }
 
 impl OnboardingView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let appearance =
+        let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
-        // Back from System Settings: read the permissions now, and watch again if one is missing.
-        let activation = cx.observe_window_activation(window, |this, window, cx| {
-            if window.is_window_active() {
-                this.watch_permissions(cx);
-            }
-        });
-        let mut this = Self {
-            seen: Permissions::read(),
-            poll: None,
-            #[cfg(feature = "self-test")]
-            pinned: None,
-            _subscriptions: [appearance, activation],
-        };
-        this.watch_permissions(cx);
-        this
+        let permissions = Watch::new(window, cx, Self::watch, Permissions::read, |p| !p.all_allowed());
+        Self { permissions, _appearance }
     }
 
-    fn permissions(&self) -> Permissions {
-        #[cfg(feature = "self-test")]
-        if let Some(pinned) = self.pinned {
-            return pinned;
-        }
-        Permissions::read()
-    }
-
-    /// Reads the permissions now, then every [`PERMISSION_POLL`] until both are allowed,
-    /// redrawing when they change. Replaces any earlier timer.
-    fn watch_permissions(&mut self, cx: &mut Context<Self>) {
-        if !self.check_permissions(cx) {
-            self.poll = None;
-            return;
-        }
-        self.poll = Some(cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(PERMISSION_POLL).await;
-                match this.update(cx, |view, cx| view.check_permissions(cx)) {
-                    Ok(true) => {}
-                    _ => break, // both allowed, or the window is gone
-                }
-            }
-        }));
-    }
-
-    /// Redraws if the permissions changed. True while one is still missing.
-    fn check_permissions(&mut self, cx: &mut Context<Self>) -> bool {
-        let now = self.permissions();
-        if now != self.seen {
-            log::info!("onboarding: permissions now {now:?}");
-            self.seen = now;
-            cx.notify();
-        }
-        !now.all_allowed()
+    fn watch(&mut self) -> &mut Watch<Permissions> {
+        &mut self.permissions
     }
 
     fn facts(&self, model: &ModelInfo, cx: &App) -> Facts {
-        let permissions = self.permissions();
+        let permissions = self.permissions.get();
         let status = cx.global::<AppStatus>();
         Facts {
             mic: permissions.mic,
@@ -169,9 +96,7 @@ impl OnboardingView {
     /// Shows these permissions instead of the system's (`None`: the system's again).
     #[cfg(feature = "self-test")]
     pub fn pin_permissions(&mut self, permissions: Option<Permissions>, cx: &mut Context<Self>) {
-        self.pinned = permissions;
-        self.watch_permissions(cx);
-        cx.notify();
+        Watch::pin(self, Self::watch, permissions, cx);
     }
 }
 

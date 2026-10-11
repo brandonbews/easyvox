@@ -18,18 +18,27 @@
 //! waits for a dictation to end, then frees the old model before loading the new one, so only
 //! one is ever in memory (see `MODEL_SWAP`).
 //!
-//! The permission prompts start here too (`request_mic`, `prompt_accessibility`), so onboarding
-//! and Settings show the same state. Onboarding opens at launch when a required step is missing
-//! (`onboard_if_needed`; see `onboarding.rs`).
+//! The permission prompts start here too (`request_mic`, `prompt_accessibility`,
+//! `request_input_monitoring`), so onboarding and Settings show the same state. Onboarding opens
+//! at launch when a required step is missing (`onboard_if_needed`; see `onboarding.rs`).
+//!
+//! Hold right ⌥ to talk needs Input Monitoring. Turning it on asks for the permission (macOS's
+//! prompt, which also puts EasyVox in System Settings' list), and the event tap is installed
+//! once the permission is allowed: at once if it is, otherwise when a read of the permissions
+//! finds it (`recheck_permissions`: the setup and Settings windows read them every second while
+//! one is missing, and a click on the menu bar item or a press of the shortcut reads them too).
+//! The tap is only ever made after the grant, so no relaunch is needed.
 
 use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
 use crate::onboarding::LaunchFacts;
-use crate::onboarding_window::{OnboardingView, Permissions};
+use crate::onboarding_window::OnboardingView;
 use crate::overlay::{Notice, Overlay};
+use crate::permissions::Permissions;
+use crate::platform::InputMonitoring;
 use crate::settings::{Page, SettingsView};
-use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
+use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, RightOptionProblem};
 use crate::{platform, tray};
 use easyvox_core::download::{CancelToken, DownloadError, Progress};
 use easyvox_core::models::ModelInfo;
@@ -151,9 +160,13 @@ pub struct Controller {
     /// Outside edits to the settings file that were applied (read by the self-test).
     #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
     pub config_reloads: u32,
+    /// The right-⌥ event tap is installed (it stays for the rest of the process).
     right_option_tap: bool,
+    /// The Input Monitoring prompt was asked for and hasn't been answered.
+    asking_input_monitoring: bool,
     /// Microphone and Accessibility as last read, for the menu bar item. Read again on events (a
-    /// press, a click on the item, a prompt answered), never on a timer.
+    /// press, a click on the item, a prompt answered, a change a window's watch saw), never on a
+    /// timer of the controller's own.
     permissions: Permissions,
     /// The text was pasted: the menu bar item shows a check until then (`menubar_pasted_ms`),
     /// and the task puts it back.
@@ -207,6 +220,7 @@ impl Controller {
             config_task: None,
             config_reloads: 0,
             right_option_tap: false,
+            asking_input_monitoring: false,
             permissions: Permissions::read(),
             pasted_until: None,
             pasted_task: None,
@@ -246,7 +260,7 @@ impl Controller {
                 }));
             }
             UiEvent::Download { model, update } => self.on_download(model, update, cx),
-            UiEvent::TrayOpened => self.recheck_tray(cx),
+            UiEvent::TrayOpened => self.recheck_permissions(cx),
         }
     }
 
@@ -266,7 +280,8 @@ impl Controller {
             engine: &status.engine,
             downloading: self.downloads.contains_key(settings.model.as_str()),
             shortcut: crate::hotkey::label(&settings.shortcut),
-            hold_right_option: settings.hold_right_option,
+            // Only once it works: until Input Monitoring is allowed, right ⌥ does nothing.
+            hold_right_option: settings.hold_right_option && self.right_option_tap,
             shortcut_failed: status.shortcut_error.is_some(),
         })
     }
@@ -281,11 +296,14 @@ impl Controller {
         }
     }
 
-    /// Reads the permissions again, then [`refresh_tray`](Self::refresh_tray). A revoke or a
-    /// grant shows at the next event that calls this: a press, a click on the item, a prompt.
-    pub fn recheck_tray(&mut self, cx: &mut Context<Self>) {
+    /// Reads the permissions again, then [`refresh_tray`](Self::refresh_tray), and installs the
+    /// right-⌥ tap if it was waiting for Input Monitoring and that's allowed now. A revoke or a
+    /// grant shows at the next event that calls this: a click on the item, a prompt answered, a
+    /// change the setup or Settings window saw (they watch while open and one is missing).
+    pub fn recheck_permissions(&mut self, cx: &mut Context<Self>) {
         self.permissions = Permissions::read();
         self.refresh_tray(cx);
+        self.apply_right_option(cx);
     }
 
     fn on_menu(&mut self, id: &str, cx: &mut Context<Self>) {
@@ -319,13 +337,16 @@ impl Controller {
 
     /// Press: start a session and show the overlay. Release: stop it; `Final` follows.
     /// Every press reads the permissions again, for the menu bar item, which shows each press and
-    /// release.
+    /// release; and, once the session has started, Input Monitoring if right ⌥ waits for it.
     pub fn on_push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
         if pressed {
             self.permissions = Permissions::read();
         }
         self.push_to_talk(pressed, source, cx);
         self.refresh_tray(cx);
+        if pressed {
+            self.apply_right_option(cx);
+        }
     }
 
     fn push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
@@ -885,41 +906,62 @@ impl Controller {
         result
     }
 
-    /// Turns "hold right ⌥ to talk" on or off (from Settings). If the event tap can't be
-    /// installed, it stays off and Settings shows why.
+    /// Turns "hold right ⌥ to talk" on or off (from Settings). On, without Input Monitoring:
+    /// asks for it if it was never asked (macOS's prompt, which puts EasyVox in the list), and
+    /// the key works once it's allowed; meanwhile Settings says it's waiting. If the event tap
+    /// can't be installed for another reason, it stays off and Settings shows why.
     pub fn set_hold_right_option(&mut self, on: bool, cx: &mut Context<Self>) {
-        if on && !self.ensure_right_option_tap(cx) {
+        cx.global_mut::<AppSettings>().hold_right_option = on;
+        if on && !self.right_option_tap && platform::input_monitoring() == InputMonitoring::NotAsked {
+            self.request_input_monitoring(cx);
+        }
+        if !self.apply_right_option(cx) {
+            cx.global_mut::<AppSettings>().hold_right_option = false;
+            cx.refresh_windows();
             return;
         }
-        cx.global_mut::<AppSettings>().hold_right_option = on;
-        cx.global_mut::<AppStatus>().right_option_error = None;
-        cx.refresh_windows();
         self.save_settings(cx);
     }
 
-    /// Installs the right-⌥ event tap the first time it's needed. False, with the reason in
-    /// `AppStatus`, if it couldn't be.
-    pub fn ensure_right_option_tap(&mut self, cx: &mut Context<Self>) -> bool {
-        if self.right_option_tap {
-            return true;
-        }
-        let tx = self.tx.clone();
-        let result = platform::modifier_tap::install(move |pressed| {
-            let _ = tx.send_blocking(UiEvent::RightOption { pressed });
-        });
-        match result {
-            Ok(()) => {
-                log::info!("right ⌥ tap installed");
-                self.right_option_tap = true;
-                cx.global_mut::<AppStatus>().right_option_error = None;
+    /// Puts "hold right ⌥ to talk" in force as the settings say: installs the event tap the
+    /// first time it's on with Input Monitoring allowed, and otherwise records why it can't work
+    /// yet in `AppStatus` (nothing, while it's off). Reads Input Monitoring only while the tap
+    /// waits for it. False if the tap couldn't be installed for another reason.
+    pub fn apply_right_option(&mut self, cx: &mut Context<Self>) -> bool {
+        let had_tap = self.right_option_tap;
+        let problem = if !cx.global::<AppSettings>().hold_right_option || self.right_option_tap {
+            None
+        } else if platform::input_monitoring() != InputMonitoring::Allowed {
+            Some(RightOptionProblem::NeedsInputMonitoring)
+        } else {
+            let tx = self.tx.clone();
+            let result = platform::modifier_tap::install(move |pressed| {
+                let _ = tx.send_blocking(UiEvent::RightOption { pressed });
+            });
+            match result {
+                Ok(()) => {
+                    log::info!("right ⌥ tap installed");
+                    self.right_option_tap = true;
+                    None
+                }
+                Err(e) => {
+                    log::warn!("right ⌥ tap: {e:#}");
+                    Some(RightOptionProblem::Failed(e.to_string()))
+                }
             }
-            Err(e) => {
-                log::warn!("right ⌥ tap: {e:#}");
-                cx.global_mut::<AppStatus>().right_option_error = Some(e.to_string());
+        };
+        let failed = matches!(problem, Some(RightOptionProblem::Failed(_)));
+        if cx.global::<AppStatus>().right_option_problem != problem {
+            if problem == Some(RightOptionProblem::NeedsInputMonitoring) {
+                log::info!("right ⌥: waiting for Input Monitoring");
             }
+            cx.global_mut::<AppStatus>().right_option_problem = problem;
+            cx.refresh_windows();
         }
-        cx.refresh_windows();
-        self.right_option_tap
+        if self.right_option_tap != had_tap {
+            self.refresh_tray(cx); // the menu's "Hold … or right ⌥ to talk" waits for the tap
+        }
+        !failed
     }
 
     /// Writes what the Settings window changed to the settings file (see
@@ -987,8 +1029,8 @@ impl Controller {
             cx.global_mut::<AppSettings>().shortcut = new.shortcut.clone();
             cx.global_mut::<AppStatus>().shortcut_error = Some(e);
         }
-        if new.hold_right_option && !old.hold_right_option {
-            self.ensure_right_option_tap(cx);
+        if new.hold_right_option != old.hold_right_option {
+            self.apply_right_option(cx);
         }
         if new.model != old.model {
             self.use_model(&new.model, cx);
@@ -1017,21 +1059,44 @@ impl Controller {
             let _ = this.update(cx, |c, cx| {
                 cx.global_mut::<AppStatus>().mic_asking = false;
                 cx.refresh_windows();
-                c.recheck_tray(cx);
+                c.recheck_permissions(cx);
             });
         })
         .detach();
     }
 
-    /// Shows the macOS Accessibility prompt (from onboarding), which offers to open System
-    /// Settings. Returns at once; the grant comes when the user turns the switch on, and the
-    /// onboarding window notices it.
+    /// Shows the macOS Accessibility prompt (from onboarding or Settings), which offers to open
+    /// System Settings. Returns at once; the grant comes when the user turns the switch on, and
+    /// the window's watch notices it.
     pub fn prompt_accessibility(&mut self, cx: &mut Context<Self>) {
         let trusted = easyvox_core::prompt_accessibility();
         log::info!("asked for Accessibility access (allowed already: {trusted})");
         cx.global_mut::<AppStatus>().accessibility_prompted = true;
         cx.refresh_windows();
-        self.recheck_tray(cx);
+        self.recheck_permissions(cx);
+    }
+
+    /// Asks for Input Monitoring (from Settings, or turning right ⌥ on): the first time, macOS
+    /// shows its prompt, whose button opens System Settings at the list, and EasyVox appears in
+    /// that list, switched off. The request blocks until TCC answers, so it runs on the background
+    /// executor. The grant comes when the user turns the switch on; a window's watch, or the next
+    /// click on the menu bar item, notices it.
+    pub fn request_input_monitoring(&mut self, cx: &mut Context<Self>) {
+        if self.asking_input_monitoring {
+            return;
+        }
+        log::info!("asking for Input Monitoring");
+        self.asking_input_monitoring = true;
+        cx.spawn(async move |this, cx| {
+            let allowed = cx.background_spawn(async { platform::request_input_monitoring() }).await;
+            log::info!("Input Monitoring: allowed {allowed}, now {:?}", platform::input_monitoring());
+            let _ = this.update(cx, |c, cx| {
+                c.asking_input_monitoring = false;
+                c.recheck_permissions(cx);
+                cx.refresh_windows();
+            });
+        })
+        .detach();
     }
 
     /// Loads the chosen model if it's downloaded and isn't loaded or loading: onboarding's

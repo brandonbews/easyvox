@@ -1,6 +1,6 @@
 //! macOS: the System Settings deep links, the overlay panel shim, key guard and open and close
-//! animations, Reduce motion, and the right-⌥ event tap. Small helpers the self-test needs sit
-//! at the bottom, behind the `self-test` feature.
+//! animations, Reduce motion, and the right-⌥ event tap with its Input Monitoring permission.
+//! Small helpers the self-test needs sit at the bottom, behind the `self-test` feature.
 
 use crate::curve::{Curve, EASE_IN, FADE_IN, POP, along};
 use anyhow::Context as _;
@@ -516,7 +516,6 @@ mod key_guard {
 
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
-    fn CGPreflightListenEventAccess() -> bool;
     fn CGEventTapCreate(
         tap: u32,
         place: u32,
@@ -539,10 +538,50 @@ unsafe extern "C" {
     static kCFRunLoopCommonModes: *const c_void;
 }
 
-/// Input Monitoring, which the right-⌥ tap needs. Never prompts.
-pub fn input_monitoring_granted() -> bool {
-    // SAFETY: no arguments, no side effects.
-    unsafe { CGPreflightListenEventAccess() }
+#[link(name = "IOKit", kind = "framework")]
+unsafe extern "C" {
+    fn IOHIDCheckAccess(request: u32) -> u32;
+    fn IOHIDRequestAccess(request: u32) -> bool;
+}
+
+/// `kIOHIDRequestTypeListenEvent`: Input Monitoring, in IOKit's words.
+const LISTEN_EVENT: u32 = 1;
+
+/// Where Input Monitoring stands, which the right-⌥ tap needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputMonitoring {
+    Allowed,
+    /// Asked, and not allowed (yet): only System Settings can change it now.
+    Denied,
+    /// Never asked: [`request_input_monitoring`] shows macOS's prompt.
+    NotAsked,
+}
+
+/// Input Monitoring as TCC says now. Never prompts. About 0.6 ms: a round trip to `tccd`.
+///
+/// Read with IOKit rather than `CGPreflightListenEventAccess`, which stops following System
+/// Settings: SkyLight (macOS 26.6) keeps the first answer `CGRequestListenEventAccess` got for
+/// the rest of the process, and every listen-only `CGEventTapCreate` makes that request. IOKit
+/// asks TCC each time.
+pub fn input_monitoring() -> InputMonitoring {
+    // SAFETY: a plain C call with a constant; it only reads.
+    match unsafe { IOHIDCheckAccess(LISTEN_EVENT) } {
+        0 => InputMonitoring::Allowed,
+        1 => InputMonitoring::Denied,
+        _ => InputMonitoring::NotAsked,
+    }
+}
+
+/// Asks for Input Monitoring: macOS shows its prompt, whose button opens System Settings at the
+/// list, and puts EasyVox in that list, switched off. Asking is what puts an app in the list;
+/// the switch is the user's. Only the first time: once asked, TCC answers at once without one.
+/// Blocks until TCC answers, so keep it off the main thread. True if allowed.
+///
+/// Through IOKit, not `CGRequestListenEventAccess`, so the answer isn't kept for the life of
+/// the process (see [`input_monitoring`]); both make the same TCC request.
+pub fn request_input_monitoring() -> bool {
+    // SAFETY: a plain C call with a constant.
+    unsafe { IOHIDRequestAccess(LISTEN_EVENT) }
 }
 
 /// Detects holding the right ⌥ key on its own, with a listen-only session event tap.
@@ -590,18 +629,15 @@ pub mod modifier_tap {
     }
 
     /// Installs the tap on the main run loop; `on_change(true)` on press, `false` on release.
-    /// Installing twice is a no-op.
+    /// Installing twice is a no-op. Only once Input Monitoring is allowed: the tap is made after
+    /// the grant, never before it, so it never has to be made again.
     pub fn install(on_change: impl Fn(bool) + Send + Sync + 'static) -> anyhow::Result<()> {
         if !TAP.load(Ordering::Acquire).is_null() {
             return Ok(());
         }
         // Check the permission first: CGEventTapCreate returns a working-looking tap even
         // without Input Monitoring; it just never sees other apps' keys.
-        anyhow::ensure!(
-            input_monitoring_granted(),
-            "Input Monitoring is off. Allow EasyVox in System Settings → Privacy & Security → \
-             Input Monitoring, then relaunch EasyVox."
-        );
+        anyhow::ensure!(input_monitoring() == InputMonitoring::Allowed, "Input Monitoring isn't allowed.");
         let _ = SINK.set(Box::new(on_change));
         const SESSION_TAP: u32 = 1;
         const HEAD_INSERT: u32 = 0;

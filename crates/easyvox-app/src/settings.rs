@@ -10,13 +10,18 @@
 //! - **About** (`about.rs`).
 //!
 //! The pages and their groups are plain elements, drawn from the app's state at each render, so
-//! the window needs no state of its own beyond the page shown and the shortcut recorder.
+//! the window needs no state of its own beyond the page shown, the shortcut recorder, and its
+//! watch on the permissions (`permissions::Watch`, as in setup): it reads them when it opens,
+//! whenever it comes forward, and every second while one is missing, so a switch turned on in
+//! System Settings shows here without a relaunch. The timer stops once all three are allowed,
+//! and goes with the window.
 
 use crate::brand::{self, Colors};
 use crate::controller;
 use crate::model_row::{ModelRow, download_words};
-use crate::platform::{PRIVACY_ACCESSIBILITY, PRIVACY_INPUT_MONITORING, PRIVACY_MICROPHONE};
-use crate::state::{AppSettings, AppStatus, EngineStatus};
+use crate::permissions::{AllPermissions, Watch};
+use crate::platform::{InputMonitoring, PRIVACY_ACCESSIBILITY, PRIVACY_INPUT_MONITORING, PRIVACY_MICROPHONE};
+use crate::state::{AppSettings, AppStatus, EngineStatus, RightOptionProblem};
 use easyvox_core::MicPermission;
 use easyvox_core::download::format_size;
 use gpui_kit::component::button::Button;
@@ -68,6 +73,8 @@ pub struct SettingsView {
     recorder: Entity<ShortcutRecorder>,
     /// The page shown: picked in the sidebar, or asked for through [`show`](Self::show).
     page: Page,
+    /// The three permissions, read again while one is missing.
+    permissions: Watch<AllPermissions>,
     _appearance: Subscription,
 }
 
@@ -76,7 +83,12 @@ impl SettingsView {
         let recorder = cx.new(|cx| ShortcutRecorder::new(window, cx));
         let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
-        Self { recorder, page: Page::default(), _appearance }
+        let permissions = Watch::new(window, cx, Self::watch, AllPermissions::read, |p| !p.all_allowed());
+        Self { recorder, page: Page::default(), permissions, _appearance }
+    }
+
+    fn watch(&mut self) -> &mut Watch<AllPermissions> {
+        &mut self.permissions
     }
 
     /// Switches to `page`, as if it were clicked in the sidebar.
@@ -89,6 +101,18 @@ impl SettingsView {
     #[cfg(feature = "self-test")]
     pub fn page(&self) -> Page {
         self.page
+    }
+
+    /// Shows these permissions instead of the system's (`None`: the system's again).
+    #[cfg(feature = "self-test")]
+    pub fn pin_permissions(&mut self, permissions: Option<AllPermissions>, cx: &mut Context<Self>) {
+        Watch::pin(self, Self::watch, permissions, cx);
+    }
+
+    /// How many times the window asked the system for the permissions.
+    #[cfg(feature = "self-test")]
+    pub fn permission_reads(&self) -> usize {
+        self.permissions.reads()
     }
 
     /// The inset sidebar: a tinted panel (the design's glass, which GPUI can't draw) with a row
@@ -133,8 +157,12 @@ impl SettingsView {
         let status = cx.global::<AppStatus>();
         let unload_after = duration_words(settings.app.unload_after_secs);
 
-        let right_option = match &status.right_option_error {
-            Some(e) => brand::problem(c, e.clone(), brand::TEXT_SMALL).into_any_element(),
+        let right_option = match &status.right_option_problem {
+            Some(RightOptionProblem::NeedsInputMonitoring) => {
+                brand::problem(c, "Waiting for Input Monitoring. Allow it under Permissions.", brand::TEXT_SMALL)
+                    .into_any_element()
+            }
+            Some(RightOptionProblem::Failed(e)) => brand::problem(c, e.clone(), brand::TEXT_SMALL).into_any_element(),
             None => brand::line(c, "Works alongside the shortcut. Needs Input Monitoring."),
         };
         let shortcut = brand::group(
@@ -285,31 +313,13 @@ fn models_page(c: &'static Colors, cx: &App) -> Div {
         .child(brand::footnote(c, "Each model is saved here with a LICENSE.txt that credits it."))
 }
 
-/// What EasyVox does with your audio, the three macOS permissions it uses, and the first
-/// launch's steps again.
-fn permissions_page(c: &'static Colors, cx: &App) -> Div {
-    let requesting = cx.global::<AppStatus>().mic_asking;
-    let mic = easyvox_core::mic_permission_status();
-    let accessibility = easyvox_core::accessibility_trusted();
-    let input_monitoring = crate::platform::input_monitoring_granted();
-
-    let (mic_state, mic_button) = match (mic, requesting) {
-        (_, true) => (Granted::Waiting("Waiting for your answer…"), None),
-        (MicPermission::Authorized, _) => (Granted::Yes, None),
-        (MicPermission::NotDetermined, _) => (Granted::Waiting("Not asked yet"), Some("Allow…")),
-        (MicPermission::Denied, _) => (Granted::No("Not allowed"), Some("Open System Settings…")),
-        (MicPermission::Restricted, _) => (Granted::No("Restricted on this Mac"), None),
-        (MicPermission::Unknown, _) => (Granted::No("Unknown"), Some("Open System Settings…")),
-    };
-    let mic_button = mic_button.map(|label| {
-        brand::button("microphone", label).on_click(move |_, _, cx| {
-            if mic == MicPermission::NotDetermined {
-                controller::with(cx, |c, cx| c.request_mic(cx));
-            } else {
-                cx.open_url(PRIVACY_MICROPHONE);
-            }
-        })
-    });
+/// What EasyVox does with your audio, the three macOS permissions it uses, as last read, and
+/// the first launch's steps again.
+fn permissions_page(permissions: AllPermissions, c: &'static Colors, cx: &App) -> Div {
+    let status = cx.global::<AppStatus>();
+    let mic = mic_state(permissions.mic, status.mic_asking);
+    let accessibility = accessibility_state(permissions.accessibility, status.accessibility_prompted);
+    let input_monitoring = input_monitoring_state(permissions.input_monitoring);
     let privacy = brand::group(
         c,
         [
@@ -324,19 +334,19 @@ fn permissions_page(c: &'static Colors, cx: &App) -> Div {
             brand::row(
                 "Microphone",
                 Some(brand::line(c, "Needed to dictate. Used only while you hold the shortcut.")),
-                Some(permission(c, mic_state, mic_button)),
+                Some(permission(c, "permission-microphone", mic)),
             )
             .into_any_element(),
             brand::row(
                 "Accessibility",
                 Some(brand::line(c, "Pastes your words where you're typing. Without it, you paste them with ⌘V.")),
-                Some(system_permission(c, accessibility, PRIVACY_ACCESSIBILITY)),
+                Some(permission(c, "permission-accessibility", accessibility)),
             )
             .into_any_element(),
             brand::row(
                 "Input Monitoring",
-                Some(brand::line(c, "Only for holding right ⌥ to talk. Relaunch EasyVox after allowing it.")),
-                Some(system_permission(c, input_monitoring, PRIVACY_INPUT_MONITORING)),
+                Some(brand::line(c, "Only for holding right ⌥ to talk.")),
+                Some(permission(c, "permission-input-monitoring", input_monitoring)),
             )
             .into_any_element(),
         ],
@@ -366,7 +376,7 @@ impl Render for SettingsView {
         let content = match page {
             Page::General => self.general_page(c, cx),
             Page::Models => models_page(c, cx),
-            Page::Permissions => permissions_page(c, cx),
+            Page::Permissions => permissions_page(self.permissions.get(), c, cx),
             Page::About => crate::about::page(c, cx),
         };
         h_flex()
@@ -444,7 +454,7 @@ fn model_picker(c: &'static Colors, cx: &App) -> AnyElement {
 }
 
 /// Where a permission stands, in words.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Granted {
     Yes,
     No(&'static str),
@@ -452,14 +462,82 @@ enum Granted {
     Waiting(&'static str),
 }
 
+/// What a permission's button does: ask (macOS's prompt, which also puts EasyVox in the
+/// permission's list), or open System Settings at the list once asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fix {
+    AskMicrophone,
+    AskAccessibility,
+    AskInputMonitoring,
+    OpenSettings(&'static str),
+}
+
+impl Fix {
+    fn label(self) -> &'static str {
+        match self {
+            Self::AskMicrophone | Self::AskAccessibility | Self::AskInputMonitoring => "Allow…",
+            Self::OpenSettings(_) => "Open System Settings…",
+        }
+    }
+
+    fn apply(self, cx: &mut App) {
+        match self {
+            Self::AskMicrophone => {
+                controller::with(cx, |c, cx| c.request_mic(cx));
+            }
+            Self::AskAccessibility => {
+                controller::with(cx, |c, cx| c.prompt_accessibility(cx));
+            }
+            Self::AskInputMonitoring => {
+                controller::with(cx, |c, cx| c.request_input_monitoring(cx));
+            }
+            Self::OpenSettings(url) => cx.open_url(url),
+        }
+    }
+}
+
+/// The Microphone's row, from its answer and whether its prompt is up.
+fn mic_state(mic: MicPermission, asking: bool) -> (Granted, Option<Fix>) {
+    let open = Some(Fix::OpenSettings(PRIVACY_MICROPHONE));
+    match (mic, asking) {
+        (_, true) => (Granted::Waiting("Waiting for your answer…"), None),
+        (MicPermission::Authorized, _) => (Granted::Yes, None),
+        (MicPermission::NotDetermined, _) => (Granted::Waiting("Not asked yet"), Some(Fix::AskMicrophone)),
+        (MicPermission::Denied, _) => (Granted::No("Not allowed"), open),
+        (MicPermission::Restricted, _) => (Granted::No("Restricted on this Mac"), None),
+        (MicPermission::Unknown, _) => (Granted::No("Unknown"), open),
+    }
+}
+
+/// Accessibility's row. macOS has no "not asked" to read back, so the button asks until the
+/// prompt was shown in this launch, then opens the list, as in setup.
+fn accessibility_state(trusted: bool, prompted: bool) -> (Granted, Option<Fix>) {
+    match (trusted, prompted) {
+        (true, _) => (Granted::Yes, None),
+        (false, false) => (Granted::No("Not allowed"), Some(Fix::AskAccessibility)),
+        (false, true) => (Granted::No("Not allowed"), Some(Fix::OpenSettings(PRIVACY_ACCESSIBILITY))),
+    }
+}
+
+/// Input Monitoring's row: macOS says whether it was asked, so the button asks first, then
+/// opens the list.
+fn input_monitoring_state(state: InputMonitoring) -> (Granted, Option<Fix>) {
+    match state {
+        InputMonitoring::Allowed => (Granted::Yes, None),
+        InputMonitoring::NotAsked => (Granted::Waiting("Not asked yet"), Some(Fix::AskInputMonitoring)),
+        InputMonitoring::Denied => (Granted::No("Not allowed"), Some(Fix::OpenSettings(PRIVACY_INPUT_MONITORING))),
+    }
+}
+
 /// A permission's state, in words with a thin glyph (a tick, or a warning), and the button that
-/// fixes it.
-fn permission(c: &'static Colors, granted: Granted, button: Option<Button>) -> AnyElement {
+/// moves it on.
+fn permission(c: &'static Colors, id: &'static str, (granted, fix): (Granted, Option<Fix>)) -> AnyElement {
     let (glyph, words) = match granted {
         Granted::Yes => (Some(brand::GLYPH_ALLOWED), "Allowed"),
         Granted::No(words) => (Some(brand::GLYPH_WARNING), words),
         Granted::Waiting(words) => (None, words),
     };
+    let button = fix.map(|fix| brand::button(id, fix.label()).on_click(move |_, _, cx| fix.apply(cx)));
     h_flex()
         .gap_3()
         .child(
@@ -471,14 +549,6 @@ fn permission(c: &'static Colors, granted: Granted, button: Option<Button>) -> A
         )
         .when_some(button, |this, button| this.child(button))
         .into_any_element()
-}
-
-/// A permission only System Settings can grant: allowed, or not with the button that opens its
-/// pane.
-fn system_permission(c: &'static Colors, granted: bool, url: &'static str) -> AnyElement {
-    let button =
-        (!granted).then(|| brand::button(url, "Open System Settings…").on_click(move |_, _, cx| cx.open_url(url)));
-    permission(c, if granted { Granted::Yes } else { Granted::No("Not allowed") }, button)
 }
 
 /// "10 minutes", "45 seconds".
@@ -606,5 +676,54 @@ impl Render for ShortcutRecorder {
                 .on_click(cx.listener(|this, _, window, cx| this.start(window, cx)))
         };
         brand::row("Shortcut", Some(line), Some(h_flex().gap_2().child(field).child(button).into_any_element()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Not `super::*`: that brings in GPUI's own `test` macro, which shadows `#[test]`.
+    use super::{Fix, Granted, accessibility_state, input_monitoring_state, mic_state};
+    use crate::platform::{InputMonitoring, PRIVACY_ACCESSIBILITY, PRIVACY_INPUT_MONITORING, PRIVACY_MICROPHONE};
+    use easyvox_core::MicPermission;
+
+    #[test]
+    fn input_monitoring_asks_first_then_opens_the_list() {
+        assert_eq!(input_monitoring_state(InputMonitoring::Allowed), (Granted::Yes, None));
+        assert_eq!(
+            input_monitoring_state(InputMonitoring::NotAsked),
+            (Granted::Waiting("Not asked yet"), Some(Fix::AskInputMonitoring))
+        );
+        assert_eq!(
+            input_monitoring_state(InputMonitoring::Denied),
+            (Granted::No("Not allowed"), Some(Fix::OpenSettings(PRIVACY_INPUT_MONITORING)))
+        );
+    }
+
+    #[test]
+    fn accessibility_asks_until_prompted_then_opens_the_list() {
+        assert_eq!(accessibility_state(true, false), (Granted::Yes, None));
+        assert_eq!(accessibility_state(true, true), (Granted::Yes, None));
+        assert_eq!(accessibility_state(false, false), (Granted::No("Not allowed"), Some(Fix::AskAccessibility)));
+        assert_eq!(
+            accessibility_state(false, true),
+            (Granted::No("Not allowed"), Some(Fix::OpenSettings(PRIVACY_ACCESSIBILITY)))
+        );
+    }
+
+    #[test]
+    fn the_microphone_waits_while_asked_and_says_where_to_turn_it_on() {
+        assert_eq!(mic_state(MicPermission::NotDetermined, true), (Granted::Waiting("Waiting for your answer…"), None));
+        assert_eq!(mic_state(MicPermission::Authorized, false), (Granted::Yes, None));
+        assert_eq!(mic_state(MicPermission::NotDetermined, false).1, Some(Fix::AskMicrophone));
+        assert_eq!(mic_state(MicPermission::Denied, false).1, Some(Fix::OpenSettings(PRIVACY_MICROPHONE)));
+        assert_eq!(mic_state(MicPermission::Restricted, false), (Granted::No("Restricted on this Mac"), None));
+    }
+
+    #[test]
+    fn every_button_says_what_it_does() {
+        for fix in [Fix::AskMicrophone, Fix::AskAccessibility, Fix::AskInputMonitoring] {
+            assert_eq!(fix.label(), "Allow…");
+        }
+        assert_eq!(Fix::OpenSettings(PRIVACY_INPUT_MONITORING).label(), "Open System Settings…");
     }
 }
