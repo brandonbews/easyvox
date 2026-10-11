@@ -76,6 +76,9 @@ pub struct SessionStats {
     /// `Level` events sent (the meter moved visibly), and `NoInput` events.
     pub level_events: u32,
     pub no_input_events: u32,
+    /// When each `Level` was sent, for tests: whoever receives them may take two at once.
+    #[cfg(test)]
+    pub level_sent_at: Vec<Instant>,
     pub audio_secs: f32,
     pub input_peak: f32,
     pub mic: Option<MicInfo>,
@@ -187,7 +190,11 @@ fn spawn_meter(
         let send = |ev: TranscriptEvent| {
             let mut s = ctl.stats.lock().unwrap();
             match ev {
-                TranscriptEvent::Level(_) => s.level_events += 1,
+                TranscriptEvent::Level(_) => {
+                    s.level_events += 1;
+                    #[cfg(test)]
+                    s.level_sent_at.push(Instant::now());
+                }
                 _ => s.no_input_events += 1,
             }
             drop(s);
@@ -564,8 +571,8 @@ mod tests {
     }
 
     /// Replays a WAV file through a session on a [`Counting`] model with `tuning`, and returns
-    /// every event with the time it arrived (seconds after the start).
-    fn replay_events(wav: &std::path::Path, tuning: Tuning) -> Vec<(f32, TranscriptEvent)> {
+    /// every event with the time it arrived (seconds after the start), and the session's counters.
+    fn replay_events(wav: &std::path::Path, tuning: Tuning) -> (Vec<(f32, TranscriptEvent)>, SessionStats) {
         let engine =
             Engine::from_model(Arc::new(Counting::default()), EngineConfig::new("counting", wav.parent().unwrap()))
                 .unwrap();
@@ -576,12 +583,13 @@ mod tests {
             out.push((start.elapsed().as_secs_f32(), event));
         }
         session.join();
-        out
+        (out, session.stats())
     }
 
     /// [`replay_events`] of a clip in `testdata/`.
     fn replay_clip(clip: &str, tuning: Tuning) -> Vec<(f32, TranscriptEvent)> {
-        replay_events(&std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata")).join(clip), tuning)
+        let wav = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata")).join(clip);
+        replay_events(&wav, tuning).0
     }
 
     fn levels(events: &[(f32, TranscriptEvent)]) -> Vec<(f32, f32)> {
@@ -599,17 +607,19 @@ mod tests {
         pcm.extend(crate::level::tests::syllables(3.0));
         let wav = write_wav("syllables", &pcm);
         for interval in [Tuning::default().meter_interval_ms, 33] {
-            let events = replay_events(&wav, Tuning { meter_interval_ms: interval, ..Tuning::default() });
+            let (events, stats) = replay_events(&wav, Tuning { meter_interval_ms: interval, ..Tuning::default() });
             let sent = levels(&events);
             let peak = sent.iter().map(|(_, l)| *l).fold(0.0, f32::max);
             assert!(peak > 0.5, "{interval} ms: {sent:?}");
-            // At most one level a tick. (How many ticks send is checked in `level.rs`, on exact
-            // times: a busy or throttled machine can sleep the meter's thread far longer than
-            // asked, which only makes for fewer.)
+            // At most one level a tick, but no fewest: a busy or throttled machine can sleep the
+            // meter's thread longer than a syllable, and then each tick sees a whole one and the
+            // meter barely moves. How many ticks send is checked in `level.rs`, on exact times.
             let ticks = 3.5e3 / interval as f32;
-            assert!((4.0..=ticks + 2.0).contains(&(sent.len() as f32)), "{interval} ms: {sent:?}");
-            let fastest = sent.windows(2).map(|w| w[1].0 - w[0].0).fold(f32::INFINITY, f32::min);
-            assert!(fastest > interval as f32 / 2e3, "{interval} ms: two levels {fastest} s apart (as received)");
+            assert!(sent.len() as f32 <= ticks + 2.0, "{interval} ms: {sent:?}");
+            // Spaced by when the meter sent them: a busy test thread can receive two at once.
+            let fastest = stats.level_sent_at.windows(2).map(|w| w[1] - w[0]).fold(Duration::MAX, Duration::min);
+            let tick = Duration::from_millis(interval as u64);
+            assert!(fastest > tick / 2, "{interval} ms: two levels sent {fastest:?} apart");
             assert_eq!(sent.last().map(|(_, l)| *l), Some(0.0), "{interval} ms: it rests flat at the end");
         }
         let _ = std::fs::remove_file(&wav);
