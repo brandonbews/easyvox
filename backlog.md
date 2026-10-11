@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 28 on hold · 11 inbox · 36 done · 0 cancelled
+0 in progress · 1 ready · 2 blocked · 25 on hold · 11 inbox · 38 done · 1 cancelled
 
 ## In progress
 
@@ -46,13 +46,10 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-qjqs`](tasks/tuh-01M4KNXEYGGE3QSN96GHNXQJQS.md) | Hands-on: overlay level meter, 'Can't hear you', live light/dark | 2 | `human` `hands-on` |
 | [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) | Hands-on: overlay animation (pop in and out, eased bars, words fading in, Reduce motion) | 2 | `human` `hands-on` `overlay` |
 | [`tuh-q8rd`](tasks/tuh-01M4MFZG1M3EDBMEC1NPD6Q8RD.md) | Decide: delete Parakeet Unified and v3 from the real models folder (1.1 GB, bench-only) | 4 | `decision` `human` `models` |
-| [`tuh-tynb`](tasks/tuh-01M4MFZG2KBAWFT6A7AZ5STYNB.md) | Decide: file the GPUI Kit issue about the block 0.1.6 warning | 4 | `decision` `human` `upstream` |
-| [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) | Decide: onboarding at every launch when Accessibility is off on purpose | 4 | `decision` `human` `app` |
 | [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) | Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap | 2 | `decision` `human` `overlay` `energy` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
-| [`tuh-5k6c`](tasks/tuh-01M4NKB6DT8QWFK2EKTH3Q5K6C.md) | Offer Cohere Transcribe as a 'maximum accuracy' model? | — | `human` `decision` |
 
 ## Inbox
 
@@ -106,9 +103,11 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-xsj4`](tasks/tuh-01M4K50SHF7C23M85P3F6PXSJ4.md) Drop Parakeet Unified from the app (keep it bench-only)
 - [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) Bench Parakeet TDT v3 on Brandon's voice
 - [`tuh-xbek`](tasks/tuh-01M4K8HZ2NA22EC4M7XF1RXBEK.md) Flaky test: download range_ignored sometimes restarts from 0
+- [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) Decide: onboarding at every launch when Accessibility is off on purpose
 - [`tuh-h1mn`](tasks/tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) Decide: website plan questions (stack, hosting, domain, public docs)
 - [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo)
+- [`tuh-5k6c`](tasks/tuh-01M4NKB6DT8QWFK2EKTH3Q5K6C.md) Offer Cohere Transcribe as a 'maximum accuracy' model?
 
 ## Cancelled
 
-_None._
+- [`tuh-tynb`](tasks/tuh-01M4MFZG2KBAWFT6A7AZ5STYNB.md) Decide: file the GPUI Kit issue about the block 0.1.6 warning

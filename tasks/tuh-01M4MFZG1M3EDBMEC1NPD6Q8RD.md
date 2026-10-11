@@ -17,8 +17,14 @@ Recommendation: delete. scripts/fetch-model.sh fetches either again, checked aga
 
 11 October: the candidate bench added 10.6 GB of bench-only models in ~/Library/Caches/easyvox-bench/models (outside the app's folder; refetchable with scripts/fetch-model.sh, pinned and checksummed). Delete them too? Needs Brandon's OK.
 
+Brandon, 11 October: yes, delete Unified and v3 from the app's models folder and the bench downloads. Claude's rm was refused by the permission check, so Brandon runs it; close once the files are gone.
+
 ## History
 
 ### 2026-10-11 13:44 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 13:57 UTC — edit by `brandon`
 
 description edited

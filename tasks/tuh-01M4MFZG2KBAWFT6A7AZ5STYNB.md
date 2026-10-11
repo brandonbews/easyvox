@@ -2,7 +2,7 @@
 
 `tuh-01M4MFZG2KBAWFT6A7AZ5STYNB`
 
-- **Status:** on hold — deliberately paused
+- **Status:** cancelled
 - **Priority:** 4
 - **Labels:** `decision` `human` `upstream`
 - **Created:** 2026-10-11 03:26 UTC by `brandon`
@@ -17,6 +17,14 @@ Options: file it (outward-facing, so it needs Brandon), or skip.
 
 Recommendation: skip. It's only a warning today, and the upstream issues already cover it.
 
+Brandon, 11 October: no need to file it. Closed.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 13:57 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 13:57 UTC — edit by `brandon`
+
+status held→cancelled

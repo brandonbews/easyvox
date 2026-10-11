@@ -2,7 +2,7 @@
 
 `tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 4
 - **Labels:** `decision` `human` `app`
 - **Created:** 2026-10-11 03:26 UTC by `brandon`
@@ -15,6 +15,14 @@ Options: keep it as is, or add a "Don't ask again" for Accessibility. That would
 
 Recommendation: keep it as is until someone finds it annoying. Built in d989050.
 
+Brandon, 11 October: leave it alone (keep as is). Closed.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 13:57 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 13:57 UTC — edit by `brandon`
+
+status held→done
