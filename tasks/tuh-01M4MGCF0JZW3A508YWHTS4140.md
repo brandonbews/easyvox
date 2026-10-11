@@ -2,7 +2,7 @@
 
 `tuh-01M4MGCF0JZW3A508YWHTS4140`
 
-- **Status:** inbox — untriaged capture
+- **Status:** open — ready
 - **Priority:** none
 - **Labels:** `website` `docs`
 - **Created:** 2026-10-11 03:33 UTC by `brandon`
@@ -13,4 +13,6 @@ Brandon's idea (10 Oct): the website gets a condensed, visual digest of our rese
 
 ## History
 
-_No activity yet._
+### 2026-10-11 21:58 UTC — edit by `brandon`
+
+status inbox→open

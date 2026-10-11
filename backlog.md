@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 18 on hold · 41 inbox · 52 done · 1 cancelled
+0 in progress · 3 ready · 2 blocked · 18 on hold · 40 inbox · 52 done · 1 cancelled
 
 ## In progress
 
@@ -11,6 +11,7 @@ _None._
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
+| [`tuh-4140`](tasks/tuh-01M4MGCF0JZW3A508YWHTS4140.md) | Website: a condensed, visual page of our benchmark and efficiency findings | — | `website` `docs` |
 | [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) | Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once | — | `test` `flaky` `overlay` |
 
 ## Blocked / waiting
@@ -58,7 +59,6 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-rvra`](tasks/tuh-01M4H2EGY7M3P5SK0T6XVARVRA.md) Speak French, get English
 - [`tuh-bdwr`](tasks/tuh-01M4H2EGZ33FCMX66PPPCBBDWR.md) Linux port (X11 first; Wayland needs per-desktop work)
 - [`tuh-k3k5`](tasks/tuh-01M4HT8MFHW8DYWZ16Z7JYK3K5.md) Pause finder: add a noise-floor term to quiet_level (floor + 6 dB) if louder rooms start forcing cuts
-- [`tuh-4140`](tasks/tuh-01M4MGCF0JZW3A508YWHTS4140.md) Website: a condensed, visual page of our benchmark and efficiency findings
 - [`tuh-are8`](tasks/tuh-01M4MKR4CRPGDT4Y4YR7PXARE8.md) Branding: assets and views (logo, app icon, menu bar icon, speaking indicator)
 - [`tuh-wzgg`](tasks/tuh-01M4NQE1VC4AMA0N2PMY0RWZGG.md) Esc cancels a dictation while the shortcut is held (Cancelled pill, nothing pasted)
 - [`tuh-ktjp`](tasks/tuh-01M4NQE1W6DXCPZQE51WFAKTJP.md) Paste Last Dictation: a menu item and a global shortcut (⌃⌥V proposed)
