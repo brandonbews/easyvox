@@ -136,7 +136,7 @@ fn word_count(text: &str) -> String {
 
 /// The footer: how many dictations, and where they're kept.
 fn footer_words(count: usize, more_in_db: bool) -> String {
-    const WHERE: &str = "Stored only on this Mac";
+    const WHERE: &str = "Stored locally";
     match (count, more_in_db) {
         (0, _) => "History is stored only on this Mac".into(),
         (n, true) => format!("The latest {n} dictations · {WHERE}"),
@@ -554,9 +554,9 @@ mod tests {
         assert_eq!(word_count("Hello"), "1 word");
         assert_eq!(word_count("  Pick up the\nblue folder. "), "5 words");
         assert_eq!(footer_words(0, false), "History is stored only on this Mac");
-        assert_eq!(footer_words(1, false), "1 dictation · Stored only on this Mac");
-        assert_eq!(footer_words(214, false), "214 dictations · Stored only on this Mac");
-        assert_eq!(footer_words(500, true), "The latest 500 dictations · Stored only on this Mac");
+        assert_eq!(footer_words(1, false), "1 dictation · Stored locally");
+        assert_eq!(footer_words(214, false), "214 dictations · Stored locally");
+        assert_eq!(footer_words(500, true), "The latest 500 dictations · Stored locally");
     }
 
     #[test]

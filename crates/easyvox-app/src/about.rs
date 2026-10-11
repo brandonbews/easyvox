@@ -97,7 +97,7 @@ pub fn page(c: &'static Colors, _cx: &App) -> Div {
                 .mt(px(14.))
                 .text_size(brand::TEXT_SMALL)
                 .text_color(secondary)
-                .child("Runs on this Mac: no audio or text leaves it. macOS 26 or later, on Apple silicon."),
+                .child("Simple, local voice-to-text."),
         );
 
     let offered = models::offered();
