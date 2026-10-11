@@ -1,0 +1,16 @@
+# Restyle the website to the design hand-off, plus the README lockup and DMG background (lanes B and C)
+
+`tuh-01M4NR75KRQGBNJTMCA0Q44N9Y`
+
+- **Status:** open — ready
+- **Priority:** 1
+- **Labels:** `design` `website`
+- **Created:** 2026-10-11 15:10 UTC by `brandon`
+
+## Description
+
+Brandon accepted every recommendation of the design triage on 11 October. Lane B (B1 tokens, favicons, head; B2 social cards re-rendered with macOS 26 / Apple silicon; B3 homepage; B4 docs layout) and C1 (README lockup, packaging/dmg/background.tiff). Brandon: 'on any copy, especially the website, you can treat that as more or less placeholder unless any of it is genuinely good'.
+
+## History
+
+_No activity yet._
