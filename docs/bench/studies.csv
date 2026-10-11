@@ -1,0 +1,30 @@
+study,section,date
+firstpass-sweep,First words and silence (first-pass delay sweep),2026-10-10
+firstpass-sweep-real,First words and silence (first-pass delay sweep),2026-10-10
+firstwords-energy,First words and silence; Quiet mics and loud rooms (energy),2026-10-10
+firstwords-lat,First words and silence,2026-10-10
+firstwords-sanity,First words and silence (sanity runs),2026-10-10
+idle-app,Idle and energy: The idle app,2026-10-09
+idle-fw,Idle and energy: The preview in pauses,2026-10-09
+idle-lat,Idle and energy: Dictation after idling,2026-10-09
+idle-pn,Idle and energy: The preview in pauses,2026-10-09
+idle-prev,Idle and energy: The preview in pauses,2026-10-09
+idle-real,Idle and energy: The preview in pauses,2026-10-09
+idle-tick,Idle and energy: The preview in pauses (first-words tick check),2026-10-09
+joinfix,Real voice: Chunk joins,2026-10-09
+lightness,Lightness,2026-10-10
+longform,Long dictation (one pass),2026-10-09
+longform-proto,"Long dictation (prototype chunked runs, not in a table)",2026-10-09
+meter,Level meter,2026-10-10
+onepipe,One pipeline; Long dictation,2026-10-09
+overlay,Overlay animation,2026-10-10
+realvoice,Real voice,2026-10-09
+results,Results,2026-10-09
+settings-idle,Idle and energy: The idle app (the settings file),2026-10-10
+silence,First words and silence,2026-10-10
+starts,First words and silence,2026-10-10
+starts-20db,"First words and silence (first, 20 dB detector)",2026-10-10
+stress,First words and silence: Quiet mics and loud rooms,2026-10-10
+tuning-check,none (check that the Tuning refactor changed nothing),2026-10-09
+v3,Real voice: Parakeet TDT v3 against v2,2026-10-10
+whisper,Whisper's preview,2026-10-10

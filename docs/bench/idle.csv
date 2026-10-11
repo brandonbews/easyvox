@@ -1,0 +1,12 @@
+study,build,state,window_s,wakeups_per_s,idle_exit_wakeups_per_s,cpu_pct,footprint_mb,resident_mb
+idle-app,32b1af7,loaded-1min,20,145.6,57.9,0.238,687.3,755.1
+idle-app,32b1af7,loaded-4.5min,30,145.4,58.8,0.15,687.3,755.1
+idle-app,32b1af7+no_residency,loaded,30,0.3,0.2,0.002,666.6,734.2
+idle-app,d33ab36,loaded,30.2,0.3,0.2,0.003,666.8,734.3
+idle-app,d33ab36,unloaded,30.2,0.3,0.2,0.002,92,159.9
+settings-idle,8f3f0b3-warm,loaded,60.2,0.3,0.2,0.002,665,732.8
+settings-idle,8f3f0b3,loaded,60,0.3,0.2,0.002,686.6,754.4
+settings-idle,8f3f0b3,unloaded,60,0.3,0.2,0.002,113.7,181.8
+settings-idle,8f3f0b3,unloaded-after-edit,60.1,0.3,0.1,0.002,113.7,181.8
+settings-idle,ffa49a5,loaded,60.1,0.3,0.2,0.003,664.5,732
+settings-idle,ffa49a5,unloaded,60,0.3,0.2,0.002,91.5,159.4
