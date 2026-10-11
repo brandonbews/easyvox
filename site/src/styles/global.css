@@ -1,57 +1,108 @@
 /* EasyVox site: plain CSS, design tokens as custom properties, light and dark following the
- * system (no toggle). The structure follows tuhdoo's site; the look is neutral and Apple-like
- * (the system font, greys and the system blue) until the brand work lands (docs/branding.md).
+ * system (no toggle). The structure follows tuhdoo's site; the look is the design hand-off's
+ * (design/tokens.json, boards 21–25): paper and ink, one vermilion, the system font. No web
+ * fonts: -apple-system is SF Pro on a Mac, and SF Pro's licence doesn't allow embedding it.
+ *
+ * Vermilion is only on the primary button, links and the wave. #F0462D (light) is for graphics
+ * only (3.7:1); text uses #D93A22. On the raised surface #D93A22 is only 4.2:1, so a link on a
+ * raised surface (a card, the privacy band) is ink, underlined.
  *
  * Contrast (WCAG 2.x, computed for every text pair used; AA needs 4.5:1, graphics 3:1):
- *   Light  fg on bg 16.8, on raised 15.5 · muted on bg 5.1, on raised/code 4.7
- *          accent on bg 5.6, on raised 5.1 · text on accent fill 5.6 (hover 8.4)
- *          pill: text 16.8, provisional text 5.1, meter bars 5.1
- *   Dark   fg on bg 19.3, on raised 15.6 · muted on bg 8.2, on raised/code 6.6
- *          accent on bg 7.0, on raised 5.6 · text on accent fill 7.0 (hover 9.9)
- *          pill: text 12.8, provisional text 5.4, meter bars 5.4
+ *   Light  fg on bg 16.8, on raised 15.5 · muted on bg 5.1, on raised 4.7, on the demo window 4.7
+ *          link on bg 4.6 (hover 6.0) · white on button fill 4.6 (hover 6.0)
+ *          wave (graphics) on bg 3.7, on raised 3.4 · link vs body text 3.7
+ *          pill over the demo's desktop: text 16.3, provisional text 5.8, meter 3.6
+ *   Dark   fg on bg 15.6, on raised 12.8 · muted on bg 5.9, on raised 4.85, on the demo window 5.7
+ *          link on bg 5.55, on raised 4.55 (hover 7.1, 5.8) · white on button fill 4.6
+ *          wave (graphics) on bg 5.55, on raised 4.55
+ *          pill over the demo's desktop: text 15.3, provisional text 5.8, meter 5.4
+ * Link and body text are only 2.8:1 apart in dark, so links in running text are underlined.
  */
 
 :root {
   color-scheme: light dark;
 
-  --color-bg: #ffffff;
-  --color-bg-raised: #f5f5f7;
-  --color-bg-code: #f5f5f7;
-  --color-fg: #1d1d1f;
-  --color-fg-muted: #6e6e73;
-  --color-border: #d2d2d7;
-  --color-accent: #0066cc;
-  --color-accent-strong: #004c99;
-  --color-accent-fill: #0066cc;
-  --color-accent-fill-contrast: #ffffff;
-  --color-selection: #b3d7ff;
-  --color-pill: #ffffff;
-  --shadow-pill: 0 1px 2px rgb(0 0 0 / 0.08), 0 8px 24px rgb(0 0 0 / 0.12);
+  --color-bg: #ffffff; /* paper */
+  --color-bg-raised: #f5f5f7; /* surface */
+  --color-fg: #1d1d1f; /* ink */
+  --color-fg-muted: #6e6e73; /* ink2 */
+  --color-border: #d2d2d7; /* sep: keycaps and control edges */
+  --color-rule: #e8e8ed; /* hairlines between sections and rows */
+  --color-rule-raised: #dcdce0; /* hairlines on the raised band */
+  --color-outline: rgb(0 0 0 / 0.16); /* the secondary button's edge */
+  --color-link: #d93a22; /* accent_text */
+  --color-link-hover: #b92f1a;
+  --color-wave: #f0462d; /* accent: the wave and the meter, never text */
+  --color-fill: #d93a22; /* button fill, both themes */
+  --color-fill-hover: #b92f1a;
+  --color-on-fill: #ffffff;
+  --color-selection: #fbd3cb;
+
+  /* The pill and the demo's desktop (design boards 07 and 21). */
+  --color-pill: rgb(255 255 255 / 0.92);
+  --color-pill-text2: #636366;
+  --shadow-pill:
+    inset 0 0.5px 0 #ffffff, 0 0 0 0.5px rgb(0 0 0 / 0.11), 0 12px 32px rgb(0 0 0 / 0.14),
+    0 2px 8px rgb(0 0 0 / 0.08);
+  --stage: radial-gradient(120% 90% at 30% 0%, #f4f3f1 0%, #e2e2e6 55%, #cdd0d8 100%);
+  --stage-edge: rgb(0 0 0 / 0.06);
+  --stage-menubar: rgb(246 246 248 / 0.78);
+  --stage-menubar-fg: #000000;
+  --window-bg: #f6f6f7;
+  --shadow-window: 0 22px 60px rgb(0 0 0 / 0.22), 0 0 0 0.5px rgb(0 0 0 / 0.18);
+  --keycap-bg: #ffffff;
+  --keycap-edge: #d2d2d7;
+  --shadow-keycap: 0 6px 16px -8px rgb(0 0 0 / 0.25);
+  --app-icon-grey: #d1d1d6;
 
   --font-sans:
     -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
-  --width-site: 68rem;
-  --width-prose: 42rem; /* about 70–75 characters a line at the doc body size */
+  --width-site: 70rem; /* the design's 1120 px column */
+  --width-prose: 40rem; /* 640 px: about 70 characters a line at 17 px */
+  --gutter: 1.5rem;
+  --header-height: 3.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #000000;
-    --color-bg-raised: #1c1c1e;
-    --color-bg-code: #1c1c1e;
+    --color-bg: #1c1c1e;
+    --color-bg-raised: #2c2c2e;
     --color-fg: #f5f5f7;
-    --color-fg-muted: #a1a1a6;
-    --color-border: #38383a;
-    --color-accent: #2997ff;
-    --color-accent-strong: #6cb8ff;
-    --color-accent-fill: #2997ff;
-    --color-accent-fill-contrast: #000000;
-    --color-selection: #0b4a8b;
-    --color-pill: #2c2c2e;
-    --shadow-pill: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.5);
+    --color-fg-muted: #98989d;
+    --color-border: #48484a;
+    --color-rule: #323235;
+    --color-rule-raised: #3a3a3d;
+    --color-outline: rgb(255 255 255 / 0.22);
+    --color-link: #ff5c3f;
+    --color-link-hover: #ff8470;
+    --color-wave: #ff5c3f;
+    --color-selection: #6b2a1f;
+
+    --color-pill: rgb(28 28 30 / 0.92);
+    --color-pill-text2: #98989d;
+    --shadow-pill:
+      inset 0 0.5px 0 rgb(255 255 255 / 0.1), 0 0 0 0.5px rgb(255 255 255 / 0.15),
+      0 14px 36px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.3);
+    --stage: radial-gradient(120% 90% at 30% 0%, #3a3b41 0%, #23242a 55%, #141519 100%);
+    --stage-edge: rgb(255 255 255 / 0.08);
+    --stage-menubar: rgb(30 30 32 / 0.7);
+    --stage-menubar-fg: #ffffff;
+    --window-bg: #1f1f21;
+    --shadow-window: 0 22px 60px rgb(0 0 0 / 0.55), 0 0 0 0.5px rgb(255 255 255 / 0.14);
+    --keycap-bg: #2c2c2e;
+    --keycap-edge: #48484a;
+    --shadow-keycap: 0 6px 16px -8px rgb(0 0 0 / 0.6);
+    --app-icon-grey: #48484a;
+  }
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --gutter: 2.5rem;
+    --header-height: 4rem;
   }
 }
 
@@ -62,7 +113,7 @@
 }
 
 html {
-  scroll-padding-top: 4.5rem;
+  scroll-padding-top: calc(var(--header-height) + 1rem);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -73,22 +124,41 @@ body {
   color: var(--color-fg);
   font-family: var(--font-sans);
   font-size: 1rem;
-  line-height: 1.6;
+  line-height: 1.5;
+  letter-spacing: -0.003em;
   -webkit-font-smoothing: antialiased;
 }
 
+@media (min-width: 48rem) {
+  body {
+    font-size: 1.0625rem;
+  }
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* Links in running text are underlined: in dark, the link colour is only 2.8:1 from the text. */
 a {
-  color: var(--color-accent);
-  text-decoration: none;
+  color: var(--color-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 0.2em;
 }
 
 a:hover {
-  color: var(--color-accent-strong);
-  text-decoration: underline;
+  color: var(--color-link-hover);
+  text-decoration-color: currentColor;
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-link);
   outline-offset: 2px;
 }
 
@@ -99,19 +169,126 @@ a:hover {
 code {
   font-family: var(--font-mono);
   font-size: 0.875em;
-  background: var(--color-bg-code);
-  border-radius: 4px;
-  padding: 0.1em 0.3em;
+  background: var(--color-bg-raised);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
 }
 
+/* Keycap chips (board 24). */
 kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.45em;
+  height: 1.45em;
+  padding: 0 0.4em;
+  margin: 0 0.05em;
+  border-radius: 6px;
+  background: var(--keycap-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--keycap-edge),
+    inset 0 -1.5px 0 var(--keycap-edge);
+  color: var(--color-fg);
   font-family: var(--font-sans);
-  font-size: 0.9em;
-  border: 1px solid var(--color-border);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  padding: 0 0.3em;
+  font-size: 0.82em;
+  font-weight: 500;
+  line-height: 1;
+  vertical-align: 0.1em;
   white-space: nowrap;
+}
+
+.container {
+  width: 100%;
+  max-width: calc(var(--width-site) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* ---------- buttons ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 3rem;
+  padding: 0 1.6rem;
+  border-radius: 999px;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.button:hover {
+  text-decoration: none;
+}
+
+.button-small {
+  height: 2rem;
+  padding: 0 0.95rem;
+  font-size: 0.875rem;
+}
+
+.button-primary,
+.button-primary:hover {
+  background: var(--color-fill);
+  color: var(--color-on-fill);
+}
+
+.button-primary:hover {
+  background: var(--color-fill-hover);
+}
+
+.button-outline,
+.button-soon {
+  background: transparent;
+  color: var(--color-fg);
+  box-shadow: inset 0 0 0 1px var(--color-outline);
+}
+
+/* Not a link: there's nothing to download yet. */
+.button-soon {
+  color: var(--color-fg-muted);
+  cursor: default;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 40rem) {
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .actions .button {
+    height: 2.75rem;
+    font-size: 1rem;
+  }
+}
+
+/* "macOS 26 or later · Apple silicon · MIT license" */
+.meta-line {
+  margin: 1.25rem 0 0;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+.meta-line span {
+  margin: 0 0.2rem;
+  color: var(--color-border);
+}
+
+@media (min-width: 48rem) {
+  .meta-line {
+    font-size: 0.875rem;
+  }
 }
 
 /* ---------- skip link, header, footer ---------- */
@@ -123,8 +300,7 @@ kbd {
   z-index: 20;
   padding: 0.5rem 0.9rem;
   background: var(--color-bg-raised);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--color-fg);
   transform: translateY(calc(-100% - 1rem));
 }
@@ -138,323 +314,1120 @@ kbd {
   top: 0;
   z-index: 10;
   background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-rule);
 }
 
-.site-header-inner,
-.site-footer-inner {
-  max-width: var(--width-site);
+.site-header-inner {
+  max-width: calc(var(--width-site) + 2 * var(--gutter));
+  height: var(--header-height);
   margin: 0 auto;
-  padding: 0.7rem 1rem;
+  padding: 0 var(--gutter);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.wordmark-link {
-  color: var(--color-fg);
-  font-weight: 600;
-  font-size: 1.1rem;
-  letter-spacing: -0.01em;
-}
-
-.wordmark-link:hover {
+.lockup-link,
+.lockup-link:hover {
   color: var(--color-fg);
   text-decoration: none;
 }
 
-.site-header nav {
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px; /* 0.36 em */
+  color: var(--color-fg);
+}
+
+.lockup-word {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.mark {
+  display: block;
+  flex: none;
+}
+
+.mark-wave {
+  stroke: var(--color-wave);
+}
+
+.site-nav {
   display: flex;
+  align-items: center;
   gap: 1.25rem;
 }
 
-.site-header nav a {
+.site-nav > a:not(.button) {
   color: var(--color-fg-muted);
-  font-size: 0.95rem;
-}
-
-.site-header nav a:hover,
-.site-header nav a[aria-current="page"] {
-  color: var(--color-fg);
+  font-size: 0.875rem;
   text-decoration: none;
 }
 
+.site-nav > a:not(.button):hover,
+.site-nav > a[aria-current] {
+  color: var(--color-fg);
+}
+
+.site-nav > a[aria-current] {
+  font-weight: 500;
+}
+
+@media (min-width: 48rem) {
+  .site-nav {
+    gap: 2rem;
+  }
+}
+
 .site-footer {
-  border-top: 1px solid var(--color-border);
-  margin-top: 4rem;
+  border-top: 1px solid var(--color-rule);
   color: var(--color-fg-muted);
   font-size: 0.875rem;
 }
 
 .site-footer-inner {
-  padding-block: 1.5rem;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
+  max-width: calc(var(--width-site) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 4rem var(--gutter) 3rem;
 }
 
-.site-footer p {
+.footer-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2rem 3rem;
+}
+
+.footer-brand p {
+  margin: 0.9rem 0 0;
+}
+
+.footer-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem 3rem;
+}
+
+@media (min-width: 48rem) {
+  .footer-cols {
+    display: flex;
+  }
+
+  .footer-cols > div {
+    min-width: 8.75rem;
+  }
+}
+
+.footer-cols h2 {
+  margin: 0 0 0.75rem;
+  color: var(--color-fg);
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+}
+
+.footer-cols ul {
+  list-style: none;
   margin: 0;
+  padding: 0;
+}
+
+.footer-cols li {
+  margin: 0 0 0.75rem;
+}
+
+.footer-cols a {
+  color: var(--color-fg-muted);
+  text-decoration: none;
+}
+
+.footer-cols a:hover {
+  color: var(--color-fg);
+}
+
+.footer-legal {
+  margin-top: 3.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-rule);
+  font-size: 0.8125rem;
+}
+
+.footer-legal p {
+  margin: 0 0 0.4rem;
 }
 
 /* ---------- homepage ---------- */
 
-.landing {
-  max-width: var(--width-site);
-  margin: 0 auto;
-  padding: 0 1rem;
+.landing h2 {
+  margin: 0;
+  font-size: clamp(2rem, 1.4rem + 1.9vw, 3rem);
+  line-height: 1.1;
 }
 
-.notice {
-  margin: 1.5rem 0 0;
-  padding: 0.6rem 0.9rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg-raised);
-  font-size: 0.95rem;
+.landing h3 {
+  margin: 0;
+  letter-spacing: -0.015em;
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2.5rem;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 3.5rem 0 3rem;
+  padding-top: 2.5rem;
+  padding-bottom: 3.5rem;
+  text-align: center;
 }
 
-@media (min-width: 56rem) {
+.hero.hero-short {
+  padding-block: 6rem 8rem;
+}
+
+@media (min-width: 48rem) {
   .hero {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    padding: 5rem 0 4rem;
+    padding-top: 6rem;
+    padding-bottom: 7rem;
   }
 }
 
-.hero h1 {
-  font-size: clamp(2.5rem, 7vw, 3.75rem);
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  margin: 0 0 0.75rem;
-}
-
-.hero .tagline {
-  font-size: clamp(1.3rem, 3vw, 1.6rem);
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.015em;
-  margin: 0 0 1rem;
-}
-
-.hero .lede {
-  font-size: 1.15rem;
-  color: var(--color-fg-muted);
+.eyebrow {
   margin: 0 0 1.75rem;
-  max-width: var(--width-prose);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.button {
-  display: inline-block;
-  padding: 0.55rem 1.15rem;
-  border-radius: 980px;
-  font-weight: 500;
-  border: 1px solid transparent;
-}
-
-.button-primary {
-  background: var(--color-accent-fill);
-  color: var(--color-accent-fill-contrast);
-}
-
-.button-primary:hover {
-  background: var(--color-accent-strong);
-  color: var(--color-accent-fill-contrast);
-  text-decoration: none;
-}
-
-/* Not a link: there's nothing to download yet. */
-.button-soon {
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
   background: var(--color-bg-raised);
-  border-color: var(--color-border);
   color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+.hero-mark {
+  margin-bottom: 1.75rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.25rem, 1.2rem + 3.8vw, 4rem);
+  line-height: 1.06;
+}
+
+@media (max-width: 40rem) {
+  .hero h1 span {
+    display: block;
+  }
+}
+
+.lede {
+  margin: 1.25rem 0 2rem;
+  max-width: 40rem;
+  color: var(--color-fg-muted);
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 48rem) {
+  .lede {
+    margin-bottom: 2.25rem;
+    font-size: 1.3125rem;
+  }
+
+  .lede span {
+    display: block;
+  }
 }
 
 .section {
-  padding: 2.75rem 0;
-  border-top: 1px solid var(--color-border);
+  position: relative;
+  padding-block: 4rem;
 }
 
-.section h2 {
-  font-size: 1.6rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  margin: 0 0 1rem;
+/* A hairline above each section, as wide as the content. */
+.section::before,
+.cta::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--gutter);
+  right: var(--gutter);
+  border-top: 1px solid var(--color-rule);
 }
 
-.section p,
-.section ul {
-  max-width: var(--width-prose);
+.section-flush {
+  padding-top: 0;
 }
 
-.section li {
-  margin: 0.35rem 0;
+.section-flush::before,
+.band + .section::before {
+  content: none;
+}
+
+@media (min-width: 48rem) {
+  .section {
+    padding-block: 7.5rem;
+  }
+
+  .section-flush {
+    padding-top: 0;
+  }
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.section-head p {
+  margin: 0;
+  color: var(--color-fg-muted);
+  letter-spacing: -0.01em;
+}
+
+.landing .section-title {
+  max-width: 45rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 48rem) {
+  .section-head {
+    margin-bottom: 3.5rem;
+  }
+
+  .section-head p {
+    font-size: 1.1875rem;
+  }
+
+  .landing .section-title {
+    margin-bottom: 4rem;
+  }
 }
 
 .caveat {
+  max-width: var(--width-prose);
+  margin: 2.5rem 0 0;
   color: var(--color-fg-muted);
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
 }
 
-.cards {
+/* How it works: three cards, each with a picture of the step. */
+
+.steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: 1rem;
-  margin: 1.25rem 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.section .cards {
-  max-width: none;
+@media (min-width: 56rem) {
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
 }
 
-.card {
+.step {
+  display: flex;
+  flex-direction: column;
+  padding: 0 1.5rem 1.75rem;
+  border-radius: 20px;
   background: var(--color-bg-raised);
-  border-radius: 12px;
-  padding: 1.1rem 1.25rem;
-  margin: 0;
 }
 
-.card h3 {
-  margin: 0 0 0.4rem;
-  font-size: 1.05rem;
+.step-art {
+  height: 9.5rem;
+  margin: 0 -1.5rem 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.step-n {
+  margin: 0 0 0.5rem;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
   font-weight: 600;
+}
+
+.step h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.1875rem;
+}
+
+.step p:last-child {
+  margin: 0;
+  color: var(--color-fg-muted);
+}
+
+@media (min-width: 48rem) {
+  .step {
+    padding: 0 2rem 2.25rem;
+    border-radius: 24px;
+  }
+
+  .step-art {
+    height: 12.25rem;
+    margin-inline: -2rem;
+  }
+
+  .step h3 {
+    font-size: 1.3125rem;
+  }
+}
+
+.keycap {
+  position: relative;
+  display: inline-block;
+  width: 72px;
+  height: 60px;
+  border-radius: 12px;
+  background: var(--keycap-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--keycap-edge),
+    inset 0 -3px 0 var(--keycap-edge),
+    var(--shadow-keycap);
+  text-align: left;
+}
+
+.keycap-space {
+  width: 188px;
+}
+
+.keycap span {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 15px;
+}
+
+.keycap small {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  color: var(--color-fg-muted);
+  font-size: 12px;
+}
+
+/* A text field in another app, with the dictation pasted in. */
+.textfield {
+  width: 250px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--color-bg);
+  box-shadow:
+    0 0 0 1px var(--color-rule),
+    0 6px 18px -8px rgb(0 0 0 / 0.2);
+  font-size: 15px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.textfield small {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--color-fg-muted);
+  font-size: 12px;
+}
+
+.textfield small span {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--app-icon-grey);
+}
+
+/* The feature grid: hairline-topped columns, thin line icons. */
+
+.features,
+.stats {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.features li,
+.stats li {
+  border-top: 1px solid var(--color-rule);
+}
+
+.features li {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  padding: 1.25rem 0;
+}
+
+.features svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  grid-row: span 2;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.features h3 {
+  font-size: 1.0625rem;
   letter-spacing: -0.01em;
 }
 
-.card p {
+.features p,
+.stats p:last-child {
   margin: 0;
   color: var(--color-fg-muted);
-  font-size: 0.95rem;
 }
 
-.card p + p {
-  margin-top: 0.5rem;
+@media (min-width: 48rem) {
+  .features,
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3.5rem 3rem;
+  }
+
+  .features li,
+  .stats li {
+    padding-top: 2rem;
+  }
+
+  .features li {
+    display: block;
+    padding-bottom: 0;
+    padding-right: 1rem;
+  }
+
+  .features svg {
+    display: block;
+    width: 30px;
+    height: 30px;
+    margin-bottom: 1.5rem;
+  }
+
+  .features h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.1875rem;
+  }
 }
 
-.card .step {
+/* Light: three numbers, with the caveat under them. */
+
+.stats li {
+  padding: 1.5rem 0 0.5rem;
+}
+
+.stat {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+@media (min-width: 48rem) {
+  .stat {
+    margin-bottom: 0.75rem;
+    font-size: 2.5rem;
+  }
+}
+
+/* The privacy band: the page's one tinted band. Links on it are ink (contrast). */
+
+.band {
+  padding-block: 4rem;
+  background: var(--color-bg-raised);
+}
+
+.band a {
+  color: var(--color-fg);
+}
+
+.band-inner {
+  display: grid;
+  gap: 2rem;
+}
+
+.band-text p {
+  max-width: 31rem;
+  margin: 1.25rem 0 0;
   color: var(--color-fg-muted);
-  font-weight: 500;
-  margin-right: 0.4rem;
+  letter-spacing: -0.01em;
 }
 
-/* ---------- the pill demo (CSS only; plays once) ---------- */
+.checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checks li {
+  position: relative;
+  padding: 1.25rem 0 1.25rem 2rem;
+  border-top: 1px solid var(--color-rule-raised);
+}
+
+.checks li::before {
+  content: "";
+  position: absolute;
+  left: 0.3rem;
+  top: 1.45rem;
+  width: 0.35rem;
+  height: 0.7rem;
+  border: solid var(--color-fg);
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+
+.checks h3 {
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+}
+
+.checks p {
+  margin: 0.25rem 0 0;
+  color: var(--color-fg-muted);
+}
+
+@media (min-width: 48rem) {
+  .band {
+    padding-block: 7.5rem;
+  }
+
+  .band-inner {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 6rem;
+    align-items: start;
+  }
+
+  .band-text h2 {
+    max-width: 32.5rem;
+  }
+
+  .band-text p {
+    margin-top: 1.5rem;
+    font-size: 1.1875rem;
+  }
+
+  .checks li {
+    padding-block: 1.5rem;
+  }
+
+  .checks li::before {
+    top: 1.75rem;
+  }
+
+  .checks h3 {
+    font-size: 1.1875rem;
+  }
+}
+
+/* Models: two cards. Links on them are ink (contrast on the raised surface). */
+
+.models {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 48rem) {
+  .models {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+}
+
+.model {
+  padding: 1.5rem;
+  border-radius: 20px;
+  background: var(--color-bg-raised);
+}
+
+.model a {
+  color: var(--color-fg);
+}
+
+.badge {
+  margin: 0 0 0.5rem;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.model h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.3125rem;
+}
+
+.model p {
+  margin: 0;
+  color: var(--color-fg-muted);
+}
+
+.model .model-credit {
+  margin-top: 0.75rem;
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 48rem) {
+  .model {
+    padding: 2rem;
+    border-radius: 24px;
+  }
+}
+
+/* Questions: a disclosure list (<details>), the first one open. */
+
+.faq-section {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.faq-head p {
+  margin: 1rem 0 0;
+  color: var(--color-fg-muted);
+}
+
+@media (min-width: 56rem) {
+  .faq-section {
+    grid-template-columns: 22.5rem minmax(0, 1fr);
+    gap: 5rem;
+  }
+
+  .faq-head p {
+    margin-top: 1.25rem;
+    max-width: 17.5rem;
+  }
+}
+
+.faq details {
+  border-top: 1px solid var(--color-rule);
+}
+
+.faq details:last-child {
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.faq summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  list-style: none;
+  cursor: pointer;
+}
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A plus that loses its upright when open: drawn, so screen readers don't read it. */
+.faq summary::after {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--color-fg-muted);
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1.5px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1.5px 12px no-repeat;
+}
+
+.faq details[open] summary::after {
+  background: linear-gradient(currentColor, currentColor) center / 12px 1.5px no-repeat;
+}
+
+.faq details p {
+  max-width: 37.5rem;
+  margin: -0.4rem 0 1.25rem;
+  padding-right: 1.5rem;
+  color: var(--color-fg-muted);
+}
+
+@media (min-width: 48rem) {
+  .faq summary {
+    padding: 1.5rem 0;
+    font-size: 1.1875rem;
+  }
+
+  .faq details p {
+    margin: -0.75rem 0 1.5rem;
+  }
+}
+
+/* The closing call to action, with the requirements. */
+
+.cta {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block: 4rem;
+  text-align: center;
+}
+
+.cta .hero-mark {
+  margin-bottom: 1.5rem;
+}
+
+.landing .cta h2 {
+  font-size: clamp(2rem, 1.2rem + 2.6vw, 3.5rem);
+}
+
+.cta .lede {
+  margin-top: 1rem;
+}
+
+.requirements {
+  margin-top: 2.5rem;
+}
+
+.requirements h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
+.requirements ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-fg-muted);
+  font-size: 0.9375rem;
+}
+
+/* A dot between items, drawn so screen readers don't read it. */
+.requirements li + li::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 0.75rem 0.2em;
+  border-radius: 50%;
+  background: var(--color-border);
+}
+
+@media (max-width: 40rem) {
+  .requirements ul {
+    flex-direction: column;
+  }
+
+  .requirements li + li::before {
+    content: none;
+  }
+}
+
+@media (min-width: 48rem) {
+  .cta {
+    padding-block: 8rem 8.5rem;
+  }
+
+  .cta .hero-mark {
+    margin-bottom: 2rem;
+  }
+}
+
+/* ---------- the demo: a Mac desktop with the pill (CSS only; plays once) ---------- */
 
 .demo {
-  margin: 0;
+  width: 100%;
+  margin: 2.5rem 0 0;
+}
+
+@media (min-width: 48rem) {
+  .demo {
+    margin-top: 4.5rem;
+  }
 }
 
 .demo-stage {
-  background: var(--color-bg-raised);
+  position: relative;
+  height: 21rem;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--stage);
+  box-shadow: 0 0 0 1px var(--stage-edge);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+@media (min-width: 40rem) {
+  .demo-stage {
+    height: auto;
+    aspect-ratio: 1120 / 540;
+    border-radius: 24px;
+  }
+}
+
+.demo-menubar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--stage-menubar);
+  color: var(--stage-menubar-fg);
+}
+
+.demo-menus,
+.demo-status {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  white-space: nowrap;
+}
+
+.demo-menus {
+  font-weight: 500;
+}
+
+.demo-status {
+  gap: 10px;
+}
+
+.demo-window {
+  position: absolute;
+  top: 46px;
+  left: 18px;
+  right: 18px;
+  height: 208px;
+  overflow: hidden;
   border-radius: 16px;
-  padding: 4.5rem 1rem 1.75rem;
+  background: var(--window-bg);
+  box-shadow: var(--shadow-window);
+  color: var(--color-fg);
+}
+
+.demo-titlebar {
+  position: relative;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.demo-titlebar b {
+  position: absolute;
+  inset: auto 0;
+  text-align: center;
+}
+
+.demo-lights {
+  display: flex;
+  gap: 8px;
+}
+
+.demo-lights span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.12);
+}
+
+.demo-lights span + span {
+  background: #febc2e;
+}
+
+.demo-lights span + span + span {
+  background: #28c840;
+}
+
+.demo-note {
+  padding: 4px 20px;
+}
+
+.demo-note p {
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+
+.demo-note .demo-date {
+  margin: 0 0 6px;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* On a phone the note is shorter: no greeting. */
+.demo-note .demo-date + p {
+  display: none;
+}
+
+.demo-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.15em;
+  margin-left: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  vertical-align: -0.25em;
+}
+
+.demo-pill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
   display: flex;
   justify-content: center;
+  padding: 0 16px;
 }
+
+@media (max-width: 40rem) {
+  .demo-menus span:nth-child(n + 4),
+  .demo-status span:first-of-type {
+    display: none;
+  }
+}
+
+@media (min-width: 40rem) {
+  .demo-window {
+    top: 11.85%;
+    left: 16%;
+    right: 16%;
+    height: 63%;
+  }
+
+  .demo-titlebar {
+    height: 52px;
+    padding: 0 20px;
+  }
+
+  .demo-note {
+    padding: 14px 9%;
+    font-size: 15px;
+  }
+
+  .demo-note p {
+    margin-top: 12px;
+  }
+
+  .demo-note .demo-date {
+    margin-bottom: 14px;
+    font-size: 12px;
+  }
+
+  .demo-note .demo-date + p {
+    display: block;
+  }
+
+  .demo-pill {
+    bottom: 9.6%;
+  }
+}
+
+.demo figcaption {
+  margin-top: 0.75rem;
+  color: var(--color-fg-muted);
+  font-size: 0.875rem;
+}
+
+/* ---------- the pill (design board 07, at 1:1) ---------- */
 
 .pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.7rem;
-  max-width: 100%;
-  padding: 0.6rem 1.1rem 0.6rem 0.9rem;
-  border-radius: 999px;
+  gap: 12px;
+  height: 44px;
+  max-width: min(560px, 100%);
+  padding: 0 20px 0 14px;
+  border-radius: 22px;
   background: var(--color-pill);
   box-shadow: var(--shadow-pill);
-  font-size: 1rem;
-  line-height: 1.4;
+  color: var(--color-fg);
+  font-size: 15px;
+  letter-spacing: 0;
+  text-align: left;
 }
 
-.meter {
+/* Three vermilion strokes, 3 px wide on a 6 px pitch, 3–20 px tall. */
+.pill-meter {
   display: flex;
   align-items: center;
-  gap: 2px;
-  height: 1rem;
+  gap: 3px;
+  height: 20px;
   flex: none;
 }
 
-.meter span {
+.pill-meter span {
   width: 3px;
-  border-radius: 2px;
-  background: var(--color-fg-muted);
+  border-radius: 1.5px;
+  background: var(--color-wave);
 }
 
-/* One line, like the app's pill: when the words don't fit, the oldest are cut at the left. */
+/* One line, flush right, like the app's pill: when the words don't fit, the oldest are cut at
+   the left, behind a fade. */
 .pill-text {
-  margin: 0;
   min-width: 0;
+  margin: 0;
   display: flex;
   justify-content: flex-end;
   overflow: hidden;
+  line-height: 20px;
 }
 
 .pill-words {
   white-space: nowrap;
 }
 
-/* On a phone the sentence doesn't fit: fade the cut edge. */
-@media (max-width: 30rem) {
-  .pill-text {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 1.5rem);
-    mask-image: linear-gradient(to right, transparent, #000 1.5rem);
-  }
-}
-
 .pill-text .provisional {
-  color: var(--color-fg-muted);
+  color: var(--color-pill-text2);
 }
 
-.demo figcaption {
-  margin-top: 0.6rem;
-  color: var(--color-fg-muted);
-  font-size: 0.875rem;
-  text-align: center;
+@media (max-width: 40rem) {
+  .demo .pill-text {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 16px);
+    mask-image: linear-gradient(to right, transparent, #000 16px);
+  }
 }
 
+/* The app's pop: 200 ms on its POP curve, 85 % → 101.5 % → 100 %, then each word fades in over
+   200 ms (DESIGN.md "Overlay"). It plays once. Reduce motion shows the still. */
 @media (prefers-reduced-motion: no-preference) {
-  .pill {
-    animation: pill-open 200ms ease-out 300ms both;
+  .pill-animate {
+    animation:
+      pill-pop 200ms cubic-bezier(0.34, 1.56, 0.64, 1) 300ms both,
+      fade-in 120ms ease-out 300ms both;
   }
 
-  .pill-words span {
-    animation: word-in 200ms ease-out both;
+  .pill-animate .pill-words > span {
+    animation: fade-in 200ms ease-out both;
     animation-delay: calc(700ms + var(--i) * 220ms);
   }
 }
 
-@keyframes pill-open {
+@keyframes pill-pop {
   from {
-    opacity: 0;
     transform: scale(0.85);
   }
-  70% {
-    transform: scale(1.02);
-  }
   to {
-    opacity: 1;
     transform: scale(1);
   }
 }
 
-@keyframes word-in {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
@@ -463,113 +1436,247 @@ kbd {
   }
 }
 
-/* ---------- docs shell ---------- */
+/* ---------- docs shell (boards 24–25) ---------- */
 
-.docs-shell {
-  max-width: var(--width-site);
-  margin: 0 auto;
-  padding: 0 1rem;
-  display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr);
-  gap: 3rem;
-  align-items: start;
+/* On a phone: a bar under the header that says where you are, and opens the docs nav. */
+.docs-menu {
+  position: relative;
+  z-index: 5;
+  border-bottom: 1px solid var(--color-rule);
 }
 
-.docs-sidebar {
-  position: sticky;
-  top: 3.5rem;
-  padding: 1.75rem 0;
-}
-
-.docs-sidebar ul {
+.docs-menu summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: 3.25rem;
+  padding: 0 var(--gutter);
   list-style: none;
+  cursor: pointer;
+}
+
+.docs-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.docs-menu summary svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.docs-menu[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.docs-menu-sheet {
+  position: absolute;
+  inset: 100% 0 auto;
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  padding: 0.5rem calc(var(--gutter) - 0.75rem) 1.25rem;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-rule);
+  /* The page dims under the open menu. */
+  box-shadow:
+    0 24px 40px -24px rgb(0 0 0 / 0.25),
+    0 0 0 100vmax rgb(0 0 0 / 0.28);
+  clip-path: inset(0 -100vmax -100vmax);
+}
+
+.docs-menu-sheet > .docs-nav > li:first-child .docs-nav-group {
+  margin-top: 0.75rem;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: 0.9375rem;
+}
+
+.crumbs b {
+  color: var(--color-fg);
+  font-weight: 500;
+}
+
+.crumbs > * + *::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 10px 2px 6px;
+  border: solid var(--color-fg-muted);
+  border-width: 1.5px 1.5px 0 0;
+  transform: rotate(45deg);
+}
+
+.docs-nav,
+.docs-nav ul {
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
-.docs-sidebar a {
-  display: block;
-  padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-  color: var(--color-fg-muted);
-  font-size: 0.95rem;
-}
-
-.docs-sidebar a:hover {
+.docs-nav-group {
+  margin: 1.5rem 0 0.25rem 0.75rem;
   color: var(--color-fg);
-  background: var(--color-bg-raised);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.docs-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  color: var(--color-fg-muted);
   text-decoration: none;
 }
 
-.docs-sidebar a[aria-current="page"] {
-  color: var(--color-accent);
-  font-weight: 600;
-  background: var(--color-bg-raised);
+.docs-nav a:hover {
+  color: var(--color-fg);
 }
 
-@media (max-width: 48rem) {
+.docs-nav a[aria-current="page"] {
+  background: var(--color-bg-raised);
+  color: var(--color-fg);
+  font-weight: 500;
+}
+
+.docs-shell {
+  padding-top: 2rem;
+  padding-bottom: 5rem;
+}
+
+.docs-sidebar {
+  display: none;
+}
+
+@media (min-width: 56rem) {
+  .docs-menu {
+    display: none;
+  }
+
   .docs-shell {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    display: grid;
+    grid-template-columns: 13.75rem minmax(0, 1fr);
+    gap: clamp(3rem, 6vw, 5rem);
+    align-items: start;
+    padding-top: 3rem;
+    padding-bottom: 7rem;
   }
 
   .docs-sidebar {
-    position: static;
-    padding: 1rem 0 0.75rem;
-    border-bottom: 1px solid var(--color-border);
+    display: block;
+    position: sticky;
+    top: calc(var(--header-height) + 3rem);
+    max-height: calc(100vh - var(--header-height) - 4rem);
+    overflow-y: auto;
   }
 
-  .docs-sidebar ul {
+  .docs-sidebar .docs-nav-group {
+    margin-top: 1.75rem;
+  }
+
+  .docs-sidebar > .docs-nav > li:first-child .docs-nav-group {
+    margin-top: 0;
+  }
+
+  .docs-sidebar .docs-nav a {
+    min-height: 2rem;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+  }
+
+  .doc .crumbs {
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+  }
+}
+
+.crumbs a {
+  color: var(--color-fg-muted);
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--color-fg);
+}
+
+/* The breadcrumb repeats the phone's docs bar, so it shows on wide screens only. */
+.doc > .crumbs {
+  display: none;
+}
+
+@media (min-width: 56rem) {
+  .doc > .crumbs {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
   }
 }
 
 /* ---------- doc content ---------- */
 
 .doc {
-  padding: 2rem 0 1rem;
   min-width: 0;
-  font-size: 1.0625rem;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .doc h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
   margin: 0 0 1rem;
+  font-size: clamp(2.125rem, 1.6rem + 1.6vw, 3rem);
+  line-height: 1.06;
+}
+
+/* The doc's opening paragraph reads as its lede. */
+.doc article > h1:first-child + p {
+  color: var(--color-fg-muted);
+  font-size: 1.125rem;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
 }
 
 .doc h2 {
-  font-size: 1.45rem;
-  font-weight: 600;
+  margin: 3rem 0 1rem;
+  font-size: clamp(1.5rem, 1.25rem + 0.8vw, 1.875rem);
   letter-spacing: -0.015em;
-  line-height: 1.3;
-  margin: 2.5rem 0 0.75rem;
+  line-height: 1.15;
 }
 
 .doc h3 {
-  font-size: 1.15rem;
-  font-weight: 600;
-  margin: 2rem 0 0.5rem;
+  margin: 2.25rem 0 0.5rem;
+  font-size: 1.1875rem;
+  letter-spacing: -0.015em;
 }
 
 .doc h4,
 .doc h5,
 .doc h6 {
+  margin: 1.75rem 0 0.5rem;
   font-size: 1rem;
-  font-weight: 600;
-  margin: 1.5rem 0 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 48rem) {
+  .doc h2 {
+    margin-top: 4rem;
+  }
+
+  .doc article > h1:first-child + p {
+    font-size: 1.1875rem;
+  }
 }
 
 .doc .anchor {
   color: inherit;
-}
-
-.doc .anchor:hover {
   text-decoration: none;
 }
 
@@ -590,70 +1697,86 @@ kbd {
 }
 
 .doc li {
-  margin: 0.25rem 0;
+  margin: 0.35rem 0;
 }
 
 .doc blockquote {
-  margin: 1rem 0;
-  padding: 0.1rem 0 0.1rem 1.1rem;
-  border-left: 3px solid var(--color-border);
+  max-width: var(--width-prose);
+  margin: 1.5rem 0;
+  padding: 1.1rem 1.5rem;
+  border-radius: 16px;
+  background: var(--color-bg-raised);
   color: var(--color-fg-muted);
+}
+
+.doc blockquote p {
+  margin: 0.5rem 0;
+}
+
+.doc blockquote a {
+  color: var(--color-fg);
 }
 
 .doc hr {
   border: none;
-  border-top: 1px solid var(--color-border);
-  margin: 2.5rem 0;
+  border-top: 1px solid var(--color-rule);
+  margin: 3rem 0;
 }
 
 .codeblock {
   position: relative;
-  margin: 1rem 0;
-  border-radius: 10px;
-  background: var(--color-bg-code);
+  margin: 1.25rem 0;
+  border-radius: 14px;
+  background: var(--color-bg-raised);
 }
 
 .codeblock[data-lang]::before {
   content: attr(data-lang);
   position: absolute;
-  top: 0.4rem;
-  right: 0.75rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
+  top: 0.55rem;
+  right: 0.9rem;
   color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
 }
 
 .codeblock pre {
   margin: 0;
-  padding: 0.95rem 1.1rem;
+  padding: 1.15rem 1.25rem;
   overflow-x: auto;
+  border-radius: 14px;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-  line-height: 1.55;
-  border-radius: 10px;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+@media (min-width: 48rem) {
+  .codeblock pre {
+    font-size: 0.875rem;
+  }
 }
 
 .codeblock code {
-  background: none;
   padding: 0;
+  background: none;
   font-size: inherit;
 }
 
 .table-scroll {
+  margin: 1.25rem 0;
   overflow-x: auto;
-  margin: 1rem 0;
 }
 
 .doc table {
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .doc th,
 .doc td {
-  border: 1px solid var(--color-border);
-  padding: 0.4rem 0.7rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--color-rule);
   text-align: left;
   vertical-align: top;
 }
@@ -664,20 +1787,27 @@ kbd {
 }
 
 .doc-index {
-  list-style: none;
+  max-width: var(--width-prose);
+  margin: 2rem 0 0;
   padding: 0;
+  list-style: none;
 }
 
 .doc-index li {
-  margin: 0 0 1.25rem;
+  margin: 0;
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--color-rule);
 }
 
 .doc-index a {
+  font-size: 1.1875rem;
   font-weight: 600;
+  letter-spacing: -0.015em;
+  text-decoration: none;
 }
 
 .doc-index p {
-  margin: 0.2rem 0 0;
+  margin: 0.25rem 0 0;
   color: var(--color-fg-muted);
 }
 
@@ -685,30 +1815,42 @@ kbd {
 
 .prev-next {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 3rem 0 1rem;
-  border-top: 1px solid var(--color-border);
-  padding-top: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  max-width: var(--width-prose);
+  margin: 3.5rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-rule);
 }
 
 .prev-next a {
+  flex: 1 1 14rem;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  max-width: 48%;
-}
-
-.prev-next a:hover {
+  gap: 0.25rem;
+  padding: 1rem 1.25rem;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--color-rule);
+  color: var(--color-fg);
   text-decoration: none;
 }
 
+.prev-next a:hover {
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  color: var(--color-fg);
+}
+
 .prev-next .direction {
-  font-size: 0.8rem;
   color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+.prev-next .title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .prev-next .next {
-  margin-left: auto;
+  align-items: flex-end;
   text-align: right;
 }

@@ -1,15 +1,23 @@
 ---
-import { REPO_PUBLIC, REPO_URL, SITE_NAME } from "../config";
+// The site header: the lockup, the nav, and the way to install. The nav is two or three short
+// links, so it stays inline on a phone rather than hiding behind a menu button.
+import { REPO_PUBLIC, REPO_URL } from "../config";
+import Lockup from "./Lockup.astro";
 
 const inDocs = Astro.url.pathname.startsWith("/docs");
 ---
 
 <header class="site-header">
   <div class="site-header-inner">
-    <a class="wordmark-link" href="/">{SITE_NAME}</a>
-    <nav aria-label="Site">
+    <a class="lockup-link" href="/"><Lockup /></a>
+    <nav class="site-nav" aria-label="Site">
       <a href="/docs" aria-current={inDocs ? "true" : undefined}>Docs</a>
       {REPO_PUBLIC && <a href={REPO_URL}>GitHub</a>}
+      {
+        /* Nothing to download yet: this goes to the homepage's install section (coming soon,
+           or build from source). At the first DMG it becomes Download. */
+      }
+      <a class="button button-primary button-small" href="/#install">Install</a>
     </nav>
   </div>
 </header>

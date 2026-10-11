@@ -1,4 +1,9 @@
-# EasyVox
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="design/assets/mark/png/easyvox-lockup-color-on-dark.png">
+    <img src="design/assets/mark/png/easyvox-lockup-color-on-light.png" alt="EasyVox" width="280" height="50">
+  </picture>
+</h1>
 
 A free, open source voice-to-text app for macOS.
 

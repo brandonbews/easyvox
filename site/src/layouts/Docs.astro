@@ -1,6 +1,7 @@
 ---
-// The docs shell: the sidebar from nav.ts beside the page. The current page is marked when the
-// page is built, so the sidebar needs no JavaScript.
+// The docs shell (design board 24): the docs nav beside a 640 px reading column. On a phone the
+// nav folds into a <details> under the header that says where you are (board 25), so it opens
+// and closes with no JavaScript. Every link in it goes to another page, which closes it.
 import Sidebar from "../components/Sidebar.astro";
 import Base from "./Base.astro";
 
@@ -10,12 +11,35 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+const isIndex = Astro.url.pathname.replace(/\/$/, "") === "/docs";
 ---
 
 <Base title={title} description={description}>
-  <div class="docs-shell">
-    <Sidebar />
+  <details class="docs-menu">
+    <summary>
+      <span class="crumbs">
+        <span>Docs</span>
+        {!isIndex && <b>{title}</b>}
+      </span>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5L6 8l3.5-3.5"></path></svg>
+    </summary>
+    <nav class="docs-menu-sheet" aria-label="Docs">
+      <Sidebar />
+    </nav>
+  </details>
+  <div class="docs-shell container">
+    <nav class="docs-sidebar" aria-label="Docs">
+      <Sidebar />
+    </nav>
     <main id="main" class="doc">
+      {
+        !isIndex && (
+          <p class="crumbs">
+            <a href="/docs">Docs</a>
+            <span>{title}</span>
+          </p>
+        )
+      }
       <slot />
     </main>
   </div>

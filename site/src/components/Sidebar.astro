@@ -1,19 +1,27 @@
 ---
-import { docsNav, routeFor } from "../lib/nav";
+// The docs nav, grouped as in nav.ts. The current page is marked when the page is built (a fill
+// and the text colour, not colour alone), so it needs no JavaScript. Docs.astro shows it as the
+// sidebar on wide screens and inside a <details> menu on phones.
+import { navGroups, routeFor } from "../lib/nav";
 
 const here = Astro.url.pathname.replace(/\/$/, "");
 ---
 
-<nav class="docs-sidebar" aria-label="Docs">
-  <ul>
-    {
-      docsNav.map((entry) => (
-        <li>
-          <a href={routeFor(entry)} aria-current={routeFor(entry) === here ? "page" : undefined}>
-            {entry.title}
-          </a>
-        </li>
-      ))
-    }
-  </ul>
-</nav>
+<ul class="docs-nav">
+  {
+    navGroups().map(({ group, entries }) => (
+      <li>
+        <p class="docs-nav-group">{group}</p>
+        <ul>
+          {entries.map((entry) => (
+            <li>
+              <a href={routeFor(entry)} aria-current={routeFor(entry) === here ? "page" : undefined}>
+                {entry.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </li>
+    ))
+  }
+</ul>

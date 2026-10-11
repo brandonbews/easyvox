@@ -3,7 +3,7 @@
 // renders a client component, so Astro emits no <script>.
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
-import { NOINDEX, SITE_NAME } from "../config";
+import { NOINDEX, SITE_NAME, SITE_URL, siteUrl } from "../config";
 import "../styles/global.css";
 
 interface Props {
@@ -14,6 +14,8 @@ interface Props {
 
 const { title, description } = Astro.props;
 const fullTitle = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME}: voice to text for macOS`;
+// A canonical URL and og:url need the domain (SITE_URL in src/config.ts), attached at launch.
+const canonical = SITE_URL ? siteUrl(Astro.url.pathname) : null;
 ---
 
 <!doctype html>
@@ -24,15 +26,35 @@ const fullTitle = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME}: voice to t
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     {NOINDEX && <meta name="robots" content="noindex" />}
+    {canonical && <link rel="canonical" href={canonical} />}
     <meta name="color-scheme" content="light dark" />
+    {/* The page backgrounds in global.css: paper, light and dark. */}
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1c1e" />
     {
-      /* Favicon and social card: none yet. They come from the brand work (docs/branding.md).
-         Put the files in public/ and their tags here: <link rel="icon">, apple-touch-icon,
-         og:title, og:description, og:image and twitter:card. A canonical URL and og:url
-         wait for the domain (https://easyvox.dev) at launch. */
+      /* Icons (design/assets/web). The .ico (16, 32, 48) is the fallback; sizes="32x32" stops
+         Chrome preferring it over the SVG, whose ink follows the colour scheme. */
     }
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    {
+      /* Link previews. og-image.png is the dark card (re-rendered from design board 20 with the
+         real requirements). Its URL is relative until the domain is attached at launch, when
+         siteUrl() makes it absolute, as og:image needs. */
+    }
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={siteUrl("/og-image.png")} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The EasyVox mark above the line “Hold ⌥Space, talk, let go.”" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>

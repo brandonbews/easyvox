@@ -1,146 +1,262 @@
 ---
-// The homepage (docs/plans/website.md §5). Every number here comes from DESIGN.md and
-// docs/model-bench.md, with the same caveats: one Mac, one speaker. Change them there first.
+// The homepage (docs/plans/website.md §5, laid out as design boards 21–23). Every number here
+// comes from DESIGN.md and docs/model-bench.md, with the same caveats: one Mac, one speaker.
+// Change them there first. Every claim is true of the app today: no "model inside the app", no
+// Esc to cancel, no history retention, no other languages, nothing to download yet.
+import Demo from "../components/Demo.astro";
+import Mark from "../components/Mark.astro";
 import Pill from "../components/Pill.astro";
+import { REPO_PUBLIC, REPO_URL } from "../config";
 import Base from "../layouts/Base.astro";
 ---
 
-<Base description="EasyVox is a free, open source voice-to-text app for macOS. Hold a shortcut and speak; when you let go, the text is pasted where your cursor is. The speech model runs on your Mac.">
+<Base description="EasyVox is free, open source dictation for the Mac. Hold ⌥Space and talk; when you let go, the text is pasted where your cursor is. The speech model runs on your Mac.">
   <main id="main" class="landing">
-    <p class="notice">
-      <strong>Early development.</strong> EasyVox isn't usable yet, and there's nothing to install. You can
-      <a href="/docs/building">build it from source</a>.
-    </p>
-
-    <section class="hero">
-      <div>
-        <h1>EasyVox</h1>
-        <p class="tagline">A free, open source voice-to-text app for macOS.</p>
-        <p class="lede">
-          Hold a shortcut and speak. EasyVox shows the words as it hears them, and when you let go it pastes the
-          text where your cursor is.
-        </p>
-        <div class="actions">
-          <span class="button button-soon">Download: coming soon</span>
-          <a class="button button-primary" href="/docs/building">Build from source</a>
-        </div>
-      </div>
-      <Pill />
-    </section>
-
-    <section class="section" aria-labelledby="private">
-      <h2 id="private">Private</h2>
-      <ul>
-        <li>The speech model runs on your Mac. No audio or text leaves it.</li>
-        <li>
-          The only time EasyVox goes online is to download a model, which it checks against its sha256 before
-          using it.
-        </li>
-        <li>History keeps the text of each dictation, never the audio.</li>
-      </ul>
-    </section>
-
-    <section class="section" aria-labelledby="light">
-      <h2 id="light">Light</h2>
-      <ul>
-        <li>Idle, it does nothing: it wakes about once every 3 seconds and uses no measurable CPU.</li>
-        <li>
-          While you dictate, it adds about 0.65 W to what the Mac draws. Drawing the overlay's animations on
-          screen adds roughly 0.15–0.2 W more.
-        </li>
-        <li>
-          The model is freed after 10 minutes without use, which takes EasyVox from about 670 MB of memory to
-          about 90 MB. Your next dictation still starts recording at once.
-        </li>
-      </ul>
-      <p class="caveat">
-        Measured in October 2026 on one Mac (an M4 Mac mini), with the default model and one speaker's voice.
-        The methods and every number are in the <a href="/docs/model-bench">model bench</a>.
+    <section class="hero container" aria-labelledby="top">
+      <p class="eyebrow">Early development: there's nothing to install yet.</p>
+      <Mark height={52} class="hero-mark" />
+      <h1 id="top">Hold ⌥Space. <span>Talk. Let go.</span></h1>
+      <p class="lede">
+        EasyVox types what you say where your cursor is.
+        <span>Free and open source, with the speech model running on your Mac.</span>
       </p>
+      <div class="actions">
+        <a class="button button-primary" href="/docs/building">Build from source</a>
+        <span class="button button-soon">Download: coming soon</span>
+      </div>
+      <p class="meta-line">macOS 26 or later <span aria-hidden="true">·</span> Apple silicon <span aria-hidden="true">·</span> MIT license</p>
+      <Demo />
     </section>
 
-    <section class="section" aria-labelledby="how">
-      <h2 id="how">How it works</h2>
-      <ol class="cards">
-        <li class="card">
-          <h3><span class="step">1</span>Hold <kbd>⌥ Space</kbd></h3>
-          <p>Hold the shortcut and speak. You can pick another shortcut, or hold the right Option key on its own.</p>
+    <section class="section container" aria-labelledby="how">
+      <div class="section-head">
+        <h2 id="how">How it works</h2>
+        <p>Nothing to set up after the first run.</p>
+      </div>
+      <ol class="steps">
+        <li class="step">
+          <div class="step-art" aria-hidden="true">
+            <span class="keycap keycap-option"><span>⌥</span><small>option</small></span>
+            <span class="keycap keycap-space"></span>
+          </div>
+          <p class="step-n">Step 1</p>
+          <h3>Hold ⌥Space</h3>
+          <p>In any app, wherever your cursor is. A small pill appears near the bottom of the screen.</p>
         </li>
-        <li class="card">
-          <h3><span class="step">2</span>Watch the words</h3>
-          <p>
-            A small pill near the bottom of the screen shows what EasyVox hears. Fainter words are provisional and
-            may still change; the rest are confirmed.
-          </p>
+        <li class="step">
+          <div class="step-art" aria-hidden="true">
+            <Pill confirmed={["Can", "we", "push", "lunch", "to", "one?"]} />
+          </div>
+          <p class="step-n">Step 2</p>
+          <h3>Talk</h3>
+          <p>Your words show up in the pill as you say them. Fainter words may still change.</p>
         </li>
-        <li class="card">
-          <h3><span class="step">3</span>Let go</h3>
+        <li class="step">
+          <div class="step-art" aria-hidden="true">
+            <span class="textfield"><small><span></span>Messages</small>Can we push lunch to one?<span class="demo-caret"></span></span>
+          </div>
+          <p class="step-n">Step 3</p>
+          <h3>Let go</h3>
           <p>EasyVox finishes the text and pastes it where your cursor is. It stays on the clipboard too.</p>
         </li>
       </ol>
     </section>
 
-    <section class="section" aria-labelledby="models">
-      <h2 id="models">Models</h2>
-      <p>
-        You choose a model in the app, and EasyVox downloads it from Hugging Face. Each one is credited with its
-        license.
+    <section class="section section-flush container" aria-labelledby="features">
+      <h2 id="features" class="section-title">Out of the way until you need it.</h2>
+      <ul class="features">
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.75" y="4.75" width="16.5" height="11.5" rx="1.75"></rect><path d="M2 19.25h20M10 9v3.5M12 8v5.5M14 9.25v3"></path></svg>
+          <h3>Runs on your Mac</h3>
+          <p>The speech model runs on your Mac, not on a server. No audio or text leaves it.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.75" y="3.75" width="7" height="7" rx="2"></rect><rect x="13.25" y="3.75" width="7" height="7" rx="2"></rect><rect x="3.75" y="13.25" width="7" height="7" rx="2"></rect><rect x="13.25" y="13.25" width="7" height="7" rx="2"></rect></svg>
+          <h3>Works where you type</h3>
+          <p>An email, a note, a chat, a commit message: if you can paste into it, EasyVox can type into it.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.25" y="7.25" width="19.5" height="9.5" rx="4.75"></rect><path d="M6.25 10.5v3M8.75 9.75v4.5M11.25 10.75v2.5M14 12h4.25"></path></svg>
+          <h3>See your words as you speak</h3>
+          <p>The pill shows the words as EasyVox hears them, so you know it heard you before you let go.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.6 13.2A7.5 7.5 0 1 0 6.4 6.9M6.6 3.6l-0.4 3.5 3.5 0.3M12 8.25V12l2.75 2"></path></svg>
+          <h3>History stays on this Mac</h3>
+          <p>Find something you said earlier and copy it again. History keeps the text, never the audio.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.25" y="3.25" width="17.5" height="17.5" rx="4.25"></rect><path d="M7.25 9.25h2.6l3.9 5.75h3M13.6 9.25h3.15"></path></svg>
+          <h3>Your shortcut</h3>
+          <p>Hold ⌥Space, or pick another shortcut in Settings. You can also have it listen while you hold the right Option key alone.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.25 7.5L3.75 12l4.5 4.5M15.75 7.5l4.5 4.5-4.5 4.5M13.6 5.25l-3.2 13.5"></path></svg>
+          <h3>One settings file</h3>
+          <p>
+            Every setting is in one TOML file, and an edit applies as soon as you save it.
+            <a href="/docs/settings">Every key and its default</a>.
+          </p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="section container" aria-labelledby="light">
+      <h2 id="light" class="section-title">Light on your Mac.</h2>
+      <ul class="stats">
+        <li>
+          <p class="stat">~0 %</p>
+          <p>Of the CPU while idle. EasyVox wakes about once every 3 seconds, and uses too little to measure.</p>
+        </li>
+        <li>
+          <p class="stat">0.65 W</p>
+          <p>
+            Added to what the Mac draws while you dictate. Drawing the pill's animations on screen adds roughly
+            0.15–0.2 W more.
+          </p>
+        </li>
+        <li>
+          <p class="stat">90 MB</p>
+          <p>
+            Of memory once the model is freed, after 10 minutes without use (about 670 MB with it loaded). Your next
+            dictation still starts recording at once.
+          </p>
+        </li>
+      </ul>
+      <p class="caveat">
+        Measured in October 2026 on one Mac (an M4 Mac mini), with the default model and one speaker's voice. The
+        methods and every number are in the <a href="/docs/model-bench">model bench</a>.
       </p>
-      <ul class="cards">
-        <li class="card">
+    </section>
+
+    <section class="band" aria-labelledby="private">
+      <div class="band-inner container">
+        <div class="band-text">
+          <h2 id="private">What you say stays on this Mac.</h2>
+          <p>
+            EasyVox turns your voice into text on this Mac, never on a server. It goes online only to download a speech
+            model, and checks the file against its sha256 before using it.
+          </p>
+        </div>
+        <ul class="checks">
+          <li>
+            <h3>No account and no sign-in</h3>
+            <p>Allow the microphone and Accessibility, download a model, and start talking.</p>
+          </li>
+          <li>
+            <h3>Online once, for the model</h3>
+            <p>After that one download, you can dictate with Wi‑Fi off.</p>
+          </li>
+          <li>
+            <h3>Text in History, never audio</h3>
+            <p>History keeps the text of each dictation, on this Mac. The audio is never saved.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section container" aria-labelledby="models">
+      <div class="section-head">
+        <h2 id="models">Two models</h2>
+        <p>Pick one in the app. EasyVox downloads it from Hugging Face, once.</p>
+      </div>
+      <ul class="models">
+        <li class="model">
+          <p class="badge">Default</p>
           <h3>Parakeet TDT 0.6B v2</h3>
-          <p>The default: the best all-round model. A 539 MB download.</p>
-          <p>
-            By NVIDIA, under CC BY 4.0.
-            <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2">Model card</a>
+          <p>The best all-round model. A 539 MB download.</p>
+          <p class="model-credit">
+            By NVIDIA, under CC BY 4.0. <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2">Model card</a>
           </p>
         </li>
-        <li class="card">
+        <li class="model">
+          <p class="badge">The small one</p>
           <h3>Whisper base.en</h3>
-          <p>The smallest: for an 8 GB Mac, or when memory matters more than the last bit of accuracy. 85 MB.</p>
-          <p>
-            By OpenAI, under Apache 2.0.
-            <a href="https://huggingface.co/openai/whisper-base.en">Model card</a>
+          <p>For an 8 GB Mac, or when memory matters more than the last bit of accuracy. An 85 MB download.</p>
+          <p class="model-credit">
+            By OpenAI, under Apache 2.0. <a href="https://huggingface.co/openai/whisper-base.en">Model card</a>
           </p>
         </li>
       </ul>
-    </section>
-
-    <section class="section" aria-labelledby="tinkerers">
-      <h2 id="tinkerers">For tinkerers</h2>
-      <p>
-        Every setting is in one TOML file, and an edit applies as soon as you save it, with no restart. The
-        Settings window writes the same file, and leaves your comments alone.
-        <a href="/docs/settings">Every key, with its default and what it trades off</a>.
+      <p class="caveat">
+        Both run on <a href="https://github.com/handy-computer/transcribe.cpp">transcribe.cpp</a>, from the team behind
+        <a href="https://github.com/cjpais/Handy">Handy</a>, another open source dictation app. The same team makes the
+        GGUF builds of both models.
       </p>
     </section>
 
-    <section class="section" aria-labelledby="requirements">
-      <h2 id="requirements">Requirements</h2>
-      <ul>
-        <li>A Mac with Apple silicon</li>
-        <li>macOS 26 or later</li>
-        <li>English, for now</li>
-      </ul>
+    <section class="section container faq-section" aria-labelledby="questions">
+      <div class="faq-head">
+        <h2 id="questions">Questions</h2>
+        <p>
+          More answers in the <a href="/docs">docs</a>{
+            REPO_PUBLIC ? (
+              <>
+                , or ask on <a href={REPO_URL}>GitHub</a>.
+              </>
+            ) : (
+              "."
+            )
+          }
+        </p>
+      </div>
+      <div class="faq">
+        <details open>
+          <summary>Is it really free?</summary>
+          <p>Yes. EasyVox is free and open source, under the MIT license. There's no paid tier, no trial and no account.</p>
+        </details>
+        <details>
+          <summary>When can I download it?</summary>
+          <p>
+            Not yet: a DMG and a Homebrew cask are coming soon. Until then, you can
+            <a href="/docs/building">build it from source</a>.
+          </p>
+        </details>
+        <details>
+          <summary>Does it need the internet?</summary>
+          <p>
+            Once, to download the speech model (539 MB for the default). After that you can dictate offline, and your audio
+            and text never leave your Mac.
+          </p>
+        </details>
+        <details>
+          <summary>Which languages?</summary>
+          <p>English, for now. Both models are English-only.</p>
+        </details>
+        <details>
+          <summary>Which Macs?</summary>
+          <p>A Mac with Apple silicon, on macOS 26 or later. Intel Macs aren't supported.</p>
+        </details>
+        <details>
+          <summary>How do I uninstall it?</summary>
+          <p>
+            Quit EasyVox from the menu bar and drag it from Applications to the Trash. To remove everything, also delete
+            <code>~/Library/Application Support/EasyVox</code> (the models and History) and <code>~/.config/easyvox</code>
+            (the settings).
+          </p>
+        </details>
+      </div>
     </section>
 
-    <section class="section" aria-labelledby="install">
-      <h2 id="install">Install</h2>
-      <ul>
-        <li>A DMG from the GitHub releases: coming soon.</li>
-        <li>A Homebrew cask: coming soon.</li>
-        <li><a href="/docs/building">Build from source</a>: the only way for now. You need Xcode, cmake and Rust.</li>
-      </ul>
-    </section>
-
-    <section class="section" aria-labelledby="open-source">
-      <h2 id="open-source">Open source</h2>
-      <p>
-        EasyVox is MIT licensed, and its code will be public on GitHub by the first release. It runs its models on
-        <a href="https://github.com/handy-computer/transcribe.cpp">transcribe.cpp</a>, from the team behind
-        <a href="https://github.com/cjpais/Handy">Handy</a>, another open source dictation app. The same team makes
-        the GGUF builds of both models.
+    <section class="cta container" aria-labelledby="install">
+      <Mark height={44} class="hero-mark" />
+      <h2 id="install">Talk instead of typing.</h2>
+      <p class="lede">
+        A DMG and a Homebrew cask are coming soon. For now, you can build EasyVox from source: you need Xcode, cmake and
+        Rust.
       </p>
+      <div class="actions">
+        <a class="button button-primary" href="/docs/building">Build from source</a>
+        <span class="button button-soon">Download: coming soon</span>
+      </div>
+      <div class="requirements">
+        <h3 id="requirements">Requirements</h3>
+        <ul>
+          <li>A Mac with Apple silicon</li>
+          <li>macOS 26 or later</li>
+          <li>English, for now</li>
+        </ul>
+      </div>
     </section>
   </main>
 </Base>

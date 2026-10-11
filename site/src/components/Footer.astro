@@ -1,5 +1,7 @@
 ---
 import { REPO_URL, repoUrl } from "../config";
+import { docsNav, routeFor } from "../lib/nav";
+import Lockup from "./Lockup.astro";
 
 // null while the repo is private (REPO_PUBLIC in src/config.ts).
 const license = repoUrl("LICENSE");
@@ -8,22 +10,61 @@ const notices = repoUrl("packaging/THIRD_PARTY_NOTICES.html");
 
 <footer class="site-footer">
   <div class="site-footer-inner">
-    {
-      license && notices ? (
-        <p>
-          EasyVox is free and open source, under the <a href={license}>MIT license</a>. Its{" "}
-          <a href={REPO_URL}>source</a> and <a href={notices}>third-party notices</a> are on GitHub.
-        </p>
-      ) : (
-        <p>
-          EasyVox is free and open source, under the MIT license. Its third-party notices are in the
-          app, under Settings → About.
-        </p>
-      )
-    }
-    <p>
-      Speech models: Parakeet TDT 0.6B v2 by NVIDIA (CC BY 4.0) and Whisper base.en by OpenAI (Apache
-      2.0). EasyVox isn't affiliated with or endorsed by NVIDIA or OpenAI.
-    </p>
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="lockup-link" href="/"><Lockup /></a>
+        <p>Free, open source dictation for the Mac.</p>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div>
+          <h2>EasyVox</h2>
+          <ul>
+            <li><a href="/#how">How it works</a></li>
+            <li><a href="/#models">Models</a></li>
+            <li><a href="/#install">Install</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2>Docs</h2>
+          <ul>
+            {
+              docsNav.map((entry) => (
+                <li>
+                  <a href={routeFor(entry)}>{entry.title}</a>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+        {
+          license && notices && (
+            <div>
+              <h2>Project</h2>
+              <ul>
+                <li>
+                  <a href={REPO_URL}>GitHub</a>
+                </li>
+                <li>
+                  <a href={license}>License</a>
+                </li>
+                <li>
+                  <a href={notices}>Third-party notices</a>
+                </li>
+              </ul>
+            </div>
+          )
+        }
+      </nav>
+    </div>
+    <div class="footer-legal">
+      <p>
+        © 2026 Brandon Bews. EasyVox is free and open source, under the MIT license.
+        {!notices && " Its third-party notices are in the app, under Settings → About."}
+      </p>
+      <p>
+        Speech models: Parakeet TDT 0.6B v2 by NVIDIA (CC BY 4.0) and Whisper base.en by OpenAI (Apache
+        2.0). EasyVox isn't affiliated with or endorsed by NVIDIA or OpenAI.
+      </p>
+    </div>
   </div>
 </footer>

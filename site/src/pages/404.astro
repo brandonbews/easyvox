@@ -1,14 +1,14 @@
 ---
+import Mark from "../components/Mark.astro";
 import Base from "../layouts/Base.astro";
 ---
 
 <Base title="Page not found" description="There's no page at this address.">
   <main id="main" class="landing">
-    <section class="hero">
-      <div>
-        <h1>Page not found</h1>
-        <p class="lede">There's no page at this address. Try the <a href="/">homepage</a> or the <a href="/docs">docs</a>.</p>
-      </div>
+    <section class="hero hero-short container">
+      <Mark height={44} class="hero-mark" />
+      <h1>Page not found</h1>
+      <p class="lede">There's no page at this address. Try the <a href="/">homepage</a> or the <a href="/docs">docs</a>.</p>
     </section>
   </main>
 </Base>

@@ -13,14 +13,14 @@ const { prev, next } = prevNext(Astro.props.entry);
     <nav class="prev-next" aria-label="Previous and next page">
       {prev && (
         <a href={routeFor(prev)} class="prev">
-          <span class="direction">← Previous</span>
-          <span>{prev.title}</span>
+          <span class="direction">Previous</span>
+          <span class="title"><span aria-hidden="true">← </span>{prev.title}</span>
         </a>
       )}
       {next && (
         <a href={routeFor(next)} class="next">
-          <span class="direction">Next →</span>
-          <span>{next.title}</span>
+          <span class="direction">Next</span>
+          <span class="title">{next.title}<span aria-hidden="true"> →</span></span>
         </a>
       )}
     </nav>

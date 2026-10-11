@@ -14,6 +14,15 @@ export const REPO_PUBLIC = false;
 
 export const REPO_URL = "https://github.com/brandonbews/easyvox";
 
+// The site's origin, attached at launch: "https://easyvox.dev". While it's null, links and the
+// social image stay relative, and there's no canonical URL or og:url.
+export const SITE_URL: string | null = null;
+
+// A root-relative path made absolute once SITE_URL is set (og:image must be absolute to work).
+export function siteUrl(sitePath: string): string {
+  return SITE_URL ? new URL(sitePath, SITE_URL).href : sitePath;
+}
+
 // A GitHub URL for a file or folder in the repo, or null while the repo is private.
 export function repoUrl(repoPath: string, kind: "blob" | "tree" = "blob"): string | null {
   return REPO_PUBLIC ? `${REPO_URL}/${kind}/main/${repoPath}` : null;

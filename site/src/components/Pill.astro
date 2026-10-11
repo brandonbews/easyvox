@@ -1,34 +1,36 @@
 ---
-// A still of the overlay as you dictate, animated in CSS only: the pill pops open and the words
-// fade in once, then it stops. No loop, and with Reduce motion on it's a static frame.
+// The overlay pill as you dictate (design board 07, at 1:1): the level meter, then one line of
+// words, flush right. The newest, provisional words are fainter: they may still change.
 //
-// The sample sentence is invented for this demo. Never use text from real recordings here.
-const confirmed = ["Let's", "move", "the", "design", "review"];
-const provisional = ["to", "Thursday", "at", "two"];
+// With `animate`, it plays once in CSS only: the pill pops open (the app's pop: 85 % → 101.5 % →
+// 100 %), then the words fade in one by one, and it stops. No loop, and with Reduce motion on it's
+// a still. The sample text is invented for the demo: never use text from real recordings here.
+interface Props {
+  confirmed: string[];
+  provisional?: string[];
+  animate?: boolean;
+}
+
+const { confirmed, provisional = [], animate = false } = Astro.props;
 const words = [
   ...confirmed.map((word) => ({ word, provisional: false })),
   ...provisional.map((word) => ({ word, provisional: true })),
 ];
-// Bar heights, in pixels, for the five-bar level meter (a still: it doesn't move).
-const bars = [6, 11, 16, 12, 7];
+// The meter is a still: three strokes at a mid level, like the menu bar's listening frame.
+const bars = [9, 17, 6];
 ---
 
-<figure class="demo">
-  <div class="demo-stage">
-    <div class="pill">
-      <span class="meter" aria-hidden="true">
-        {bars.map((h) => <span style={`height:${h}px`} />)}
-      </span>
-      <p class="pill-text">
-        <span class="pill-words">
-          {
-            words.map(({ word, provisional }, i) => (
-              <span class={provisional ? "provisional" : undefined} style={`--i:${i}`}>{word} </span>
-            ))
-          }
-        </span>
-      </p>
-    </div>
-  </div>
-  <figcaption>The overlay while you speak: fainter words may still change. The sentence is made up.</figcaption>
-</figure>
+<div class:list={["pill", { "pill-animate": animate }]}>
+  <span class="pill-meter" aria-hidden="true">{bars.map((h) => <span style={`height:${h}px`}></span>)}</span>
+  <p class="pill-text">
+    <span class="pill-words">
+      {
+        words.map(({ word, provisional }, i) => (
+          <span class={provisional ? "provisional" : undefined} style={animate ? `--i:${i}` : undefined}>
+            {i < words.length - 1 ? `${word} ` : word}
+          </span>
+        ))
+      }
+    </span>
+  </p>
+</div>

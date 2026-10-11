@@ -13,3 +13,6 @@
 
 # Private voice recordings for local benchmarks (never committed)
 /recordings/
+
+# Agent worktrees (Claude Code)
+/.claude/worktrees/
