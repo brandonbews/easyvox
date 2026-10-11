@@ -18,8 +18,14 @@ Brandon's check at an unlocked screen; agents never take it. Built in c87dd40 (s
 5. Does any of it feel slow or distracting? The timings are under [advanced] in ~/.config/easyvox/config.toml (overlay_open_ms, overlay_close_ms, overlay_shrink_pct, overlay_words_ms, overlay_glide_ms, overlay_meter_ms, overlay_meter_frame_ms, overlay_frame_ms; 0 turns one off) and apply from the next time the pill opens.
 6. Energy, see the decision task: try overlay_meter_ms = 0 (bars snap instead of easing) and see if you miss the easing.
 
+11 October: the pill was restyled in c2e8837 (44 pt, 92 % fill, three vermilion strokes, grey dots then a check) and now sits 24 pt above the Dock. The motion is unchanged, so these steps still apply; do them together with the restyle check above (green dot → now a check).
+
 ## History
 
 ### 2026-10-11 04:59 UTC — edit by `brandon`
 
 retitled · description edited
+
+### 2026-10-11 16:50 UTC — edit by `brandon`
+
+description edited

@@ -2,7 +2,7 @@
 
 `tuh-01M4NR75PPG1ZFEZ3ZNXQEN2HD`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `design` `app`
 - **Created:** 2026-10-11 15:10 UTC by `brandon`
@@ -15,6 +15,8 @@ From lane A1 (11 October): the branded theme kept GPUI Kit's neutral greys, so d
 
 From lane A7-A9 (11 October): Settings, setup and History restyled in worktree agent-a5c0f787750044b9e, uncommitted, on 00dce18. Windows are paper (#FFFFFF / #1C1C1E) with ink and ink2 text, hairline borders and a white switch thumb; in dark, outline buttons, menus, hovered rows and the off switch track are lighter so they show. A group on light is paper with an outline, since vermilion links are 4.2:1 on #F5F5F7; the contrast is a unit test in brand.rs. Settings: its own layout in place of GPUI Kit Settings (no search field), inset tinted sidebar with icons, grouped forms, keycap with Change..., same four pages and Page enum. About: icon header, credits kept. Setup: the checklist restyled, step logic unchanged. History: day groups, local time and word count, copy, footer, knot empty state. DESIGN.md: new section The windows. fmt, both clippys, tests, bundle and self-test (pass, 40 of 40) all OK. Captures in scratchpad restyle/windows/. Not checked by hand: recording a shortcut (ring, refusal, Cancel), sidebar clicks, the model menu.
 
+Merged to main and pushed as c214eb7. Orchestrator re-ran every gate (one timing test flaked under load and passed 6 reruns: tuh-01M4NXG7XGT9V9TPESKKJESVBN) and the self-test, 40/40.
+
 ## History
 
 ### 2026-10-11 15:24 UTC — edit by `brandon`
@@ -24,3 +26,11 @@ description edited
 ### 2026-10-11 16:40 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 16:50 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 16:50 UTC — edit by `brandon`
+
+status open→done

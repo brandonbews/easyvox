@@ -2,7 +2,7 @@
 
 `tuh-01M4NR75GB4AD01K44V0W0P35Y`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `design` `app` `overlay`
 - **Created:** 2026-10-11 15:10 UTC by `brandon`
@@ -17,6 +17,8 @@ Part 2 (A3-A6) done in the same worktree, uncommitted (Part 1 is b66996e). A3: m
 
 Orchestrator: both parts pass fmt, both clippy runs, cargo test, the ignored release tests and the self-test bundle build; committed on worktree-agent-a5c0f787750044b9e as b66996e and 00dce18. Not merged yet: the self-test and captures wait until Brandon's EasyVox (testing) is closed. The windows lane (A7-A9) builds on the same branch.
 
+Merged to main and pushed as 9583927 and c2e8837 (rebased). Self-test 40/40 on the rebased branch.
+
 ## History
 
 ### 2026-10-11 15:23 UTC — edit by `brandon`
@@ -30,3 +32,11 @@ description edited
 ### 2026-10-11 16:08 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 16:50 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 16:50 UTC — edit by `brandon`
+
+status open→done
