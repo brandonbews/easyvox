@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 3 ready · 2 blocked · 26 on hold · 41 inbox · 39 done · 1 cancelled
+0 in progress · 4 ready · 2 blocked · 26 on hold · 41 inbox · 39 done · 1 cancelled
 
 ## In progress
 
@@ -13,6 +13,7 @@ _None._
 | [`tuh-p35y`](tasks/tuh-01M4NR75GB4AD01K44V0W0P35Y.md) | Restyle the app to the design hand-off: brand, icon, menu bar, pill, notices, placement (lane A1-A6) | 1 | `design` `app` `overlay` |
 | [`tuh-n2hd`](tasks/tuh-01M4NR75PPG1ZFEZ3ZNXQEN2HD.md) | Restyle Settings, setup and History to the design hand-off (lane A7-A9) | 2 | `design` `app` |
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
+| [`tuh-svbn`](tasks/tuh-01M4NXG7XGT9V9TPESKKJESVBN.md) | Flaky test: session::tests::speech_moves_the_level_meter_at_up_to_its_rate failed once under load | 3 | `test` `flaky` |
 
 ## Blocked / waiting
 
