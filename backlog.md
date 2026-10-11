@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 0 ready · 2 blocked · 23 on hold · 9 inbox · 34 done · 0 cancelled
+0 in progress · 0 ready · 2 blocked · 23 on hold · 10 inbox · 34 done · 0 cancelled
 
 ## In progress
 
@@ -60,6 +60,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-rvra`](tasks/tuh-01M4H2EGY7M3P5SK0T6XVARVRA.md) Speak French, get English
 - [`tuh-bdwr`](tasks/tuh-01M4H2EGZ33FCMX66PPPCBBDWR.md) Linux port (X11 first; Wayland needs per-desktop work)
 - [`tuh-k3k5`](tasks/tuh-01M4HT8MFHW8DYWZ16Z7JYK3K5.md) Pause finder: add a noise-floor term to quiet_level (floor + 6 dB) if louder rooms start forcing cuts
+- [`tuh-4140`](tasks/tuh-01M4MGCF0JZW3A508YWHTS4140.md) Website: a condensed, visual page of our benchmark and efficiency findings
 
 ## Done
 
