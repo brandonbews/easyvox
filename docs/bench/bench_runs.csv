@@ -20,3 +20,17 @@ v3/tts-a-v2,v3,f424519,parakeet-tdt-0.6b-v2-q5_k_m-gguf,3,1095,6,0.55,0,0,0.0146
 v3/tts-a-v3,v3,f424519,parakeet-tdt-0.6b-v3-q5_k_m-gguf,3,1095,15,1.37,0,0,0.0167,137.3,135.1,89.1
 v3/tts-b-v2,v3,f424519,parakeet-tdt-0.6b-v2-q5_k_m-gguf,3,1095,6,0.55,0,0,0.0146,137.1,153.9,79.2
 v3/tts-b-v3,v3,f424519,parakeet-tdt-0.6b-v3-q5_k_m-gguf,3,1095,15,1.37,0,0,0.0166,137.4,164.3,81
+candidates/tts-can,candidates,93fc164+catalog,canary-180m-flash-q5_k_m-gguf,3,1095,78,7.12,0,0,0.0158,94.7,48.9,72.8
+candidates/tts-cohere,candidates,93fc164+catalog,cohere-transcribe-03-2026-q5_k_m-gguf,3,1095,6,0.55,0,0,0.0422,720.1,471.2,253.5
+candidates/tts-cq,candidates,93fc164+catalog,canary-qwen-2.5b-q5_k_m-gguf,3,1095,18,1.64,0,0,0.0912,1310.6,958.6,586.5
+candidates/tts-distil,candidates,93fc164+catalog,distil-whisper-large-v3.5-f16-ggml,3,1095,24,2.19,0,0,0.1244,1028,359.6,1013.7
+candidates/tts-gr41,candidates,93fc164+catalog,granite-speech-4.1-2b-q5_k_m-gguf,3,1095,21,1.92,0,0,0.1064,729.3,529.9,518.8
+candidates/tts-gr5,candidates,93fc164+catalog,granite-speech-5.0-470m-turboctc-q5_k_m-gguf,3,1095,60,5.48,0,0,0.0102,180.6,115.6,128.7
+candidates/tts-moon,candidates,93fc164+catalog,moonshine-streaming-medium-q8_0-gguf,3,1095,18,1.64,0,0,0.0644,162.7,90.3,190.1
+candidates/tts-nemo,candidates,93fc164+catalog,nemotron-speech-streaming-en-0.6b-q5_k_m-gguf,3,1095,9,0.82,0,0,0.0158,262.4,133.4,97.2
+candidates/tts-qwen,candidates,93fc164+catalog,qwen3-asr-1.7b-q5_k_m-gguf,3,1095,78,7.12,0,0,0.0898,855.3,714,475.9
+candidates/tts-turbo,candidates,93fc164+catalog,whisper-large-v3-turbo-q5_k_m-gguf,3,1095,10,0.91,0,0,0.1393,321.1,186.5,1141.4
+candidates/tts-uni,candidates,93fc164+catalog,parakeet-unified-en-0.6b-q5_k_m-gguf,3,1095,6,0.55,0,0,0.0154,265.8,112.5,84.1
+candidates/tts-v2,candidates,93fc164+catalog,parakeet-tdt-0.6b-v2-q5_k_m-gguf,3,1095,6,0.55,0,0,0.0146,262.8,159.6,79.1
+candidates/tts-v3,candidates,93fc164+catalog,parakeet-tdt-0.6b-v3-q5_k_m-gguf,3,1095,15,1.37,0,0,0.0167,277,160.8,85.8
+candidates/tts-wh,candidates,93fc164+catalog,whisper-base.en-q8_0-gguf,3,1095,15,1.37,0,0,0.0144,80.9,52.8,100.5

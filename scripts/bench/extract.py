@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Rebuild docs/bench/*.csv from EasyVox's raw bench runs of 9-10 October 2026. Numbers only.
+"""Rebuild docs/bench/*.csv from EasyVox's raw bench runs of 9-11 October 2026. Numbers only.
 
-    python3 -I scripts/bench/extract.py --s1 DIR --s2 DIR [--out docs/bench]
+    python3 -I scripts/bench/extract.py --s1 DIR --s2 DIR [--s3 DIR] [--out docs/bench]
                                         [--testdata testdata] [--recordings recordings]
 
---s1 and --s2 are the two scratch folders the runs were made in (docs/bench/README.md lists what
-each one holds). --recordings is only read for the loudness of the private read-aloud clip, to
+--s1 and --s2 are the two scratch folders the runs of 9-10 October were made in, and --s3 the
+folder of the 11 October candidate runs (docs/bench/README.md lists what each one holds). Leave
+--s3 out and the 11 October rows are left out. --recordings is only read for the loudness of the private read-aloud clip, to
 place the start of its speech; leave it out and those few onsets stay empty.
 
 The raw files hold text decoded from private recordings: final_text in the session JSON, and
@@ -39,6 +40,15 @@ MODELS = {  # model id -> short alias used in run ids
     "parakeet-unified-en-0.6b-q5_k_m-gguf": "uni",
     "whisper-base.en-q8_0-gguf": "wh",
     "canary-180m-flash-q5_k_m-gguf": "can",
+    "whisper-large-v3-turbo-q5_k_m-gguf": "turbo",
+    "distil-whisper-large-v3.5-f16-ggml": "distil",
+    "qwen3-asr-1.7b-q5_k_m-gguf": "qwen",
+    "cohere-transcribe-03-2026-q5_k_m-gguf": "cohere",
+    "canary-qwen-2.5b-q5_k_m-gguf": "cq",
+    "granite-speech-4.1-2b-q5_k_m-gguf": "gr41",
+    "granite-speech-5.0-470m-turboctc-q5_k_m-gguf": "gr5",
+    "nemotron-speech-streaming-en-0.6b-q5_k_m-gguf": "nemo",
+    "moonshine-streaming-medium-q8_0-gguf": "moon",
 }
 SHORT_TAGS = {"parakeet-tdt": "v2", "parakeet-unified-en": "uni", "whisper-base.en": "wh"}
 
@@ -73,6 +83,7 @@ STUDIES = {
     "meter": ("Level meter", "2026-10-10"),
     "whisper": ("Whisper's preview", "2026-10-10"),
     "overlay": ("Overlay animation", "2026-10-10"),
+    "candidates": ("Every candidate, one pipeline", "2026-10-11"),
 }
 
 SECTIONS = {v[0] for v in STUDIES.values()}
@@ -644,7 +655,7 @@ def sidecar(base, *exts):
     return None
 
 
-def enumerate_runs(S1, S2):
+def enumerate_runs(S1, S2, S3=None):
     runs, benches, apps = [], [], []
 
     def add(study, label, path, build, settings="", idx=None, err=None, extra=None):
@@ -810,6 +821,18 @@ def enumerate_runs(S1, S2):
         else:
             bin_ = "bench-head"
         add("whisper", s, p, bin_.replace("bench-", ""))
+
+    # ---- S3: 11 October, every candidate model on this build's defaults (runs/: run1.sh's files
+    # for the sessions, bench results for the text-to-speech clips; s = read aloud, r = ramble,
+    # tts = the clips)
+    if S3:
+        for p in session_files(os.path.join(S3, "runs")):
+            s = stem(p)
+            j = load_json(p)
+            if j and "clips" in j:
+                benches.append(Run(study="candidates", label=s, path=p, build="93fc164+catalog"))
+            elif j and "finalize_ms" in j:
+                add("candidates", s, p, "93fc164+catalog")
 
     # ---- app self-test runs
     for p in session_files(os.path.join(S1, "ab")):
@@ -1058,19 +1081,20 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--s1", required=True, help="scratch folder of the 9 Oct evening to 10 Oct runs")
     ap.add_argument("--s2", required=True, help="scratch folder of the 9 Oct daytime runs")
+    ap.add_argument("--s3", help="scratch folder of the 11 Oct candidate runs (optional)")
     here = os.path.dirname(os.path.abspath(__file__))
     repo = os.path.dirname(os.path.dirname(here))
     ap.add_argument("--out", default=os.path.join(repo, "docs/bench"))
     ap.add_argument("--testdata", default=os.path.join(repo, "testdata"))
     ap.add_argument("--recordings", default=os.path.join(repo, "recordings"))
     a = ap.parse_args()
-    S1, S2 = a.s1, a.s2
-    for d in (S1, S2):
+    S1, S2, S3 = a.s1, a.s2, a.s3
+    for d in (S1, S2) + ((S3,) if S3 else ()):
         if not os.path.isdir(d):
             die("no such folder: %s" % d)
     os.makedirs(a.out, exist_ok=True)
 
-    runs, benches, apps = enumerate_runs(S1, S2)
+    runs, benches, apps = enumerate_runs(S1, S2, S3)
     seen = set()
     for x in runs + apps:
         if x["run_id"] in seen:

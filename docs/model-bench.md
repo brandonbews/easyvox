@@ -5,7 +5,7 @@ Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk. [Overlay animation](#overlay-animation) measured what the overlay's fades and glides cost. [Whisper's preview](#whispers-preview) re-measured Whisper base.en's flickering, costly preview on those defaults, and lines the preview's passes up by text as well as time.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk. [Overlay animation](#overlay-animation) measured what the overlay's fades and glides cost. [Whisper's preview](#whispers-preview) re-measured Whisper base.en's flickering, costly preview on those defaults, and lines the preview's passes up by text as well as time. [Every candidate, one pipeline](#every-candidate-one-pipeline-11-october) then ran all fourteen candidate models, Whisper large-v3-turbo among them, through today's pipeline on the same audio: the first table where every model compares directly.
 
 ## Results
 
@@ -17,6 +17,8 @@ Later the same day the engine moved to one pipeline for every model (no native s
 | Parakeet TDT 0.6B v3 Q5_K_M (bench only, 10 October) | 549 MB | 1.37 % | 0 of 84 | "Thank you." | – | – | – | 0.017 | 716 / 806 MB |
 | Canary 180M Flash Q5_K_M (bench only) | 159 MB | **7.12 %** | 0 of 84 | nothing | 0.45 s | 0.09 / 0.20 / 0.51 s | 5–14 % | 0.016 | 243 / 312 MB |
 | **Whisper base.en Q8_0** (alternative) | 85 MB | 1.37 % | 0 of 84 | "you" | 0.51 s | 0.17 / 0.17 / 0.52 s | 31–36 % | 0.014 | 205 / 259 MB |
+
+Superseded for every model by [Every candidate, one pipeline](#every-candidate-one-pipeline-11-october), which runs these clips and the two real recordings on today's pipeline; this table stays as the record of 9 October.
 
 How to read it:
 
@@ -40,6 +42,116 @@ How to read it:
 Whisper base.en's own flaw showed up too: it wrote "you" for 2 s of silence and added a stray "Mhm." after one long clip. The app should skip the final pass when a recording holds no speech. (It does now, for every model: see [First words and silence](#first-words-and-silence).)
 
 **v2: Q5_K_M replaces Q8_0.** Both files wrote exactly the same text for every clip. First words appear just as fast (0.45–0.48 s for both). Q5_K_M decodes about 5 % slower, so its final text lands 10–20 ms later (medians of 3 sessions each), well inside the run-to-run spread and far below what anyone can notice. In return it's 191 MB smaller to download and uses about 190 MB less memory. The Q8_0 entry is gone from the catalog.
+
+## Every candidate, one pipeline (11 October)
+
+Run on 11 October 2026, same M4, for the ledger task "Bench every candidate model on the real recordings with the current pipeline". The sections below measured the models on different days, on different subsets, and on the pipeline of their day: [Results](#results) and [Real voice](#real-voice) ran a preview pass every 0.4 s, Parakeet v3 and Canary ran on different days with different subsets, and Whisper large-v3-turbo only ran in the first spike (`docs/spikes/core.md`), through whisper-rs, on the text-to-speech clips. Here every candidate ran through one build, with its defaults and nothing changed (no `--set`): a preview pass every 1.6 s from 1 s before the confirmed words, passes lined up by text, chunks of about 30 s, and nothing decoded before speech. Same audio, same conditions, so these numbers compare with each other.
+
+**The models.** Fourteen: the five transcribe.cpp models in the catalog until now, Whisper large-v3-turbo, and every other model in `DESIGN.md`'s "Other models we looked at" that runs on transcribe-cpp 0.3.1. The new ones are bench-only catalog entries (`crates/easyvox-core/src/models.rs`, `scripts/fetch-model.sh`), each pinned to a Hugging Face commit, with its size and sha256 checked against Hugging Face's LFS metadata; the app never lists a bench-only entry.
+
+- **Files:** Q5_K_M from `handy-computer` (transcribe.cpp's authors) wherever it's published. Moonshine Streaming comes in Q8_0 only. Distil-Whisper has no GGUF at all: transcribe.cpp also loads whisper.cpp's own `.bin` format, and the authors publish theirs in F16 only, so that's the file.
+- **Sizes:** Moonshine Streaming ran as Medium, the most accurate of its three; Granite Speech 4.x as 4.1 2B, the newest of four (4.0 1B, 4.1 2B-NAR and 4.1 2B-plus are also published); Distil-Whisper as large-v3.5.
+- **Not run:** Phonon-2 and Parakeet Redux (not on transcribe.cpp yet, [#189](https://github.com/handy-computer/transcribe.cpp/issues/189)), Kyutai STT (another runtime) and Apple SpeechAnalyzer (part of macOS, not a transcribe.cpp model).
+
+**The runs.** The two recordings of [Real voice](#real-voice), the author's own voice: the 81 s read-aloud clip (238 words, with its reference) and the 5-minute ramble (no reference), as real-time `session` replays, the app's code path. Plus the 13 text-to-speech clips and the 2 s silent clip, each decoded on its own (`bench`, 3 times each).
+
+- **Tier 1**, the catalog's five and turbo: the read-aloud clip 3 times, the ramble twice, the clips.
+- **Tier 2**, the other eight: the read-aloud clip 3 times, the ramble once, the clips. Cohere Transcribe came within a point of v2 on the read-aloud clip and about a second of release, so it got a second ramble too.
+- **Every ramble was an energy run** as in [Lightness](#lightness): `macmon` from a minute before to a minute after, the CPU rail taken robustly. The read-aloud runs had 20 s of idle either side, enough for the GPU's power, not for energy.
+- **Conditions:** the models took turns, in a different order each round, each run started on a quiet Mac (`scripts/bench/quiet.sh`: 1-minute load under 2.5, nothing building, a 15 s probe with the GPU off and the CPU under 1.2 W). The load average was 1.2–2.7 (median 2.0) at the start of the runs, and other processes used 23–59 % of one core (median 34 %) on average during them, logged every 2 s. `EASYVOX_CONFIG` pointed at an empty file. 77 runs; every one finished, and none was dropped.
+- **Every model wrote the same final text in all 3 runs** of the read-aloud clip, and in both rambles where it had two. The catalog's five wrote word for word the read-aloud text of [Real voice](#real-voice) and [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2), and v2 and v3 the same ramble.
+
+| Model (file) | Download | Read aloud: word errors (of 238) | Text-to-speech clips: word errors | Empty or failed | 2 s of silence | First words | Text ready after release: read aloud / ramble | CPU while talking | GPU while talking: power / busy | Energy per minute | Memory, loaded / peak | Preview revisions |
+|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| Cohere Transcribe 03-2026 (Q5_K_M) | 1,770 MB | 0.84 % (2) | 0.55 % (2) | 0 of 39 | "Thank you." | 0.70–0.76 s | 0.98–1.20 / 0.91–1.07 s | 5 % | 1.80–1.85 W / 77–79 % | 138 J (136–141) | 1,934–1,935 / 1,988–1,991 MB | 31–33 % |
+| **Parakeet TDT 0.6B v2** (Q5_K_M; the default) | 539 MB | 1.68 % (4) | 0.55 % (2) | 0 of 39 | nothing | 0.60–0.64 s | 0.39–0.41 / 0.34–0.37 s | 8–9 % | 0.46–0.49 W / 68–75 % | 40 J (40.0–40.1) | 705–706 / 741–743 MB | 33–42 % |
+| Parakeet Unified EN 0.6B (Q5_K_M) | 541 MB | 2.10 % (5) | 0.55 % (2) | 0 of 39 | nothing | 0.62–0.66 s | 0.43–0.58 / 0.35–0.37 s | 9 % | 0.44–0.47 W / 74–78 % | 44 J (43.4–45.0) | 709–710 / 745–747 MB | 25–29 % |
+| Parakeet TDT 0.6B v3 (Q5_K_M) | 549 MB | 2.10 % (5) | 1.37 % (5) | 0 of 39 | "Thank you." | 0.62–0.63 s | 0.42–0.46 / 0.37–0.43 s | 12–14 % | 0.57–0.63 W / 73–83 % | 42 J (39.0–45.7) | 772 / 812–814 MB | 50–55 % |
+| **Whisper large-v3-turbo** (Q5_K_M; new) | 620 MB | 2.52 % (6) | 0.91 % (3) | 0 of 39 | "you" | 1.59–1.63 s | 1.28–2.18 / 1.78–1.85 s | 10–11 % | 11.69–11.78 W / 93–95 % | 796 J (792–800) | 849 / 905–908 MB | 33–49 % |
+| Canary-Qwen 2.5B (Q5_K_M) | 1,984 MB | 2.52 % (6) | 1.64 % (6) | 0 of 39 | "Transcribe the text" | 0.82–0.86 s | 2.09–2.12 / 1.78 s | 6–7 % | 4.22–4.53 W / 79–89 % | 284 J | 3,521 / 3,557–3,558 MB | 34–45 % |
+| Distil-Whisper large-v3.5 (F16, whisper.cpp `.bin`) | 1,520 MB | 3.36 % (8) | 2.19 % (8) | 0 of 39 | "you" | 1.48–1.52 s | 1.25–1.37 / 1.13 s | 9–10 % | 10.13–10.20 W / 95–98 % | 688 J | 1,801–1,802 / 1,852–1,853 MB | 32–43 % |
+| Granite Speech 4.1 2B (Q5_K_M) | 1,830 MB | 4.20 % (10) | 1.92 % (7) | 0 of 39; 3 preview passes | a sentence in Spanish | 0.79–0.84 s | 2.58–2.94 / 2.31 s | 6 % | 4.53–5.06 W / 84–88 % | 323 J | 2,630–2,631 / 2,742–2,744 MB | 34–36 % |
+| Moonshine Streaming Medium (Q8_0) | 296 MB | 4.62 % (11) | 1.64 % (6) | 0 of 39; 1 preview pass | a line in Thai | 0.61–0.65 s | 1.57–1.73 / 1.12 s | 8–9 % | 0.60–0.67 W / 64–70 % | 57 J | 724–725 / 1,077–1,078 MB | 62–69 % |
+| Qwen3-ASR 1.7B (Q5_K_M) | 1,517 MB | 5.88 % (14) | 7.12 % (26) | 0 of 39 | nothing | 0.80–0.88 s | 1.91–2.05 / 1.71 s | 8–9 % | 4.99–5.34 W / 82–90 % | 292 J | 2,637–2,638 / 2,671–2,674 MB | 45–46 % |
+| **Whisper base.en** (Q8_0; the small option) | 85 MB | 6.72 % (16) | 1.37 % (5) | 0 of 39 | "you" | 0.63 s | 0.25–0.33 / 0.18–0.25 s | 10–11 % | 0.55–0.60 W / 62–71 % | 42 J (41.2–43.7) | 234–235 / 269 MB | 47–62 % |
+| Granite Speech 5.0 470M TurboCTC (Q5_K_M) | 336 MB | 9.24 % (22) | 5.48 % (20) | 0 of 39 | "i" | 0.59–0.62 s | 0.26–0.33 / 0.26 s | 2 % | 0.33–0.37 W / 71–76 % | 27 J | 440–441 / 551–554 MB | 35–42 % |
+| Nemotron Speech Streaming EN 0.6B (Q5_K_M) | 539 MB | 9.66 % (23) | 0.82 % (3) | 0 of 39 | nothing | 0.62–0.65 s | 0.41–0.43 / 0.37 s | 9 % | 0.49–0.52 W / 71–79 % | 38 J | 700–701 / 736–740 MB | 38–44 % |
+| Canary 180M Flash (Q5_K_M) | 159 MB | 11.76 % (28) | 7.12 % (26) | 0 of 39 | nothing | 0.56–0.61 s | 0.41–0.42 / 0.33–0.34 s | 3–4 % | 0.50–0.54 W / 67–72 % | 30 J (29.5–30.9) | 271–272 / 324–325 MB | 52–54 % |
+
+How to read it:
+
+- **Order:** by word errors on the read-aloud clip. All but v2 and Whisper base.en are bench only.
+- **Read aloud:** the 81 s clip, 3 runs each; the same text in every run, so the same count. Like the rest of this file, the scorer ignores punctuation and case.
+- **Text-to-speech clips:** the 13 speech clips, 3 decodes each (365 words a round).
+- **Empty or failed:** speech-clip decodes that came back empty or with an error (of 39), then preview passes that failed in the model's 4 or 5 sessions.
+- **2 s of silence:** what the model wrote for `silence_2s.wav` decoded on its own. The app decodes nothing for a recording without speech (see [First words and silence](#first-words-and-silence)), so this only matters if the speech detector errs.
+- **First words:** after the speech starts, on the read-aloud clip.
+- **Text ready after release:** the read-aloud clip (3 runs) and the end of the ramble (1 or 2 runs).
+- **CPU while talking:** the bench's share of one core over the read-aloud session. **GPU while talking:** the GPU's power on top of the idle Mac (`macmon`), then macOS's "Device Utilization %" (`ioreg`), both over the read-aloud sessions. As [Lightness](#lightness) found, the second barely moves with cost: the power is the one to read.
+- **Energy per minute:** of rambling, the SoC on top of the idle Mac (two runs for tier 1 and Cohere, the mean and the range; one for the rest).
+- **Memory:** the process's footprint once loaded (after a warm-up decode), and its peak at the end of the read-aloud session.
+- **Preview revisions:** the share of preview updates that changed words already on screen, on the read-aloud clip.
+
+**Ramble** (5 minutes; 2 runs for tier 1 and Cohere, 1 for the rest):
+
+| Model (runs) | Energy per minute | GPU power added / active | CPU while talking | Text ready after release | Peak memory | Preview passes | Preview behind the voice: median / 95th pct | Words written | Differs from v2's text | Longest run of v2's words missing / added | Back-to-back repeats | Hesitations written |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Cohere Transcribe 03-2026 (2) | 138 J (136–141) | 1.95–1.98 W / 18 % | 5.6–5.7 % | 0.91–1.07 s | 2,029 MB | 185–186 | 0.89–0.93 / 2.07–2.23 s | 709 | 14 | 2 / 1 | 0 | 0 |
+| **Parakeet TDT 0.6B v2** (2) | 40 J (40.0–40.1) | 0.50–0.53 W / 6 % | 7.4–7.5 % | 0.34–0.37 s | 782–783 MB | 185–186 | 0.74–0.80 / 1.94–1.96 s | 712 | 0 | 0 / 0 | 0 | 0 |
+| Parakeet Unified EN 0.6B (2) | 44 J (43.4–45.0) | 0.51–0.52 W / 6 % | 8.4–8.7 % | 0.35–0.37 s | 786–808 MB | 186 | 0.79–0.83 / 1.78–1.87 s | 713 | 16 | 1 / 2 | 1 | 0 |
+| Parakeet TDT 0.6B v3 (2) | 42 J (39.0–45.7) | 0.53 W / 6 % | 10.2–10.4 % | 0.37–0.43 s | 807–844 MB | 186 | 0.80–0.86 / 2.43–2.61 s | 742 | 50 | 1 / 3 | 2 | 25 |
+| **Whisper large-v3-turbo** (2) | 796 J (792–800) | 12.28–12.38 W / 69–70 % | 11.0–11.2 % | 1.78–1.85 s | 864–910 MB | 179 | 1.83–1.84 / 3.27–3.33 s | 711 | 22 | 1 / 1 | 0 | 1 |
+| Canary-Qwen 2.5B (1) | 284 J | 4.03 W / 32 % | 6.8 % | 1.78 s | 3,619 MB | 181 | 1.22 / 2.56 s | 716 | 19 | 1 / 2 | 2 | 0 |
+| Distil-Whisper large-v3.5 (1) | 688 J | 10.52 W / 62 % | 10.5 % | 1.13 s | 1,885 MB | 180 | 1.70 / 2.97 s | 713 | 23 | 1 / 1 | 0 | 0 |
+| Granite Speech 4.1 2B (1) | 323 J | 4.72 W / 38 % | 5.7 % | 2.31 s | 2,812 MB | 178 | 1.30 / 3.24 s | 712 | 27 | 3 / 1 | 0 | 0 |
+| Moonshine Streaming Medium (1) | 57 J | 0.64 W / 16 % | 7.6 % | 1.12 s | 1,178 MB | 185 | 1.00 / 2.69 s | 714 | 34 | 4 / 2 | 1 | 0 |
+| Qwen3-ASR 1.7B (1) | 292 J | 4.05 W / 33 % | 7.7 % | 1.71 s | 2,713 MB | 182 | 1.21 / 2.60 s | 718 | 32 | 1 / 2 | 2 | 1 |
+| **Whisper base.en** (2) | 42 J (41.2–43.7) | 0.54–0.55 W / 7 % | 10.2–10.4 % | 0.18–0.25 s | 269–277 MB | 186 | 0.77–0.78 / 1.99–2.06 s | 708 | 34 | 1 / 1 | 0 | 0 |
+| Granite Speech 5.0 470M TurboCTC (1) | 27 J | 0.41 W / 5 % | 2.2 % | 0.26 s | 569 MB | 185 | 0.52 / 1.66 s | 747 | 91 | 1 / 3 | 2 | 0 |
+| Nemotron Speech Streaming EN 0.6B (1) | 38 J | 0.54 W / 6 % | 8.4 % | 0.37 s | 777 MB | 186 | 0.78 / 1.78 s | 712 | 31 | 2 / 2 | 2 | 0 |
+| Canary 180M Flash (2) | 30 J (29.5–30.9) | 0.40–0.42 W / 7 % | 3.2 % | 0.33–0.34 s | 349–351 MB | 185 | 0.98–1.07 / 6.17–6.24 s | 711 | 34 | 1 / 2 | 0 | 2 |
+
+- **Nothing broke on 5 minutes.** Every model polished the same 13 chunks and wrote 708–747 words, against v2's 712. Lined up with v2's text, no model left out more than 4 of v2's words in a row anywhere, or added more than 3: no cut-off, no dropped chunk. Back-to-back repeats of 2–8 words came 0–2 times a run, and no session hung (each had a watchdog). "Differs from v2's text" is the word edit distance; with no reference there's no telling who's right, and Granite 5.0 TurboCTC's 91 are mostly its spelling ("here is" for "here's").
+- **Cohere's cut-off past ~50 s** ([#128](https://github.com/handy-computer/transcribe.cpp/issues/128)) can't show in this pipeline as long as chunks stay near 30 s: a chunk only runs past 50 s after nearly a minute without a pause, which neither recording has.
+- **Hesitations:** v3 wrote 25 again (see [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2)); no other model more than 2.
+
+What the numbers say:
+
+- **Accuracy on a real voice.** Cohere Transcribe made the fewest errors on the read-aloud clip, 2 words to v2's 4, and tied v2 and Unified on the text-to-speech clips (0.55 %, the same two names). Unified and v3 made 5; turbo and Canary-Qwen 6. One speaker and one 238-word clip: two words is a hint, not a ranking.
+- **Numbers as words.** Canary 180M, Nemotron and Qwen3-ASR wrote most numbers of the read-aloud clip as words: 25, 18 and 15 number words where the reference has 4 (the others wrote 3–6), and 0, 4 and 5 numbers in digits where it has 11. That's most of their errors. On the number clips Canary and Qwen3-ASR got 21 and 18 of 37 words wrong, Nemotron 1.
+- **Granite 5.0 TurboCTC writes lowercase with no punctuation:** not one capital letter in the read-aloud text, and 2 punctuation marks where the reference has 36. Its 9.2 % doesn't count either.
+- **Big models cost time and energy.** The three Parakeets, Canary 180M, Nemotron, Granite 5.0 and Whisper base.en had the text ready 0.18–0.58 s after release and took 27–46 J a minute of rambling. Cohere took 0.9–1.2 s and 136–141 J. Qwen3-ASR, Canary-Qwen and Granite 4.1, 1.5–2 GB each and built on a language model, took 1.7–2.9 s and 284–323 J, with 2.6–3.6 GB of memory. Their preview passes took 0.46–0.63 s each (v2's 0.11 s), so they ran a few fewer: 178–182 on the ramble against 185–186.
+- **The large Whispers pay for 30 s on every pass.** transcribe.cpp pads every Whisper decode under 30 s to a full 30 s window (`arch/whisper/model.cpp`, "short-form pads to 30s"), so a 5 s preview pass costs about as much as a 25 s chunk: 1.1 s for turbo and 1.0 s for Distil-Whisper, against 1.2 s for their chunks. With a pass every 1.6 s that keeps the GPU active 62–70 % of the time, at about 12 W for turbo and 10.5 W for Distil (v2: 0.5 W): about 795 and 690 J a minute, 17–20 times v2's. Their first words come 1.5–1.6 s after speech starts, waiting for the first pass. And a release usually lands while a pass is running, which can't be stopped midway (see [Lightness](#lightness)): in 4 of turbo's 5 releases it waited 0.5–0.9 s for one, of its 1.3–2.2 s. Whisper base.en pays for 30 s too, but its encoder is small.
+- **Moonshine Streaming** is small to download (296 MB) but grows from 0.72 GB loaded to 1.1–1.2 GB at the peak, and its chunk decodes took about 1.2 s, so its text came 1.1–1.7 s after release. One of its preview passes, in the first read-aloud run, failed at transcribe.cpp's generation cap ("output truncated before end-of-stream").
+- **Failed preview passes:** besides Moonshine's one, Granite 4.1 had three in a row in its second read-aloud run, 60–64 s in, stopped by transcribe.cpp's repetition guard ("output began repeating before end-of-stream"). The session reports a failed pass as an error and the preview keeps its text (the app would show the error as a note in the overlay); the final text was the same as in the other runs. No chunk or final decode failed, on any model.
+- **Made-up text on silence**, decoded on its own: "you" (the three Whispers), "Thank you." (v3, Cohere), "i" (Granite 5.0), its own prompt "Transcribe the text" (Canary-Qwen), a sentence in Spanish (Granite 4.1: "Es una de las principales localidades de la provincia.") and a line in Thai (Moonshine). v2, Unified, Canary 180M, Nemotron and Qwen3-ASR wrote nothing.
+- **The catalog's five** repeat their earlier numbers on today's pipeline: the same read-aloud text (v2 1.68 %, Unified and v3 2.10 %, Whisper base.en 6.72 %, Canary 11.76 %), the same text-to-speech error rates as in [Results](#results), and v2's and v3's energy within the noise of [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) (41.5 and 40.9 J then).
+- **Limits:** one speaker, one Mac, two recordings, the same as every section here. The clips are text-to-speech. Nothing here tests other languages, which is where v3, Canary, Qwen3-ASR, Cohere and Whisper would have more to offer.
+
+```sh
+source "$HOME/.cargo/env"
+cargo build -p easyvox-bench --release    # once; the runs used a copy of this binary
+B=target/release/easyvox-bench
+R=recordings                              # private, gitignored
+export EASYVOX_MODELS_DIR=~/Library/Caches/easyvox-bench/models   # the new downloads, and links
+                                          # to the four models already in the app's folder
+export EASYVOX_CONFIG=$PWD/empty.toml     # an empty file
+scripts/fetch-model.sh whisper-large-v3-turbo-q5_k_m-gguf          # and so on, for each new id
+M=whisper-large-v3-turbo-q5_k_m-gguf
+# The text-to-speech clips and the silent one, 3 decodes each.
+$B bench --model $M --reps 3 --out tts.json
+# Read aloud, 3 rounds over all fourteen models, in a different order each round:
+# run1.sh with 20 s of idle either side (macmon, ps and ioreg around the session).
+OUT=runs MODEL=$M PRE=20 IDLE=0 POST=20 REF=$R/structured-reference.txt \
+  scripts/bench/run1.sh s1-turbo $B $R/structured.wav
+# Ramble: an energy run as in "Lightness", twice for tier 1, once for tier 2.
+OUT=runs MODEL=$M scripts/bench/run1.sh r1-turbo $B $R/ramble.wav
+# Before every run: scripts/bench/quiet.sh, with LOAD_MAX=2.5 CPU_W_MAX=1.2 CPU_W_PEAK=8.
+```
+
+- **Where the numbers come from:** `bench`: `wer_total`, `empty_speech_decodes`, `failed_speech_decodes`, the silent clip's `hypotheses_distinct`. `session`: `wer.wer`, `partials.first_partial_ms` less `speech_onset_secs`, `finalize_ms` (with `final_wait_ms` and `final_decode_ms`), `cpu.cpu_pct_of_one_core`, `mem_before_session.footprint_mb`, `mem_end.peak_footprint_mb`, `partials.revision_rate`, `partials.passes`, `partials.pass_ms_mean`, `chunks`, `errors`. Energy, GPU power and GPU active from `macmon` (`scripts/bench/hybrid.py`, the same as `extract.py`'s `energy.csv`); "Device Utilization %" from the `G` lines `run1.sh` logs every 2 s.
+- **The ramble's comparison with v2's text** aligns each final text with v2's first run, word by word (Python's `difflib`, after the scorer's normalisation), and counts the longest runs left out and added and the back-to-back repeats, printing numbers only. The digits, number words, capitals and punctuation marks above are counts of the same kind.
+- The per-run numbers are in `docs/bench/` (study `candidates`).
 
 ## One pipeline
 

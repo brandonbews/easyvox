@@ -15,7 +15,8 @@
 # shasum, which macOS ships with.
 set -euo pipefail
 
-# The GGUF entries of the catalog (crates/easyvox-core/src/models.rs), one model per line:
+# The transcribe.cpp entries of the catalog (crates/easyvox-core/src/models.rs): GGUF files, plus
+# one whisper.cpp .bin that transcribe.cpp also loads. One model per line:
 #   id  offering  bytes  sha256  path (in the models folder)  url
 # crates/easyvox-core/tests/fetch_script.rs checks this table against the catalog, and the one
 # `default` line against easyvox_core::RECOMMENDED_MODEL. The sherpa-onnx archives (bench only)
@@ -26,6 +27,15 @@ MODELS=(
   "parakeet-unified-en-0.6b-q5_k_m-gguf bench-only 540795264 f9def6f9b4e83ab7d006df3e1b676dfa1f973a3b6da232a9c99fcaa66bcd2836 gguf/parakeet-unified-en-0.6b-Q5_K_M.gguf https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/d5249700b2382bf5c5024c2421d101b8db54a629/parakeet-unified-en-0.6b-Q5_K_M.gguf"
   "canary-180m-flash-q5_k_m-gguf bench-only 158704416 73c4861a43fe848cc7a64c179c08da04e985efac03f3e4684a3f5e94a1bb33fe gguf/canary-180m-flash-Q5_K_M.gguf https://huggingface.co/handy-computer/canary-180m-flash-gguf/resolve/46b86384d1db59108d6e060a0fc00924cb58499f/canary-180m-flash-Q5_K_M.gguf"
   "parakeet-tdt-0.6b-v3-q5_k_m-gguf bench-only 548946272 cc722e76adc1a629fc0b2535de879d99b8160d07ad4c0215e2ca7d7ea0ae4b8f gguf/parakeet-tdt-0.6b-v3-Q5_K_M.gguf https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/90f082450fcbacdb54e5900c44ef697c9ea59622/parakeet-tdt-0.6b-v3-Q5_K_M.gguf"
+  "whisper-large-v3-turbo-q5_k_m-gguf bench-only 619628128 977b5db4e004349dffd1ab9caa10ba5aaba3fc3edd3ba72cadb84328a3203e36 gguf/whisper-large-v3-turbo-Q5_K_M.gguf https://huggingface.co/handy-computer/whisper-large-v3-turbo-gguf/resolve/ceea6c8a94a21ab85be244d311e874a39344dbf5/whisper-large-v3-turbo-Q5_K_M.gguf"
+  "qwen3-asr-1.7b-q5_k_m-gguf bench-only 1517290464 034c557fe92ff8fcd9a9c041cbdaad347be0a86a58d3a348f63cf3f0180879d0 gguf/Qwen3-ASR-1.7B-Q5_K_M.gguf https://huggingface.co/handy-computer/Qwen3-ASR-1.7B-gguf/resolve/3555bd238a8572bbace3ebf60d23b036dc0a5dbe/Qwen3-ASR-1.7B-Q5_K_M.gguf"
+  "distil-whisper-large-v3.5-f16-ggml bench-only 1519521155 ec2498919b498c5f6b00041adb45650124b3cd9f26f545fffa8f5d11c28dcf26 ggml/distil-large-v3.5/ggml-model.bin https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/960ecb5c2ecfba3ebb9ebe485c1032ec266cf436/ggml-model.bin"
+  "moonshine-streaming-medium-q8_0-gguf bench-only 295793568 f7c9564249b508f6012927ec4f9e536087da53a7047f858ca9975bea5f75299e gguf/moonshine-streaming-medium-Q8_0.gguf https://huggingface.co/handy-computer/moonshine-streaming-medium-gguf/resolve/0f99e956a9e63d591ddd7f2a20dfead255e96c68/moonshine-streaming-medium-Q8_0.gguf"
+  "granite-speech-5.0-470m-turboctc-q5_k_m-gguf bench-only 335737184 a18c6882ff9dbcefbe674ccb8f8653578ed7dbc3fa9a955f036f3617b9627cce gguf/granite-speech-5.0-470m-turboctc-Q5_K_M.gguf https://huggingface.co/handy-computer/granite-speech-5.0-470m-turboctc-gguf/resolve/2b0b44d0d6c8b94a2e4f04a2cf3ec6a5c054463b/granite-speech-5.0-470m-turboctc-Q5_K_M.gguf"
+  "nemotron-speech-streaming-en-0.6b-q5_k_m-gguf bench-only 538989568 d6b8b36f9aca6a751779d064a29f6583f3e82c0c15646904383c8436a25c1489 gguf/nemotron-speech-streaming-en-0.6b-Q5_K_M.gguf https://huggingface.co/handy-computer/nemotron-speech-streaming-en-0.6b-gguf/resolve/9789e0ebf77277911272f0d9a35e1646b5aa6004/nemotron-speech-streaming-en-0.6b-Q5_K_M.gguf"
+  "cohere-transcribe-03-2026-q5_k_m-gguf bench-only 1770270208 14d02f1ad6dd77b3a60f82639879012c3adb4fe25c50a5a47a2c4c661daf1558 gguf/cohere-transcribe-03-2026-Q5_K_M.gguf https://huggingface.co/handy-computer/cohere-transcribe-03-2026-gguf/resolve/ab667acedcb5d8d56837ef3ed3568c3ad50dde47/cohere-transcribe-03-2026-Q5_K_M.gguf"
+  "canary-qwen-2.5b-q5_k_m-gguf bench-only 1983729024 d71b1d9ae442dc538665ed4df63a69520eb9be769ec0bc78c7d2f40040928306 gguf/canary-qwen-2.5b-Q5_K_M.gguf https://huggingface.co/handy-computer/canary-qwen-2.5b-gguf/resolve/df576c1641eb59bb66bc3c396bbdd8b0b113825a/canary-qwen-2.5b-Q5_K_M.gguf"
+  "granite-speech-4.1-2b-q5_k_m-gguf bench-only 1829704640 1ea15c2174b485b8de81337a1da3ae6703a7892a5330345b9a2212e9a6a0c365 gguf/granite-speech-4.1-2b-Q5_K_M.gguf https://huggingface.co/handy-computer/granite-speech-4.1-2b-gguf/resolve/5fa89dfac74d52a186f63647553b9e1f7ae36e83/granite-speech-4.1-2b-Q5_K_M.gguf"
 )
 
 usage() {

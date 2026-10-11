@@ -1,11 +1,11 @@
-# Bench data, 9–10 October 2026
+# Bench data, 9–11 October 2026
 
 These files hold the per-run numbers behind [`docs/model-bench.md`](../model-bench.md). That file has the summary tables and the methods. This folder has the runs those tables summarize, one row per run or per sample, so charts can be drawn from them.
 
-- **When:** every run was made on 9 or 10 October 2026. `studies.csv` gives the date of each study.
+- **When:** every run was made on 9, 10 or 11 October 2026. `studies.csv` gives the date of each study.
 - **Machine:** one M4 Mac mini (16 GB), on mains power, macOS 26.6.2, transcribe-cpp 0.3.1, 4 threads.
 - **Code:** each study ran a known commit, or a build on its way to one. See [Studies and builds](#studies-and-builds).
-- **Extracted:** on 10 October 2026, by [`scripts/bench/extract.py`](../../scripts/bench/extract.py), from the raw runs in two session scratch folders.
+- **Extracted:** on 10 October 2026, by [`scripts/bench/extract.py`](../../scripts/bench/extract.py), from the raw runs in two session scratch folders. The 11 October rows (study `candidates`) were added on 11 October from a third.
 
 ## No transcript text
 
@@ -30,9 +30,9 @@ Units are in the column names: `_ms` milliseconds, `_s` seconds, `_pct` percent,
 
 One row per study: `study`, `section` (the heading in `docs/model-bench.md`) and `date`.
 
-### `runs.csv` (1,422 rows)
+### `runs.csv` (1,485 rows)
 
-One row per `easyvox-bench session` run, or per clip of a `sessions` run: a WAV replayed in real time through the app's code path. It backs every session table in `docs/model-bench.md`, from "Results" to "Whisper's preview".
+One row per `easyvox-bench session` run, or per clip of a `sessions` run: a WAV replayed in real time through the app's code path. It backs every session table in `docs/model-bench.md`, from "Results" to "Every candidate, one pipeline".
 
 - **Who and what:** `study`, `build`, `model`, `clip`, and `source`:
   - `tts`: a text-to-speech clip from `testdata/`;
@@ -62,16 +62,16 @@ One row per `easyvox-bench session` run, or per clip of a `sessions` run: a WAV 
 
 `gpu_util_pct` leaves out the model load. The energy runs use the samples inside the session. The 9 October `idle-*` runs drop the first 2 samples, as their scripts did. The others drop the first 3. `onepipe` drops none.
 
-### `bench_runs.csv` (21 rows) and `clips.csv` (826 rows)
+### `bench_runs.csv` (35 rows) and `clips.csv` (1,414 rows)
 
-`easyvox-bench bench` runs: the 14 test clips decoded one at a time, 3 times each (once for `bench_fast`). They back "Results" (word error rate, empty or failed decodes, speed and memory), the `bench` check in "One pipeline" and the text-to-speech rows of "Parakeet TDT v3 against v2".
+`easyvox-bench bench` runs: the 14 test clips decoded one at a time, 3 times each (once for `bench_fast`). They back "Results" (word error rate, empty or failed decodes, speed and memory), the `bench` check in "One pipeline" and the text-to-speech columns of "Parakeet TDT v3 against v2" and "Every candidate, one pipeline".
 
 - `bench_runs.csv`: one row per run. `wer_pct` over all clips, `errors`, `ref_words`, `empty_speech_decodes`, `failed_speech_decodes`, `rtf_speech_clips` (decode time over audio length), `load_ms_first` and `load_ms_warm` (model load), `first_decode_ms`.
 - `clips.csv`: one row per clip and repeat. `category`, `audio_s`, `ref_words`, `errors`, `wer_pct`, `rtf`, `decode_ms` (that repeat's decode), `hyp_words` (the number of words decoded) and `distinct_hyps` (1 if every repeat wrote the same text). The error counts are per clip, the same for each repeat.
 
 The "Results" table pools `bench1-*` and `bench2-*`, the two rounds of 3 repeats.
 
-### `memory.csv` (2,736 rows)
+### `memory.csv` (2,932 rows)
 
 The process's memory footprint (`footprint_mb`) and its peak so far (`peak_footprint_mb`), by `phase`:
 
@@ -81,9 +81,9 @@ The process's memory footprint (`footprint_mb`) and its peak so far (`peak_footp
 
 It backs the memory columns of every table. `sessions` runs (several clips in one process) have no rows: they load a second copy of the model, as `docs/model-bench.md` warns.
 
-### `energy.csv` (67 rows)
+### `energy.csv` (130 rows)
 
-One row per energy run. That's a `macmon` trace around the run, from 60 s of idle machine before it to 60 s after. It backs "Lightness", the energy rows of "First words and silence" and "Quiet mics and loud rooms", "Parakeet TDT v3 against v2", "Level meter" and "Whisper's preview".
+One row per energy run. That's a `macmon` trace around the run, from 60 s of idle machine before it to 60 s after. It backs "Lightness", the energy rows of "First words and silence" and "Quiet mics and loud rooms", "Parakeet TDT v3 against v2", "Level meter", "Whisper's preview" and "Every candidate, one pipeline". The candidates' read-aloud runs (`candidates/s…`) had only 20 s of idle machine either side: their GPU power holds, but their energy totals are rough, and that section quotes energy from the ramble only.
 
 - `j_per_min`: the headline figure, energy per minute of audio. It counts the SoC (CPU, GPU, Neural Engine and DRAM) on top of the idle machine, over the session (from the replay's start to the final text). GPU, Neural Engine and DRAM subtract their idle mean. The CPU rail, which jumps with other processes, subtracts the median of 5 s blocks.
 - `w_added` (all rails) and `w_cpu`, `w_gpu`, `w_ane`, `w_dram`: the added power in watts.
@@ -92,9 +92,9 @@ One row per energy run. That's a `macmon` trace around the run, from 60 s of idl
 
 For `meter/*` (app runs), the session is the self-test's own start and end, and idle is the rest of the trace, as the meter's analysis did.
 
-### `power.csv` (22,392 rows)
+### `power.csv` (34,071 rows)
 
-The 67 energy traces, as mean power in 1 s bins: `cpu_mw`, `gpu_mw`, `dram_mw` and `gpu_active_pct`. `t_s` counts seconds from the session's start, from 15 s before it to 15 s after its end. macmon samples about every 0.55 s. The Neural Engine read 0 W in every sample, so it has no column. These are the traces for a before and after chart of "Lightness".
+The 130 energy traces, as mean power in 1 s bins: `cpu_mw`, `gpu_mw`, `dram_mw` and `gpu_active_pct`. `t_s` counts seconds from the session's start, from 15 s before it to 15 s after its end. macmon samples about every 0.55 s. The Neural Engine read 0 W in every sample, so it has no column. These are the traces for a before and after chart of "Lightness".
 
 ### `traces.csv` (14,083 rows)
 
@@ -134,13 +134,13 @@ Every chunk cut in the runs whose bench logged them ("Real voice", "Chunk joins"
 - `words_added` and `decode_ms` for the chunk;
 - the pause the cut used, `pause_start_s` to `pause_end_s`, and its length `pause_s`.
 
-### `lag_quantiles.csv` (514 rows) and `lag_hist.csv` (3,824 rows)
+### `lag_quantiles.csv` (640 rows) and `lag_hist.csv` (5,094 rows)
 
-How far the preview trails the voice, per word, for 81 chunked sessions on `ramble.wav`, `lf_3m.wav` and `lf_10m.wav`. They back "Preview behind the voice" in "Real voice", "Lightness", "First words and silence", "Parakeet TDT v3 against v2" and "Whisper's preview".
+How far the preview trails the voice, per word, for 102 chunked sessions on `ramble.wav`, `lf_3m.wav` and `lf_10m.wav`. They back "Preview behind the voice" in "Real voice", "Lightness", "First words and silence", "Parakeet TDT v3 against v2", "Whisper's preview" and "Every candidate, one pipeline".
 
 The method is the one in `docs/model-bench.md`. Each recording has a one-pass decode with word timings: the `timeline`. For each of its words, the lag is the time of the first preview update whose last three words match the timeline at that word, minus the time the word ended. The timelines:
 
-- `ramble-v2-onepass`: Parakeet TDT v2's one-pass decode of the ramble from 9 October (`realvoice/r0-v2`);
+- `ramble-v2-onepass`: Parakeet TDT v2's one-pass decode of the ramble from 9 October (`realvoice/r0-v2`). The `candidates` runs use it for every model, so a model that words things differently from v2 shows more lag than it has;
 - `ramble-v3-onepass` and `ramble-v2-0910-onepass`: v3's and v2's own one-pass decodes from 10 October, for the v3 study;
 - `lf_3m-v2-onepass` and `lf_10m-v2-onepass`: v2's one-pass decodes of the two long text-to-speech clips.
 
@@ -207,27 +207,31 @@ The idle app, measured from `proc_pid_rusage` over `window_s`: `wakeups_per_s`, 
 | `meter` | Level meter | `b9dd9fb` |
 | `whisper` | Whisper's preview | `head`: cd78c42. `fix`: fc7c60a. `fix-cmp`: fc7c60a logging both agreement rules. All three add log lines for each pass |
 | `overlay` | Overlay animation | `fc7c60a` (before) and `5bd95f9` |
+| `candidates` | Every candidate, one pipeline | `93fc164+catalog`: 93fc164 with the nine bench-only catalog entries added, nothing else |
 
 Run labels follow each study's own scheme:
 
 - `-rN`: an energy run; `-sN`: a read-aloud run;
 - `r0` and `s0`: one pass on release (`chunk_ms=0`);
 - `B-` and `N-`: base and new builds;
-- `a-` and `b-`: before and after.
+- `a-` and `b-`: before and after;
+- `candidates`: `s1-`…`s3-` the read-aloud rounds, `r1-` and `r2-` the ramble runs, `tts-` the clips, each followed by the model's alias (`extract.py`'s `MODELS`).
 
 Every run is here, including a few that `docs/model-bench.md` left out. "The preview in pauses" dropped two read-aloud runs that overlapped a build on the same Mac: `idle-real/before3-structured` (`build_overlap_s` 26) and, judging by its 4.25 s release, `idle-real/after1-structured`. In the 5-minute ramble, Whisper's preview showed a word made up from room noise at 1.4 s. `first_words_ms` counts that word, but the published table gives 2.2 s, the first real word.
 
 ## Regenerating
 
-The raw runs were in two session scratch folders under `/private/tmp`. They held:
+The raw runs were in session scratch folders under `/private/tmp`. They held:
 
 - 9 October: `mbench/`, `onepipe/`, `longform/` and `idle/`;
-- 9 October evening to 10 October: `realvoice/`, `joinfix/`, `eq/`, `lightness/`, `idle/`, `engine2/`, `v3/`, `ab/`, `whisper/` and `overlay-anim/`.
+- 9 October evening to 10 October: `realvoice/`, `joinfix/`, `eq/`, `lightness/`, `idle/`, `engine2/`, `v3/`, `ab/`, `whisper/` and `overlay-anim/`;
+- 11 October: `candidates/runs/`, in the second of those folders.
 
-With both folders:
+With the folders:
 
 ```sh
-python3 -I scripts/bench/extract.py --s1 <9 Oct evening to 10 Oct folder> --s2 <9 Oct folder>
+python3 -I scripts/bench/extract.py --s1 <9 Oct evening to 10 Oct folder> --s2 <9 Oct folder> \
+    --s3 <9 Oct evening to 10 Oct folder>/candidates
 ```
 
 It also reads `recordings/structured.wav`, if it's there, for where the speech starts in the read-aloud stress copies. The raw run files, and any audio cut from the private recordings, stay private.
