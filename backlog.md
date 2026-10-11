@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 27 on hold · 11 inbox · 35 done · 0 cancelled
+0 in progress · 2 ready · 2 blocked · 27 on hold · 11 inbox · 35 done · 0 cancelled
 
 ## In progress
 
@@ -10,6 +10,7 @@ _None._
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
+| [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) | Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo) | 1 | `bench` |
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
 
 ## Blocked / waiting
