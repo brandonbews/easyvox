@@ -34,6 +34,15 @@ Agent notes, 2026-10-10 (built, uncommitted in the working tree; DESIGN.md "Over
 
 Committed and pushed as 5bd95f9 after the orchestrator re-ran the 5 gates, bundle and self-test (36/36). The visual check moved to its own held hands-on task.
 
+Agent notes, 2026-10-10 evening (uncommitted in the working tree; DESIGN.md "Overlay animation" and docs/model-bench.md "On screen" have the detail):
+- On-screen cost, measured with the screen unlocked (driven over Jump Desktop, whose capture adds to WindowServer/GPU; noted per table). Fade-and-slide build (5bd95f9), 3-min clip, 3 runs each: draws 6.8 -> 9.9/s with animations; WindowServer +1.4 points of a core (3.0 for the pill up at all); GPU +28 mW; app ~+1 point (unresolved, noisy). On screen GPUI's 16 ms timer gave 30 fps, not 60.
+- Open and close alone (40 dictations of cmd_moira, --repeat 40): app nothing; WindowServer 60-75 ms CPU per open+close.
+- The pop replaced the slide: open 200 ms, fade in (quartic ease-out) as it grows from 85 % (overlay_shrink_pct = 15, replaces overlay_slide_pt) on cubic-bezier(0.34, 1.56, 0.64, 1), 1.5 % overshoot, exact duration; close 120 ms ease-in to 85 %. Core Animation keyframes on the view's layer (scale + centring translation; the presentation layer clamps an overshooting timing function, keyframes don't). Window is now the row plus 6 pt either side (slide room gone). Reduce motion: no scale.
+- Brandon's feedback ("pleasant animation with a nice ease"): the meter's bars now ease (overlay_meter_ms = 120, overlay_meter_frame_ms = 33, GPUI frames; CALayer bars weighed and rejected: they'd save only the app's share, ~2 points, not WindowServer's); words 120 -> 200 ms, glide 150 -> 250 ms, CSS ease-out; frame timer wakes a quarter frame early so frames land every refresh (captures: glides 13-15 frames 17 ms apart instead of 4-5 at 33 ms).
+- Cost of that while talking: draws 9.9 -> 28.9/s; WindowServer +4.9 points, GPU +0.09 W (Retina), app +1.6-2.3 points for the meter; roughly 0.15-0.2 W next to dictating's 0.65 W. Mostly the meter's easing; overlay_meter_ms = 0 takes it back. 20 fps for the meter saved only 4 draws/s.
+- Self-test 36/36 (pop watched every 10 ms: starts small, peak <= curve's, full size at the end, centre fixed; reverse-from-close starts where the close was; Reduce motion turns off pop, glide and meter easing). All gates pass.
+- Clips for the hands-on check (overlay region only, testdata clip num_rishi): scratchpad overlay-pop/clips/overlay-defaults.mov and overlay-reduce-motion.mov. Still needed: a person judging the pop, the meter and the glide on a real screen; defaults may need tuning.
+
 ## History
 
 ### 2026-10-11 01:32 UTC — edit by `brandon`
@@ -43,3 +52,7 @@ description edited
 ### 2026-10-11 01:35 UTC — edit by `brandon`
 
 description edited · status open→done
+
+### 2026-10-11 04:55 UTC — edit by `brandon`
+
+description edited
