@@ -43,6 +43,8 @@ Agent notes, 2026-10-10 evening (uncommitted in the working tree; DESIGN.md "Ove
 - Self-test 36/36 (pop watched every 10 ms: starts small, peak <= curve's, full size at the end, centre fixed; reverse-from-close starts where the close was; Reduce motion turns off pop, glide and meter easing). All gates pass.
 - Clips for the hands-on check (overlay region only, testdata clip num_rishi): scratchpad overlay-pop/clips/overlay-defaults.mov and overlay-reduce-motion.mov. Still needed: a person judging the pop, the meter and the glide on a real screen; defaults may need tuning.
 
+Follow-up committed as c87dd40 after the orchestrator re-ran the 5 gates, bundle and self-test (36/36): pop instead of slide, eased meter bars, 200 ms word fades, 250 ms glide, 60 fps glide fix, first on-screen measurements.
+
 ## History
 
 ### 2026-10-11 01:32 UTC — edit by `brandon`
@@ -54,5 +56,9 @@ description edited
 description edited · status open→done
 
 ### 2026-10-11 04:55 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 04:59 UTC — edit by `brandon`
 
 description edited
