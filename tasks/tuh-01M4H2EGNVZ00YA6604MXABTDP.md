@@ -20,6 +20,10 @@ Pointers: scripts/bundle.sh (today's ad-hoc bundle), packaging/Info.plist, .gith
 
 Constraints: bundle id dev.easyvox.EasyVox never changes (macOS ties permissions and the shader cache to it); no secrets in the repo; ad-hoc dev builds keep working.
 
+Design hand-off (11 October): the DMG background and Finder window settings are in design/assets/dmg/ (README.md). Ship the light background.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 14:56 UTC — edit by `brandon`
+
+description edited

@@ -18,6 +18,10 @@ Options:
 - cargo-packager's updater crate, already the planned packager, against GitHub Releases.
 - No in-app updater at first: Homebrew cask upgrades plus a "new version" link.
 
+Design hand-off (11 October): Check for Updates… in the menu and on About. If built, explicit and user-initiated (the only other network use is model downloads).
+
 ## History
 
-_No activity yet._
+### 2026-10-11 14:56 UTC — edit by `brandon`
+
+description edited

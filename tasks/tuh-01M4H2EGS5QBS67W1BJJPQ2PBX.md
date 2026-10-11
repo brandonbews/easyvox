@@ -11,6 +11,10 @@
 
 DESIGN.md "Push-to-talk shortcut" → "Later".
 
+Design hand-off (11 October): board 12 has a 'Mode: Hold to talk / Press to toggle' row in Settings, and board 11 a setup page for it (design/mockups/).
+
 ## History
 
-_No activity yet._
+### 2026-10-11 14:56 UTC — edit by `brandon`
+
+description edited

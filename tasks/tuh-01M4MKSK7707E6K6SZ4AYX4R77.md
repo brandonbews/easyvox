@@ -21,6 +21,10 @@ Questions from the branding brief (10 Oct) that change the asset list. Each has 
 
 The full brief, with the Claude Design prompt, is the artifact "EasyVox Brand Brief".
 
+Design hand-off (11 October) answers Q3 (menu bar states), Q4 (icon format: .icns via iconutil for now) and Q5 (vermilion accent). Q1, Q2, Q6 and Q7 stay open.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 14:56 UTC — edit by `brandon`
+
+description edited
