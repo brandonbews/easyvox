@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 24 on hold · 11 inbox · 34 done · 0 cancelled
+0 in progress · 1 ready · 2 blocked · 25 on hold · 11 inbox · 34 done · 0 cancelled
 
 ## In progress
 
@@ -49,6 +49,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-tynb`](tasks/tuh-01M4MFZG2KBAWFT6A7AZ5STYNB.md) | Decide: file the GPUI Kit issue about the block 0.1.6 warning | 4 | `decision` `human` `upstream` |
 | [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) | Decide: onboarding at every launch when Accessibility is off on purpose | 4 | `decision` `human` `app` |
 | [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
+| [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 
 ## Inbox
 
