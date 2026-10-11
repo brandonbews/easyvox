@@ -13,7 +13,7 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
-const fullTitle = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME}: voice to text for macOS`;
+const fullTitle = title ? `${title} · ${SITE_NAME}` : `${SITE_NAME}: simple, local, fast speech-to-text for the Mac`;
 // A canonical URL and og:url need the domain (SITE_URL in src/config.ts), attached at launch.
 const canonical = SITE_URL ? siteUrl(Astro.url.pathname) : null;
 ---

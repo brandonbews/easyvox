@@ -1,16 +1,19 @@
 ---
-// The site header: the lockup, the nav, and the way to install. The nav is two or three short
+// The site header: the lockup, the nav, and the way to install. The nav is three or four short
 // links, so it stays inline on a phone rather than hiding behind a menu button.
 import { REPO_PUBLIC, REPO_URL } from "../config";
 import Lockup from "./Lockup.astro";
 
-const inDocs = Astro.url.pathname.startsWith("/docs");
+const here = Astro.url.pathname;
+const inDocs = here.startsWith("/docs");
+const inResults = here.startsWith("/results");
 ---
 
 <header class="site-header">
   <div class="site-header-inner">
     <a class="lockup-link" href="/"><Lockup /></a>
     <nav class="site-nav" aria-label="Site">
+      <a href="/results" aria-current={inResults ? "page" : undefined}>Results</a>
       <a href="/docs" aria-current={inDocs ? "true" : undefined}>Docs</a>
       {REPO_PUBLIC && <a href={REPO_URL}>GitHub</a>}
       {

@@ -1,0 +1,412 @@
+---
+// /results: the bench, condensed for someone deciding whether to use EasyVox. Every number comes
+// from the CSVs in ../docs/bench (src/lib/bench.ts), picked by src/lib/results.config.ts, and is
+// rounded as docs/model-bench.md rounds it. The page shows no dates, commits or build ids, and no
+// text from any recording: the two recordings of a real voice are private.
+//
+// The copy's claims ("only one model did better", "17–20 times") are checked against the data
+// below, so a new selection that breaks one fails the build instead of leaving it stale.
+import BarChart from "../components/charts/BarChart.astro";
+import Base from "../layouts/Base.astro";
+import { accuracyRows, costRows, idleRows, silenceRows, speedRows } from "../lib/bench";
+import { accuracy, speed } from "../lib/results.config";
+
+function claim(ok: boolean, what: string) {
+  if (!ok) throw new Error(`/results: the copy says ${what}, and the data no longer does`);
+}
+
+const acc = accuracyRows();
+const spd = speedRows();
+const cst = costRows();
+const idle = idleRows();
+const quiet = silenceRows();
+
+const find = <T extends { tone: string; name: string }>(rows: T[], name: string) => {
+  const row = rows.find((r) => r.name === name);
+  if (!row) throw new Error(`/results: no row for ${name}`);
+  return row;
+};
+
+// Accuracy.
+const accV2 = find(acc, "Parakeet TDT v2");
+const accBase = find(acc, "Whisper base.en");
+const beatV2 = acc.filter((r) => r.value < accV2.value);
+claim(
+  accV2.value === 4 && beatV2.length === 1 && beatV2[0].name === "Cohere Transcribe",
+  "v2 made 4 errors, and only Cohere Transcribe made fewer",
+);
+claim(accBase.value === 16, "Whisper base.en made 16 errors");
+
+// Speed: v2's medians, as the heading rounds them.
+const spdV2 = find(spd, "Parakeet TDT v2");
+claim(
+  Math.abs(spdV2.first.value - 0.6) < 0.05 && Math.abs(spdV2.ready.value - 0.4) < 0.05,
+  "about 0.6 s to first words and 0.4 s to the text",
+);
+
+// Cost.
+const cstV2 = find(cst, "Parakeet TDT v2");
+const cstBase = find(cst, "Whisper base.en");
+const turbo = find(cst, "Whisper large-v3-turbo");
+const distil = find(cst, "Distil-Whisper large-v3.5");
+const cohere = find(cst, "Cohere Transcribe");
+claim(
+  [cstV2, cstBase].every((r) => Math.abs(r.energy.value - 40) < 3),
+  "both offered models take about 40 J a minute",
+);
+claim(
+  Math.round(distil.energy.value / cstV2.energy.value) === 17 &&
+    Math.round(turbo.energy.value / cstV2.energy.value) === 20,
+  "the large Whispers take 17–20 times v2's energy",
+);
+
+// Silence.
+const spoken = quiet.filter((q) => q.speech);
+const silent = quiet.filter((q) => !q.speech);
+const spokenTotal = spoken.reduce((n, q) => n + q.sessions, 0);
+claim(
+  spoken.every((q) => q.found === q.sessions && q.kept === q.sessions),
+  "speech was found and its text kept in every session",
+);
+claim(
+  silent.every((q) => q.kept === 0),
+  "silence and room noise never gave text",
+);
+
+const [idleLoaded, idleUnloaded] = idle;
+
+const ticks = (values: number[], unit = "") =>
+  values.map((v, i) => ({ value: v, label: i === values.length - 1 && unit ? `${v} ${unit}` : `${v}` }));
+const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : `${v} s` }));
+---
+
+<Base
+  title="Results"
+  description="How EasyVox's speech models compare on one Mac and one voice: word errors, how fast the text comes, energy and memory, and what happens on silence."
+>
+  <main id="main" class="results container">
+    <header class="results-head">
+      <h1>Results</h1>
+      <p class="lede">
+        Fourteen speech models, run through EasyVox on the same recordings: how many words each got wrong, how soon
+        the text came, and what it cost the Mac. EasyVox offers two of them.
+      </p>
+      <p class="results-sample">
+        One M4 Mac mini and one speaker's voice: a small sample. Read a gap of a word or two as a tie.
+      </p>
+      <ul class="results-key" aria-label="Colours in the charts">
+        <li class="tone-default">Parakeet TDT v2, the default</li>
+        <li class="tone-offered">Whisper base.en, the small option</li>
+        <li class="tone-bench">Tested, not offered</li>
+      </ul>
+    </header>
+
+    <section class="result" aria-labelledby="accuracy">
+      <p class="result-q">How accurate is it?</p>
+      <h2 id="accuracy">The default got {accV2.value} words wrong in {accuracy.refWords}; only one model did better.</h2>
+      <div class="chart-panels">
+        <BarChart
+          title="Word errors reading a passage aloud"
+          sub={`(of ${accuracy.refWords} words; fewer is better)`}
+          label={`Word errors for each of the ${acc.length} models. Parakeet TDT v2: ${accV2.value}. Whisper base.en: ${accBase.value}. The numbers are in the table below.`}
+          max={30}
+          ticks={ticks([0, 10, 20, 30])}
+          bars={acc.map((r) => ({
+            label: r.name,
+            tag: r.tag,
+            tone: r.tone,
+            value: r.value,
+            display: `${r.display} (${r.rate})`,
+            title: `${r.name}: ${r.value} of ${accuracy.refWords} words wrong (${r.rate})`,
+          }))}
+        />
+      </div>
+      <p class="result-caveat">
+        One speaker reading an 81-second passage with names, times and sums of money, 3 times per model; each model
+        wrote the same text every time. Two words is a hint, not a ranking. Punctuation and capitals aren't scored,
+        so Granite Speech 5.0, which writes neither, isn't marked down for it. Canary 180M Flash, Nemotron and
+        Qwen3-ASR write most numbers as words, and that's most of their errors. One M4 Mac mini.
+      </p>
+      <details class="chart-data">
+        <summary>The numbers</summary>
+        <div class="table-scroll">
+          <table class="data-table">
+            <caption class="visually-hidden">Word errors on the read-aloud passage, by model</caption>
+            <thead>
+              <tr><th scope="col">Model</th><th scope="col">Word errors (of {accuracy.refWords})</th><th scope="col">Word error rate</th></tr>
+            </thead>
+            <tbody>
+              {acc.map((r) => (
+                <tr><th scope="row">{r.name}{r.tag && <span class="table-tag"> ({r.tag})</span>}</th><td>{r.value}</td><td>{r.rate}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="result" aria-labelledby="speed">
+      <p class="result-q">How fast is it?</p>
+      <h2 id="speed">Words appear in about 0.6 s, and the text lands 0.4 s after you let go.</h2>
+      <div class="chart-panels two">
+        <BarChart
+          title="First words"
+          sub="(seconds after you start talking)"
+          label={`Seconds from the start of speech to the first words, for each model. Parakeet TDT v2: ${spdV2.first.display}. The numbers are in the table below.`}
+          max={speed.axisMaxS}
+          ticks={secondTicks}
+          bars={spd.map((r) => ({
+            label: r.name,
+            tag: r.tag,
+            tone: r.tone,
+            value: r.first.value,
+            display: r.first.display,
+            title: `${r.name}: first words ${r.first.display} after speech starts`,
+          }))}
+        />
+        <BarChart
+          title="Text ready"
+          sub="(seconds after you let go)"
+          label={`Seconds from letting go to the final text, for each model. Parakeet TDT v2: ${spdV2.ready.display}. The numbers are in the table below.`}
+          max={speed.axisMaxS}
+          ticks={secondTicks}
+          bars={spd.map((r) => ({
+            label: r.name,
+            tag: r.tag,
+            tone: r.tone,
+            value: r.ready.value,
+            display: r.ready.display,
+            title: `${r.name}: text ready ${r.ready.display} after release`,
+          }))}
+        />
+      </div>
+      <p class="result-caveat">
+        The read-aloud passage, 3 runs per model; the bar is the middle run, the label the range. After 5 minutes of
+        talking, the default's text was ready <span class="nowrap">{spdV2.rambleReady}</span> after release: it doesn't
+        grow with length. The large Whisper models pad every pass to 30 s of audio, so each pass takes about a second,
+        and their first words wait for the first one. One M4 Mac mini, one speaker.
+      </p>
+      <details class="chart-data">
+        <summary>The numbers</summary>
+        <div class="table-scroll">
+          <table class="data-table">
+            <caption class="visually-hidden">First words and text ready, by model</caption>
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col">First words</th>
+                <th scope="col">Text ready: read aloud</th>
+                <th scope="col">Text ready: 5 minutes of talking</th>
+              </tr>
+            </thead>
+            <tbody>
+              {spd.map((r) => (
+                <tr>
+                  <th scope="row">{r.name}{r.tag && <span class="table-tag"> ({r.tag})</span>}</th>
+                  <td>{r.first.display}</td>
+                  <td>{r.ready.display}</td>
+                  <td>{r.rambleReady}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="result" aria-labelledby="cost">
+      <p class="result-q">What does it cost the Mac?</p>
+      <h2 id="cost">The two offered models take about 40 J a minute; the large Whispers, 17–20 times that.</h2>
+      <div class="chart-panels two">
+        <BarChart
+          title="Energy per minute of talking"
+          sub="(joules, on top of the idle Mac)"
+          label={`Energy per minute of talking, for each model. Parakeet TDT v2: ${cstV2.energy.display}. Whisper base.en: ${cstBase.energy.display}. The numbers are in the table below.`}
+          max={800}
+          ticks={ticks([0, 200, 400, 600, 800], "J")}
+          bars={cst.map((r) => ({
+            label: r.name,
+            tag: r.tag,
+            tone: r.tone,
+            value: r.energy.value,
+            display: r.energy.display,
+            title: `${r.name}: ${r.energy.display} a minute of talking`,
+          }))}
+        />
+        <BarChart
+          title="Memory while you talk"
+          sub="(at the peak)"
+          label={`Peak memory while dictating, for each model. Parakeet TDT v2: ${cstV2.memory.display}. Whisper base.en: ${cstBase.memory.display}. The numbers are in the table below.`}
+          max={4000}
+          ticks={[0, 1000, 2000, 3000, 4000].map((v) => ({ value: v, label: v === 4000 ? "4,000 MB" : v.toLocaleString("en-US") }))}
+          bars={cst.map((r) => ({
+            label: r.name,
+            tag: r.tag,
+            tone: r.tone,
+            value: r.memory.value,
+            display: r.memory.display,
+            title: `${r.name}: ${r.memory.display} at the peak`,
+          }))}
+        />
+      </div>
+      <p class="result-caveat">
+        Energy is the chip's draw on top of the idle Mac over 5 minutes of talking, 2 runs or 1 per model; the CPU's
+        share moves with whatever else the Mac is doing, so totals within about 5 J are a tie. Cohere Transcribe, the
+        one model with fewer errors, took {cohere.energy.display} a minute and
+        <span class="nowrap">{cohere.memory.display}</span> of memory. One M4 Mac mini, one speaker.
+      </p>
+      <details class="chart-data">
+        <summary>The numbers</summary>
+        <div class="table-scroll">
+          <table class="data-table">
+            <caption class="visually-hidden">Energy and memory, by model</caption>
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col">Energy per minute</th>
+                <th scope="col">Range over 2 runs</th>
+                <th scope="col">Memory: loaded</th>
+                <th scope="col">Memory: peak</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cst.map((r) => (
+                <tr>
+                  <th scope="row">{r.name}{r.tag && <span class="table-tag"> ({r.tag})</span>}</th>
+                  <td>{r.energy.display}</td>
+                  <td>{r.energyRange ? `${r.energyRange} J` : "1 run"}</td>
+                  <td>{r.memoryLoaded}</td>
+                  <td>{r.memory.display}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <h3 class="result-sub">And when you're not talking</h3>
+      <ul class="stats results-stats">
+        <li>
+          <p class="stat">{idleLoaded.wakeups}</p>
+          <p>Wake-ups a second while idle: about one every 3 seconds.</p>
+        </li>
+        <li>
+          <p class="stat">{idleLoaded.cpu}</p>
+          <p>Of one CPU core, with the model loaded. Too little to notice.</p>
+        </li>
+        <li>
+          <p class="stat">{idleUnloaded.memory}</p>
+          <p>
+            Of memory once the model is freed, after 10 minutes unused ({idleLoaded.memory} with it loaded). The next
+            dictation still starts recording at once.
+          </p>
+        </li>
+      </ul>
+      <p class="result-caveat">
+        The app on its own, nobody dictating, 30 seconds each, with Parakeet Unified loaded: the same size as the
+        default. One M4 Mac mini.
+      </p>
+      <details class="chart-data">
+        <summary>The numbers</summary>
+        <div class="table-scroll">
+          <table class="data-table">
+            <caption class="visually-hidden">The idle app</caption>
+            <thead>
+              <tr>
+                <th scope="col">The app, nobody dictating</th>
+                <th scope="col">Wake-ups a second</th>
+                <th scope="col">CPU, share of one core</th>
+                <th scope="col">Memory</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Model loaded</th><td>{idleLoaded.wakeups}</td><td>{idleLoaded.cpu}</td><td>{idleLoaded.memory}</td></tr>
+              <tr><th scope="row">After the 10-minute unload</th><td>{idleUnloaded.wakeups}</td><td>{idleUnloaded.cpu}</td><td>{idleUnloaded.memory}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="result" aria-labelledby="silence">
+      <p class="result-q">What if you say nothing?</p>
+      <h2 id="silence">Silence gives no text, and quiet speech still gets through.</h2>
+      <p class="result-text">
+        EasyVox decodes nothing until it hears speech, so a press with nothing said pastes nothing and leaves the
+        clipboard alone. In a long pause, the live preview stops decoding until you speak again. The speech detector
+        was tested on {spokenTotal + silent.reduce((n, q) => n + q.sessions, 0)} recordings made harder on purpose:
+      </p>
+      <div class="table-scroll">
+        <table class="data-table result-table">
+          <caption class="visually-hidden">The speech detector's stress test</caption>
+          <thead>
+            <tr><th scope="col">Recording</th><th scope="col">Sessions</th><th scope="col">Result</th></tr>
+          </thead>
+          <tbody>
+            {quiet.map((q) => (
+              <tr>
+                <th scope="row">{q.label}</th>
+                <td>{q.sessions}</td>
+                <td>{q.speech ? "All heard, text kept" : "No text in any"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="result-caveat">
+        Copies of the read-aloud passage, the starts of real dictations and short synthetic clips, turned down or
+        mixed with noise, on Parakeet TDT v2 and Whisper base.en (and Parakeet Unified on the silent ones). Heard
+        isn't the same as transcribed well: on the faintest copies the default got about a quarter of the words
+        wrong. In a room louder than about −35 dBFS, the noise counts as speech from the start. One M4 Mac mini, one
+        speaker.
+      </p>
+    </section>
+
+    <section class="result method" aria-labelledby="method">
+      <h2 id="method">How we measured</h2>
+      <dl>
+        <dt>The Mac</dt>
+        <dd>
+          One M4 Mac mini with 16 GB of memory, on mains power, running macOS 26. Every model ran on transcribe.cpp
+          with 4 threads. Each run waited until the Mac was quiet.
+        </dd>
+        <dt>The voice</dt>
+        <dd>
+          One speaker, in two recordings: an 81-second passage read aloud (238 words with names, times, sums of money
+          and technical terms) and five minutes of unscripted talking on AirPods in an office. They stay private, and so
+          does every word of them.
+        </dd>
+        <dt>The runs</dt>
+        <dd>
+          Each recording plays into EasyVox's own pipeline in real time, as a microphone would: the live preview, the
+          text polished in chunks while you talk, the rest when you let go. Every model ran the same pipeline with the
+          same settings, the models taking turns in a different order each round.
+        </dd>
+        <dt>Word errors</dt>
+        <dd>
+          Words wrong, missing or added, against what was read. Punctuation and capitals don't count, and "10" and
+          "ten" count as the same word.
+        </dd>
+        <dt>First words and text ready</dt>
+        <dd>
+          First words: from the start of speech to the first words on screen. Text ready: from letting go to the final
+          text.
+        </dd>
+        <dt>Energy</dt>
+        <dd>
+          The chip's power (CPU, GPU, Neural Engine and memory) from its own sensors, less what the idle Mac draws,
+          summed over the dictation. 40 J a minute is about two-thirds of a watt.
+        </dd>
+        <dt>Memory</dt>
+        <dd>The app's memory footprint as macOS counts it: once the model is loaded, and at its peak.</dd>
+        <dt>Idle</dt>
+        <dd>Wake-ups and CPU time from macOS's own counters for the app, over 30 seconds.</dd>
+        <dt>Limits</dt>
+        <dd>
+          One Mac, one speaker, two recordings, and English only. More voices and rooms would tell the closest models
+          apart.
+        </dd>
+      </dl>
+    </section>
+  </main>
+</Base>

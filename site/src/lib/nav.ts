@@ -3,6 +3,9 @@
 // previous/next links. Titles and descriptions live here, not in the docs, which stay plain
 // GitHub Markdown with no frontmatter.
 //
+// The bench write-ups (model-bench.md, bench/README.md) aren't published: they stay in the repo
+// as the full record, and /results is the site's bench page.
+//
 // `file` is relative to the repo's docs/ folder. `slug` is the route below /docs. `group` is the
 // sidebar heading it sits under; entries of one group stay together, in this order.
 
@@ -30,22 +33,6 @@ export const docsNav: NavEntry[] = [
     title: "Settings",
     description:
       "EasyVox's settings file: where it is, how edits apply, and every key with its default, its unit and what it trades off.",
-  },
-  {
-    slug: "model-bench",
-    group: "The bench",
-    file: "model-bench.md",
-    title: "Model bench",
-    description:
-      "The full October 2026 bench: accuracy, speed, memory and energy for each model and setting, with the methods.",
-  },
-  {
-    slug: "bench",
-    group: "The bench",
-    file: "bench/README.md",
-    title: "Bench data",
-    description:
-      "The per-run numbers behind the model bench: what each CSV file holds, and how they fit together.",
   },
 ];
 

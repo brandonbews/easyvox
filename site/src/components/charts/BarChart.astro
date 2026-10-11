@@ -1,0 +1,87 @@
+---
+// One panel of horizontal bars, drawn at build time as static SVG: no chart library and no
+// JavaScript. Each row is a model: its name above the bar, its value at the right, the bar from a
+// shared zero baseline. The SVG has no viewBox: x positions are percentages of its width and y
+// positions are pixels, so it stretches to any width while the text keeps its size (a phone at
+// 390 px gets the same 13 px labels as a desktop).
+//
+// Colour follows the model (tone): vermilion for the default, dark grey for the other offered
+// model, light grey for bench-only ones (tokens and contrast in global.css, "results"). Every row
+// is named, so colour is never the only cue. Hovering a row shows its numbers (SVG <title>), and
+// the same numbers are in a table under the chart.
+import type { Tone } from "../../lib/results.config";
+
+interface Bar {
+  label: string;
+  tag?: string;
+  tone: Tone;
+  value: number;
+  display: string;
+  title: string; // the row's tooltip: the model and its numbers in words
+}
+
+interface Props {
+  title: string;
+  sub?: string;
+  bars: Bar[];
+  max: number;
+  ticks: { value: number; label: string }[];
+  label: string; // the chart's accessible name
+}
+
+const { title, sub, bars, max, ticks, label } = Astro.props;
+
+const ROW = 38; // px per model
+const NAME_Y = 13; // the name's baseline, from the row's top
+const BAR_Y = 19; // the bar's top
+const BAR_H = 10;
+const TOP = 2;
+const plotBottom = TOP + bars.length * ROW - 4;
+const height = plotBottom + 22;
+
+if (bars.some((b) => b.value > max || b.value < 0)) {
+  throw new Error(`chart "${title}": a value is outside 0–${max}; widen its axis`);
+}
+const x = (v: number) => `${((v / max) * 100).toFixed(3)}%`;
+const last = ticks.length - 1;
+---
+
+<div class="chart-panel">
+  <p class="chart-title">{title}{sub && <span> {sub}</span>}</p>
+  <svg class="chart" width="100%" height={height} role="img" aria-label={label}>
+    <g class="chart-grid" aria-hidden="true">
+      {ticks.map((t) => <line x1={x(t.value)} x2={x(t.value)} y1={TOP} y2={plotBottom}></line>)}
+    </g>
+    {
+      bars.map((b, i) => {
+        const y = TOP + i * ROW;
+        return (
+          <g class={`chart-row tone-${b.tone}`}>
+            <title>{b.title}</title>
+            <rect class="chart-hit" x="0" y={y} width="100%" height={ROW}></rect>
+            <text class="chart-name" x="0" y={y + NAME_Y}>
+              {b.label}
+              {b.tag && <tspan class="chart-tag"> · {b.tag}</tspan>}
+            </text>
+            <text class="chart-value" x="100%" y={y + NAME_Y} text-anchor="end">
+              {b.display}
+            </text>
+            {/* A 4 px round end on the data side; the square patch keeps the baseline end square. */}
+            <rect class="chart-bar" x="0" y={y + BAR_Y} width={x(b.value)} height={BAR_H} rx="4"></rect>
+            <rect class="chart-bar" x="0" y={y + BAR_Y} width="4" height={BAR_H}></rect>
+          </g>
+        );
+      })
+    }
+    <g class="chart-axis" aria-hidden="true">
+      <line class="chart-baseline" x1="0.5" x2="0.5" y1={TOP} y2={plotBottom}></line>
+      {
+        ticks.map((t, i) => (
+          <text x={x(t.value)} y={plotBottom + 16} text-anchor={i === 0 ? "start" : i === last ? "end" : "middle"}>
+            {t.label}
+          </text>
+        ))
+      }
+    </g>
+  </svg>
+</div>

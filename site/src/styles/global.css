@@ -17,6 +17,13 @@
  *          wave (graphics) on bg 5.55, on raised 4.55
  *          pill over the demo's desktop: text 15.3, provisional text 5.8, meter 5.4
  * Link and body text are only 2.8:1 apart in dark, so links in running text are underlined.
+ *
+ * Results charts (marks need 3:1 against the page): one accent and greys, by model, never by rank.
+ *   Light  default (the wave) 3.7 · other offered model #515154 7.9 · bench-only #8e8e93 3.3
+ *   Dark   default 5.55 · other offered model #aeaeb2 7.7 · bench-only #6e6e73 3.4
+ *   The two greys are ΔE 21 apart in OKLab (×100), and each is ≥ 10 from the accent under simulated
+ *   protanopia and deuteranopia. Every bar is named, so colour is never the only cue. Chart text
+ *   is ink or muted text (above), never a mark colour.
  */
 
 :root {
@@ -38,6 +45,11 @@
   --color-on-fill: #ffffff;
   --color-selection: #fbd3cb;
 
+  /* Results charts: the default model, the other offered model, bench-only models. */
+  --chart-default: var(--color-wave);
+  --chart-offered: #515154;
+  --chart-bench: #8e8e93;
+
   /* The pill and the demo's desktop (design boards 07 and 21). */
   --color-pill: rgb(255 255 255 / 0.92);
   --color-pill-text2: #636366;
@@ -52,8 +64,6 @@
   --shadow-window: 0 22px 60px rgb(0 0 0 / 0.22), 0 0 0 0.5px rgb(0 0 0 / 0.18);
   --keycap-bg: #ffffff;
   --keycap-edge: #d2d2d7;
-  --shadow-keycap: 0 6px 16px -8px rgb(0 0 0 / 0.25);
-  --app-icon-grey: #d1d1d6;
 
   --font-sans:
     -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
@@ -81,6 +91,9 @@
     --color-wave: #ff5c3f;
     --color-selection: #6b2a1f;
 
+    --chart-offered: #aeaeb2;
+    --chart-bench: #6e6e73;
+
     --color-pill: rgb(28 28 30 / 0.92);
     --color-pill-text2: #98989d;
     --shadow-pill:
@@ -94,8 +107,6 @@
     --shadow-window: 0 22px 60px rgb(0 0 0 / 0.55), 0 0 0 0.5px rgb(255 255 255 / 0.14);
     --keycap-bg: #2c2c2e;
     --keycap-edge: #48484a;
-    --shadow-keycap: 0 6px 16px -8px rgb(0 0 0 / 0.6);
-    --app-icon-grey: #48484a;
   }
 }
 
@@ -512,10 +523,9 @@ kbd {
   line-height: 1.06;
 }
 
-@media (max-width: 40rem) {
-  .hero h1 span {
-    display: block;
-  }
+/* The pitch, then "That's it." on a line of its own. */
+.hero h1 span {
+  display: block;
 }
 
 .lede {
@@ -611,137 +621,6 @@ kbd {
   margin: 2.5rem 0 0;
   color: var(--color-fg-muted);
   font-size: 0.9375rem;
-}
-
-/* How it works: three cards, each with a picture of the step. */
-
-.steps {
-  display: grid;
-  gap: 1rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-@media (min-width: 56rem) {
-  .steps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1.5rem;
-  }
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  padding: 0 1.5rem 1.75rem;
-  border-radius: 20px;
-  background: var(--color-bg-raised);
-}
-
-.step-art {
-  height: 9.5rem;
-  margin: 0 -1.5rem 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  overflow: hidden;
-}
-
-.step-n {
-  margin: 0 0 0.5rem;
-  color: var(--color-fg-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.step h3 {
-  margin-bottom: 0.5rem;
-  font-size: 1.1875rem;
-}
-
-.step p:last-child {
-  margin: 0;
-  color: var(--color-fg-muted);
-}
-
-@media (min-width: 48rem) {
-  .step {
-    padding: 0 2rem 2.25rem;
-    border-radius: 24px;
-  }
-
-  .step-art {
-    height: 12.25rem;
-    margin-inline: -2rem;
-  }
-
-  .step h3 {
-    font-size: 1.3125rem;
-  }
-}
-
-.keycap {
-  position: relative;
-  display: inline-block;
-  width: 72px;
-  height: 60px;
-  border-radius: 12px;
-  background: var(--keycap-bg);
-  box-shadow:
-    inset 0 0 0 1px var(--keycap-edge),
-    inset 0 -3px 0 var(--keycap-edge),
-    var(--shadow-keycap);
-  text-align: left;
-}
-
-.keycap-space {
-  width: 188px;
-}
-
-.keycap span {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  font-size: 15px;
-}
-
-.keycap small {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  color: var(--color-fg-muted);
-  font-size: 12px;
-}
-
-/* A text field in another app, with the dictation pasted in. */
-.textfield {
-  width: 250px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--color-bg);
-  box-shadow:
-    0 0 0 1px var(--color-rule),
-    0 6px 18px -8px rgb(0 0 0 / 0.2);
-  font-size: 15px;
-  line-height: 1.45;
-  text-align: left;
-}
-
-.textfield small {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  color: var(--color-fg-muted);
-  font-size: 12px;
-}
-
-.textfield small span {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: var(--app-icon-grey);
 }
 
 /* The feature grid: hairline-topped columns, thin line icons. */
@@ -1767,21 +1646,25 @@ kbd {
   overflow-x: auto;
 }
 
-.doc table {
+.doc table,
+.data-table {
   border-collapse: collapse;
   font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .doc th,
-.doc td {
+.doc td,
+.data-table th,
+.data-table td {
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--color-rule);
   text-align: left;
   vertical-align: top;
 }
 
-.doc th {
+.doc th,
+.data-table thead th {
   background: var(--color-bg-raised);
   font-weight: 600;
 }
@@ -1853,4 +1736,316 @@ kbd {
 .prev-next .next {
   align-items: flex-end;
   text-align: right;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* For screen readers only. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- results ---------- */
+
+.results {
+  padding-top: 2.5rem;
+  padding-bottom: 5rem;
+}
+
+.results-head h1 {
+  margin: 0;
+  font-size: clamp(2.25rem, 1.6rem + 2vw, 3.5rem);
+  line-height: 1.06;
+}
+
+.results-head .lede {
+  margin-bottom: 1rem;
+}
+
+.results-sample {
+  max-width: var(--width-prose);
+  margin: 0 0 1.5rem;
+  font-weight: 500;
+}
+
+/* The colour key: a swatch the shape of a bar end, then the words. */
+.results-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-fg-muted);
+  font-size: 0.875rem;
+}
+
+.results-key li::before {
+  content: "";
+  display: inline-block;
+  width: 1.25rem;
+  height: 10px;
+  margin-right: 0.5rem;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-bench);
+}
+
+.results-key .tone-default::before {
+  background: var(--chart-default);
+}
+
+.results-key .tone-offered::before {
+  background: var(--chart-offered);
+}
+
+.result {
+  position: relative;
+  padding-block: 3rem;
+}
+
+.result::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--color-rule);
+}
+
+.results-head + .result {
+  margin-top: 3rem;
+}
+
+.result-q {
+  margin: 0 0 0.5rem;
+  color: var(--color-fg-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.result h2 {
+  max-width: 60rem;
+  margin: 0;
+  font-size: clamp(1.5rem, 1.25rem + 0.9vw, 2.125rem);
+  line-height: 1.15;
+}
+
+.result-sub {
+  margin: 3rem 0 0;
+  font-size: 1.1875rem;
+}
+
+.result-text,
+.result-caveat {
+  max-width: var(--width-prose);
+}
+
+.result-text {
+  margin: 1.25rem 0 1.5rem;
+}
+
+.result-caveat {
+  margin: 1.5rem 0 0;
+  color: var(--color-fg-muted);
+  font-size: 0.9375rem;
+}
+
+.results-stats {
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 48rem) {
+  .results {
+    padding-top: 4.5rem;
+  }
+
+  .result {
+    padding-block: 4.5rem;
+  }
+
+  .results-stats {
+    gap: 2rem 3rem;
+  }
+}
+
+/* Charts: one panel, or two side by side from tablet width. */
+.chart-panels {
+  display: grid;
+  gap: 2.5rem 3rem;
+  max-width: var(--width-prose);
+  margin-top: 2rem;
+}
+
+.chart-panels.two {
+  max-width: 60rem;
+}
+
+@media (min-width: 48rem) {
+  .chart-panels.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.chart-panel {
+  min-width: 0;
+}
+
+.chart-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.chart-title span {
+  color: var(--color-fg-muted);
+  font-weight: 400;
+}
+
+.chart {
+  display: block;
+  overflow: visible;
+  font-size: 13px;
+}
+
+/* Text on a chart gets a halo of the page colour, so a gridline never runs through a letter. */
+.chart text {
+  fill: var(--color-fg);
+  paint-order: stroke;
+  stroke: var(--color-bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.chart .chart-value,
+.chart .chart-tag,
+.chart-axis text {
+  fill: var(--color-fg-muted);
+}
+
+.chart-value,
+.chart-axis text {
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-axis text {
+  font-size: 12px;
+}
+
+.tone-default .chart-name,
+.tone-offered .chart-name {
+  font-weight: 600;
+}
+
+.chart .tone-default .chart-value,
+.chart .tone-offered .chart-value {
+  fill: var(--color-fg);
+}
+
+.chart .chart-tag {
+  font-weight: 400;
+}
+
+.chart-grid line {
+  stroke: var(--color-rule);
+  stroke-width: 1;
+}
+
+.chart-baseline {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.chart-hit {
+  fill: transparent;
+}
+
+.chart-bar {
+  fill: var(--chart-bench);
+}
+
+.tone-default .chart-bar {
+  fill: var(--chart-default);
+}
+
+.tone-offered .chart-bar {
+  fill: var(--chart-offered);
+}
+
+/* The numbers under each chart, folded away until asked for. */
+.chart-data {
+  margin-top: 1.25rem;
+}
+
+.chart-data summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-fg);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+
+.chart-data summary::-webkit-details-marker {
+  display: none;
+}
+
+.chart-data summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
+}
+
+.chart-data[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.data-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table tbody th {
+  min-width: 9rem;
+  font-weight: 500;
+}
+
+/* Ranges stay on one line ("0.60–0.64 s"); on a phone a wide table scrolls in its own box. */
+.data-table td {
+  white-space: nowrap;
+}
+
+.table-tag {
+  color: var(--color-fg-muted);
+  font-weight: 400;
+}
+
+.result-table {
+  max-width: 44rem;
+}
+
+/* How we measured: short definitions. */
+.method dl {
+  max-width: var(--width-prose);
+  margin: 1.5rem 0 0;
+}
+
+.method dt {
+  margin-top: 1.25rem;
+  font-weight: 600;
+}
+
+.method dd {
+  margin: 0.25rem 0 0;
+  color: var(--color-fg-muted);
 }
