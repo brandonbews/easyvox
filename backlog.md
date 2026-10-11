@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 25 on hold · 11 inbox · 38 done · 1 cancelled
+0 in progress · 1 ready · 2 blocked · 26 on hold · 41 inbox · 38 done · 1 cancelled
 
 ## In progress
 
@@ -50,6 +50,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) | Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap | 2 | `decision` `human` `overlay` `energy` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
+| [`tuh-82ya`](tasks/tuh-01M4NQE2KBMZ8WST33GWHJ82YA.md) | Hands-on: the DMG window on macOS 26 in light and dark (do Finder labels stay black over the background?) | — | `design` `hands-on` `human` `release` |
 
 ## Inbox
 
@@ -66,6 +67,36 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-k3k5`](tasks/tuh-01M4HT8MFHW8DYWZ16Z7JYK3K5.md) Pause finder: add a noise-floor term to quiet_level (floor + 6 dB) if louder rooms start forcing cuts
 - [`tuh-4140`](tasks/tuh-01M4MGCF0JZW3A508YWHTS4140.md) Website: a condensed, visual page of our benchmark and efficiency findings
 - [`tuh-are8`](tasks/tuh-01M4MKR4CRPGDT4Y4YR7PXARE8.md) Branding: assets and views (logo, app icon, menu bar icon, speaking indicator)
+- [`tuh-wzgg`](tasks/tuh-01M4NQE1VC4AMA0N2PMY0RWZGG.md) Esc cancels a dictation while the shortcut is held (Cancelled pill, nothing pasted)
+- [`tuh-ktjp`](tasks/tuh-01M4NQE1W6DXCPZQE51WFAKTJP.md) Paste Last Dictation: a menu item and a global shortcut (⌃⌥V proposed)
+- [`tuh-ge0a`](tasks/tuh-01M4NQE1WYPQ26SA6VNPR5GE0A.md) Pause EasyVox: a menu item that turns the shortcut off, with a Paused menu bar glyph
+- [`tuh-4gwc`](tasks/tuh-01M4NQE1XQ5BQTR9MH3ZW94GWC.md) Choose the microphone (menu bar submenu, Settings, onboarding) instead of the system default
+- [`tuh-r676`](tasks/tuh-01M4NQE1YG4AWC908CQB91R676.md) Onboarding: an input level check once the Microphone is allowed
+- [`tuh-hr5h`](tasks/tuh-01M4NQE1Z9XH9YT1E9XZE9HR5H.md) Setting: Copy only, don't paste (the self-test's auto_paste flag already does it)
+- [`tuh-v2tw`](tasks/tuh-01M4NQE202PM600S8DRN2DV2TW.md) Setting: Live text in the pill, on or off (off skips the preview passes: lighter)
+- [`tuh-qy7z`](tasks/tuh-01M4NQE20TF04DKPS3DEZBQY7Z.md) Don't listen in password fields: detect secure input on the key press and say so
+- [`tuh-7s57`](tasks/tuh-01M4NQE21KC8HEXGS2W9427S57.md) Setting: start and stop sounds
+- [`tuh-4pcz`](tasks/tuh-01M4NQE22BH30V2N22GFSX4PCZ.md) Setting: Open at login (SMAppService), also offered on onboarding's last step
+- [`tuh-3hya`](tasks/tuh-01M4NQE2341TYCJBHXS1XG3HYA.md) Setting: hide the menu bar item; opening EasyVox from Applications shows Settings
+- [`tuh-yvjr`](tasks/tuh-01M4NQE23WRBAXWBQ8Q2ZSYVJR.md) Pill: name the app the text went to, and say "Copied" when no text field had focus
+- [`tuh-gxt5`](tasks/tuh-01M4NQE24MM1FNAYH7STKXGXT5.md) History: record the app each dictation went to, and show it on the row
+- [`tuh-fcjs`](tasks/tuh-01M4NQE25DD9F42VDQFNTQFCJS.md) Pill notices with one button (Open Settings) that take a click without taking focus; notices leave on Esc or a click
+- [`tuh-aa1k`](tasks/tuh-01M4NQE266V4PXNZJM758TAA1K.md) Pill: two lines of live text that grow upward (design board 07), weighed against the one-line scroll
+- [`tuh-32ye`](tasks/tuh-01M4NQE26YNKTVEZXWQ76732YE.md) Pill: a background blur behind the capsule; measure the window server's cost first
+- [`tuh-r5yy`](tasks/tuh-01M4NQE27QS24AQWYVCDV0R5YY.md) Pill: draw the Pasted check on (a 180 ms stroke) instead of fading it in
+- [`tuh-kkbm`](tasks/tuh-01M4NQE28TZCXDGXSNSC28KKBM.md) Menu bar: live level bars while listening; measure Control Center's redraw cost first
+- [`tuh-tsbr`](tasks/tuh-01M4NQE29KBA9CV8HV8X6ETSBR.md) Menu bar: 150 ms crossfades and the knot's slide between states
+- [`tuh-s510`](tasks/tuh-01M4NQE2ACCP4DHWGCND1CS510.md) Menu bar: a Getting ready ring driven by the model download's progress
+- [`tuh-eam5`](tasks/tuh-01M4NQE2B4HFZCDEVAP2R3EAM5.md) Shortcut recorder: name the app that already owns a taken shortcut (e.g. Spotlight's ⌘Space)
+- [`tuh-q6mc`](tasks/tuh-01M4NQE2BYBDCYVASBW60TQ6MC.md) Onboarding: a "Your shortcut" step with a practice field (and Hold or Toggle, once toggle mode exists)
+- [`tuh-8m0b`](tasks/tuh-01M4NQE2CQRXGBXZ813AKJ8M0B.md) Onboarding as a paged wizard (design boards 10–11), only if chosen over the checklist
+- [`tuh-yh4f`](tasks/tuh-01M4NQE2DHRVQ7VK5E7SPSYH4F.md) Onboarding: the Accessibility illustration, with the switch ringed
+- [`tuh-hqet`](tasks/tuh-01M4NQE2E9BKDNHGF5N2WVHQET.md) App icon: an Icon Composer .icon with Dark, Clear and Tinted looks (needs Xcode 26's actool in the build)
+- [`tuh-bx80`](tasks/tuh-01M4NQE2F16JK0KZ66BGV4BX80.md) Settings: a real glass sidebar, if GPUI or GPUI Kit gains a material
+- [`tuh-zmt0`](tasks/tuh-01M4NQE2FVV1104NMFEW68ZMT0.md) Website: user docs from the design (Getting started, Install, Permissions, Your shortcut, The pill, History, Troubleshooting, FAQ, Uninstall)
+- [`tuh-by9a`](tasks/tuh-01M4NQE2GPXDMKGVYBMW1MBY9A.md) Website docs: an "On this page" rail, and "Edit this page on GitHub" links at launch
+- [`tuh-cgh4`](tasks/tuh-01M4NQE2HHPJ7HRPFXRBMECGH4.md) Website: docs search without page JavaScript, or decide it's worth an island
+- [`tuh-bf4j`](tasks/tuh-01M4NQE2JFPWJHN7KPRFH0BF4J.md) Website: a release notes page at the first DMG
 
 ## Done
 
