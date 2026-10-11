@@ -2,10 +2,10 @@
 
 `tuh-01M4MJQZ9ZPPHC1MZY01T63XB8`
 
-- **Status:** open — blocked on dependencies
+- **Status:** open — ready
 - **Priority:** 3
 - **Labels:** `website` `repo`
-- **Depends on:** [`tuh-h1mn`](tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) (on hold)
+- **Depends on:** [`tuh-h1mn`](tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) (done)
 - **Created:** 2026-10-11 04:15 UTC by `brandon`
 
 ## Description

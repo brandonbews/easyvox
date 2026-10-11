@@ -2,7 +2,7 @@
 
 `tuh-01M4MMD8EE6D7T5F8S7NFAH1MN`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 3
 - **Labels:** `decision` `human` `website`
 - **Created:** 2026-10-11 04:44 UTC by `brandon`
@@ -25,8 +25,14 @@ The website plan (docs/plans/website.md, section 10) has 11 questions. Each has 
 
 Answers so far (Brandon, 10 Oct): 3. He owns easyvox.dev. 1. Doesn't need Next; unsure about Astro only because he doesn't know it, and his other projects are on Vercel (Astro deploys to Vercel too, so hosting stays the same). Stack still open.
 
+Decided (Brandon, 10 Oct): 1. Astro ("i dont plan to work on the site at all, so astro is fine if thats the best choice"). 2. Vercel, his existing account. 3. He owns easyvox.dev. 4–11: the recommendations, per the orchestrator, unless Brandon objects. The Vercel project, DNS and launch stay Brandon's steps.
+
 ## History
 
 ### 2026-10-11 04:57 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 06:10 UTC — edit by `brandon`
+
+description edited · status held→done
