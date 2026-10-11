@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 27 on hold · 11 inbox · 35 done · 0 cancelled
+0 in progress · 1 ready · 2 blocked · 28 on hold · 11 inbox · 36 done · 0 cancelled
 
 ## In progress
 
@@ -10,7 +10,6 @@ _None._
 
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
-| [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) | Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo) | 1 | `bench` |
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
 
 ## Blocked / waiting
@@ -53,6 +52,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) | Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap | 2 | `decision` `human` `overlay` `energy` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
+| [`tuh-5k6c`](tasks/tuh-01M4NKB6DT8QWFK2EKTH3Q5K6C.md) | Offer Cohere Transcribe as a 'maximum accuracy' model? | — | `human` `decision` |
 
 ## Inbox
 
@@ -107,6 +107,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-fz1t`](tasks/tuh-01M4K563JQZQBC60FTQZMKFZ1T.md) Bench Parakeet TDT v3 on Brandon's voice
 - [`tuh-xbek`](tasks/tuh-01M4K8HZ2NA22EC4M7XF1RXBEK.md) Flaky test: download range_ignored sometimes restarts from 0
 - [`tuh-h1mn`](tasks/tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) Decide: website plan questions (stack, hosting, domain, public docs)
+- [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo)
 
 ## Cancelled
 

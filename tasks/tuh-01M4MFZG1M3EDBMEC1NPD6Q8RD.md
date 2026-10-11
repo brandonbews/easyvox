@@ -15,6 +15,10 @@ Options: delete both and free about 1.1 GB, or keep them for future benches.
 
 Recommendation: delete. scripts/fetch-model.sh fetches either again, checked against its pinned sha256, if a bench ever needs it. Agents never delete without Brandon's yes.
 
+11 October: the candidate bench added 10.6 GB of bench-only models in ~/Library/Caches/easyvox-bench/models (outside the app's folder; refetchable with scripts/fetch-model.sh, pinned and checksummed). Delete them too? Needs Brandon's OK.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 13:44 UTC — edit by `brandon`
+
+description edited

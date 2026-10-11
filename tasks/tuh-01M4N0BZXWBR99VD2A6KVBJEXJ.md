@@ -2,7 +2,7 @@
 
 `tuh-01M4N0BZXWBR99VD2A6KVBJEXJ`
 
-- **Status:** open — ready
+- **Status:** done
 - **Priority:** 1
 - **Labels:** `bench`
 - **Created:** 2026-10-11 08:13 UTC by `brandon`
@@ -17,6 +17,8 @@ Progress (11 Oct, 06:40, agent): all 77 runs done (14 clip benches, 42 read-alou
 
 Done (11 Oct, 07:10, agent): docs/model-bench.md 'Every candidate, one pipeline (11 October)', new rows in docs/bench/*.csv (study candidates, via extract.py --s3), DESIGN.md 'Other models we looked at' facts, 9 bench-only catalog + fetch-script entries. Gates green (fmt, clippy, test). Uncommitted; the orchestrator commits.
 
+Done in 7cd28d5 (orchestrator re-ran every gate and the self-test, 36/36, and the leak check). 14 models, 77 runs. Turbo: 6/238 wrong (v2 4), 1.3-2.2 s to text, ~20x v2's energy. Cohere fewest errors (2) at ~1 s, 1.9 GB, 3.5x energy: decision task created. Downloads: ~/Library/Caches/easyvox-bench/models, 10.6 GB.
+
 ## History
 
 ### 2026-10-11 09:32 UTC — edit by `brandon`
@@ -30,3 +32,11 @@ description edited
 ### 2026-10-11 13:41 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-11 13:44 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 13:44 UTC — edit by `brandon`
+
+status open→done
