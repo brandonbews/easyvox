@@ -173,6 +173,14 @@ pub const MARK: &str = "brand/mark.svg";
 #[allow(dead_code)]
 pub const KNOT: &str = "brand/knot.svg";
 
+/// The overlay pill's glyphs (`design/`, board 08): 20 pt, a 1.5 pt stroke with round caps, in
+/// one colour (`svg()` paints them in the text colour).
+pub const GLYPH_WARNING: &str = "brand/pill/warning.svg";
+pub const GLYPH_NO_MICROPHONE: &str = "brand/pill/no-microphone.svg";
+pub const GLYPH_INFO: &str = "brand/pill/info.svg";
+pub const GLYPH_PASTED: &str = "brand/pill/pasted.svg";
+pub const GLYPH_COPIED: &str = "brand/pill/copied.svg";
+
 /// Every brand image GPUI can load, by its asset path.
 const FILES: &[(&str, &[u8])] = &[
     (ICON_128, include_bytes!("../assets/brand/icon-128.png")),
@@ -181,6 +189,11 @@ const FILES: &[(&str, &[u8])] = &[
     (MARK_ON_DARK, include_bytes!("../assets/brand/mark-on-dark.svg")),
     (MARK, include_bytes!("../assets/brand/mark.svg")),
     (KNOT, include_bytes!("../assets/brand/knot.svg")),
+    (GLYPH_WARNING, include_bytes!("../assets/brand/pill/warning.svg")),
+    (GLYPH_NO_MICROPHONE, include_bytes!("../assets/brand/pill/no-microphone.svg")),
+    (GLYPH_INFO, include_bytes!("../assets/brand/pill/info.svg")),
+    (GLYPH_PASTED, include_bytes!("../assets/brand/pill/pasted.svg")),
+    (GLYPH_COPIED, include_bytes!("../assets/brand/pill/copied.svg")),
 ];
 
 /// The app's asset source: the brand's images (`brand/…`), then GPUI Kit's icons.

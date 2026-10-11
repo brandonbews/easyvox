@@ -157,9 +157,10 @@ unload_after_secs = 600
 overlay_hide_after_final_ms = 600
 
 # How long a notice (no microphone access, nothing heard, the model still loading)
-# stays up. Higher leaves more time to read it.
+# stays up. It's two lines, what happened and what to do, so it needs a moment to read.
+# Higher leaves more time; lower gets it out of the way sooner.
 # In milliseconds, from 500 to 30000.
-overlay_hide_after_notice_ms = 2500
+overlay_hide_after_notice_ms = 4000
 
 # The most of the transcript the overlay lays out. The pill shows the end of it, as
 # much as fits, and scrolls as words come so the newest stay in view; this caps the
@@ -168,6 +169,13 @@ overlay_hide_after_notice_ms = 2500
 # more to lay out for nothing you'd see.
 # In characters, from 10 to 500.
 overlay_max_chars = 200
+
+# How far above the Dock the overlay sits, in points, from the top of the Dock to the
+# bottom of the pill; above the bottom of the screen when the Dock is hidden or on a
+# side. It goes on the screen with the window you're typing in, centred. Higher keeps it
+# further from the Dock; lower, closer to the bottom of the screen.
+# In points, from 0 to 400.
+overlay_dock_gap_pt = 24
 
 # How long the overlay takes to pop open when you press the shortcut: it fades in as
 # it grows from `overlay_shrink_pct` smaller to full size, just past it and back. It
@@ -223,6 +231,11 @@ overlay_frame_ms = 16
 # is 30 frames a second, 50 is 20) and choppier; lower is smoother but draws more often.
 # In milliseconds, from 8 to 100.
 overlay_meter_frame_ms = 33
+
+# How long the menu bar item shows a check after EasyVox pastes your text, before it
+# goes back to how it was. Higher leaves more time to glance at it; 0 skips the check.
+# In milliseconds, from 0 to 10000.
+menubar_pasted_ms = 1000
 
 # How often the preview re-decodes the newest audio while the key is held. 0 turns the
 # preview off (long dictations are still polished in chunks). Lower shows words sooner

@@ -26,8 +26,8 @@ use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
 use crate::hotkey::HotkeyService;
 use crate::onboarding::LaunchFacts;
-use crate::onboarding_window::OnboardingView;
-use crate::overlay::Overlay;
+use crate::onboarding_window::{OnboardingView, Permissions};
+use crate::overlay::{Notice, Overlay};
 use crate::settings::{Page, SettingsView};
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
 use crate::{platform, tray};
@@ -46,6 +46,8 @@ pub enum UiEvent {
     Menu(String),
     HotKey { id: u32, pressed: bool },
     RightOption { pressed: bool },
+    // The menu bar item was clicked: its menu opens.
+    TrayOpened,
     Transcript { seq: u64, event: TranscriptEvent },
     // The settings file may have changed (from its watcher, on a background thread).
     ConfigChanged,
@@ -150,6 +152,13 @@ pub struct Controller {
     #[cfg_attr(not(feature = "self-test"), allow(dead_code))]
     pub config_reloads: u32,
     right_option_tap: bool,
+    /// Microphone and Accessibility as last read, for the menu bar item. Read again on events (a
+    /// press, a click on the item, a prompt answered), never on a timer.
+    permissions: Permissions,
+    /// The text was pasted: the menu bar item shows a check until then (`menubar_pasted_ms`),
+    /// and the task puts it back.
+    pasted_until: Option<Instant>,
+    pasted_task: Option<Task<()>>,
     /// Model downloads running now, by catalog id.
     downloads: HashMap<&'static str, DownloadJob>,
     /// A model picked while a dictation was running: switched to once it ends.
@@ -198,6 +207,9 @@ impl Controller {
             config_task: None,
             config_reloads: 0,
             right_option_tap: false,
+            permissions: Permissions::read(),
+            pasted_until: None,
+            pasted_task: None,
             downloads: HashMap::new(),
             pending_model: None,
             load_generation: Arc::default(),
@@ -234,7 +246,46 @@ impl Controller {
                 }));
             }
             UiEvent::Download { model, update } => self.on_download(model, update, cx),
+            UiEvent::TrayOpened => self.recheck_tray(cx),
         }
+    }
+
+    /// What the menu bar item shows, from the dictation, the app's state and the permissions as
+    /// last read (`DESIGN.md`, "Menu bar").
+    fn tray_status(&self, cx: &App) -> tray::Status {
+        let (settings, status) = (cx.global::<AppSettings>(), cx.global::<AppStatus>());
+        tray::Status::of(&tray::Facts {
+            activity: match self.phase {
+                Phase::Idle => tray::Activity::Idle,
+                Phase::Recording { .. } => tray::Activity::Recording,
+                Phase::Finalizing { .. } => tray::Activity::Finishing,
+            },
+            just_pasted: self.pasted_until.is_some_and(|until| Instant::now() < until),
+            mic: self.permissions.mic,
+            accessibility: self.permissions.accessibility,
+            engine: &status.engine,
+            downloading: self.downloads.contains_key(settings.model.as_str()),
+            shortcut: crate::hotkey::label(&settings.shortcut),
+            hold_right_option: settings.hold_right_option,
+            shortcut_failed: status.shortcut_error.is_some(),
+        })
+    }
+
+    /// Shows the menu bar item's status as it is now. Changes nothing that's already shown, so
+    /// it's cheap to call on any change (`main.rs` calls it whenever `AppStatus` or `AppSettings`
+    /// changes).
+    pub fn refresh_tray(&mut self, cx: &mut Context<Self>) {
+        let status = self.tray_status(cx);
+        if let Some(tray) = &mut self.tray {
+            tray.show(status);
+        }
+    }
+
+    /// Reads the permissions again, then [`refresh_tray`](Self::refresh_tray). A revoke or a
+    /// grant shows at the next event that calls this: a press, a click on the item, a prompt.
+    pub fn recheck_tray(&mut self, cx: &mut Context<Self>) {
+        self.permissions = Permissions::read();
+        self.refresh_tray(cx);
     }
 
     fn on_menu(&mut self, id: &str, cx: &mut Context<Self>) {
@@ -256,12 +307,28 @@ impl Controller {
                 }
                 cx.quit();
             }
+            fix if fix.starts_with(tray::MENU_FIX) => match self.tray.as_ref().and_then(|t| t.fix(fix)) {
+                Some(tray::Fix::SystemSettings(url)) => cx.open_url(url),
+                Some(tray::Fix::Setup) => self.open_onboarding(cx),
+                Some(tray::Fix::Settings(page)) => self.open_settings_at(page, cx),
+                None => log::warn!("menu bar: no problem for {fix:?}"),
+            },
             _ => log::warn!("unknown menu item {id:?}"),
         }
     }
 
     /// Press: start a session and show the overlay. Release: stop it; `Final` follows.
+    /// Every press reads the permissions again, for the menu bar item, which shows each press and
+    /// release.
     pub fn on_push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
+        if pressed {
+            self.permissions = Permissions::read();
+        }
+        self.push_to_talk(pressed, source, cx);
+        self.refresh_tray(cx);
+    }
+
+    fn push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
         if pressed {
             let audio = match &self.source_override {
                 Some(wav) => AudioSource::WavReplay(wav.clone()),
@@ -270,8 +337,11 @@ impl Controller {
                     let permission = easyvox_core::mic_permission_status();
                     if permission != MicPermission::Authorized {
                         log::warn!("push-to-talk: Microphone access is {permission:?}");
-                        let msg = "Microphone access needed: menu bar icon → Settings… → Permissions";
-                        self.show_notice(msg.into(), cx);
+                        let notice = match permission {
+                            MicPermission::NotDetermined => Notice::microphone_not_asked(),
+                            _ => Notice::microphone_off(),
+                        };
+                        self.show_notice(notice, cx);
                         return;
                     }
                     AudioSource::Microphone
@@ -287,6 +357,7 @@ impl Controller {
             session.stop(); // returns at once; Final follows on the channel
             log::info!("session {seq}: released after {:.2} s", started.elapsed().as_secs_f32());
             self.phase = Phase::Finalizing { seq, session, released: Instant::now(), _no_app_nap };
+            self.overlay.view.update(cx, |v, cx| v.set_finishing(cx));
         }
     }
 
@@ -295,12 +366,14 @@ impl Controller {
             return; // key repeat, or a press while the last session finishes
         }
         let Some(engine) = self.engine.clone() else {
-            let msg = match &cx.global::<AppStatus>().engine {
-                EngineStatus::Failed { .. } => "The speech model didn't load: see Settings",
-                EngineStatus::Missing => "No speech model downloaded yet: see Settings",
-                _ => "The speech model is still loading…",
+            let downloading = self.downloads.contains_key(cx.global::<AppSettings>().model.as_str());
+            let notice = match &cx.global::<AppStatus>().engine {
+                EngineStatus::Failed { .. } => Notice::model_failed(),
+                EngineStatus::Missing if downloading => Notice::downloading(),
+                EngineStatus::Missing => Notice::no_model(),
+                _ => Notice::loading(),
             };
-            self.show_notice(msg.into(), cx);
+            self.show_notice(notice, cx);
             return;
         };
         // Recording starts now either way; an unloaded model reloads while it records.
@@ -311,7 +384,13 @@ impl Controller {
             Ok(v) => v,
             Err(e) => {
                 log::error!("couldn't start a session: {e:#}");
-                self.show_notice(format!("Can't start: {e}"), cx);
+                // The core's words when the Mac has no input device (`audio::open_mic`).
+                let notice = if format!("{e:#}").contains("no default input device") {
+                    Notice::no_microphone()
+                } else {
+                    Notice::cant_start(&e.to_string())
+                };
+                self.show_notice(notice, cx);
                 return;
             }
         };
@@ -344,6 +423,8 @@ impl Controller {
         // At once, without waiting for the model; a press during the last close turns it back.
         self.overlay.view.update(cx, |v, cx| v.reset(cx));
         self.overlay.show(cx);
+        (self.pasted_until, self.pasted_task) = (None, None);
+        self.refresh_tray(cx);
         log::info!("session {seq}: started ({source}){}", if reloading { ", reloading the model" } else { "" });
     }
 
@@ -379,6 +460,7 @@ impl Controller {
                 self.sync_engine_status(cx);
                 self.schedule_unload(cx);
                 self.deliver(text, audio_secs, cx);
+                self.refresh_tray(cx);
                 if let Some(model) = self.pending_model.take() {
                     self.use_model(&model, cx);
                 }
@@ -406,7 +488,8 @@ impl Controller {
     fn deliver(&mut self, text: String, audio_secs: f32, cx: &mut Context<Self>) {
         if text.trim().is_empty() {
             // Nothing heard: leave the clipboard and history alone.
-            self.show_notice("Didn't catch anything".into(), cx);
+            let shortcut = crate::hotkey::label(&cx.global::<AppSettings>().shortcut);
+            self.show_notice(Notice::nothing_heard(&shortcut), cx);
             return;
         }
         self.overlay.view.update(cx, |v, cx| v.set_final(text.clone(), cx));
@@ -424,22 +507,42 @@ impl Controller {
             Ok(()) => {
                 let after = cx.global::<AppSettings>().app.overlay_hide_after_final_ms;
                 self.schedule_hide(Duration::from_millis(after.into()), cx);
+                self.show_pasted(cx);
             }
             Err(e) => {
                 let e = e.to_string();
                 log::warn!("paste: {e}");
-                let msg = if e.contains("Accessibility") {
-                    "Copied. Allow Accessibility in Settings to paste automatically".to_string()
+                let notice = if e.contains("Accessibility") {
+                    // Read again, so the menu bar item names the problem too.
+                    self.permissions = Permissions::read();
+                    Notice::accessibility_off()
                 } else {
-                    format!("Copied. Paste failed: {e}")
+                    Notice::couldnt_paste()
                 };
-                self.show_notice(msg, cx);
+                self.show_notice(notice, cx);
             }
         }
     }
 
-    fn show_notice(&mut self, message: String, cx: &mut Context<Self>) {
-        self.overlay.view.update(cx, |v, cx| v.set_notice(message, cx));
+    /// The menu bar item's check, for `menubar_pasted_ms`; then it goes back to how it was.
+    fn show_pasted(&mut self, cx: &mut Context<Self>) {
+        let after = Duration::from_millis(cx.global::<AppSettings>().app.menubar_pasted_ms.into());
+        if after.is_zero() {
+            return;
+        }
+        self.pasted_until = Some(Instant::now() + after);
+        self.pasted_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(after).await;
+            let _ = this.update(cx, |c, cx| {
+                c.pasted_until = None;
+                c.refresh_tray(cx);
+            });
+        }));
+    }
+
+    fn show_notice(&mut self, notice: Notice, cx: &mut Context<Self>) {
+        log::info!("notice: {}. {}", notice.title, notice.detail);
+        self.overlay.view.update(cx, |v, cx| v.set_notice(notice, cx));
         self.overlay.show(cx);
         let after = cx.global::<AppSettings>().app.overlay_hide_after_notice_ms;
         self.schedule_hide(Duration::from_millis(after.into()), cx);
@@ -911,9 +1014,10 @@ impl Controller {
         cx.spawn(async move |this, cx| {
             let status = cx.background_spawn(async { easyvox_core::request_mic_permission(MIC_PROMPT_TIMEOUT) }).await;
             log::info!("Microphone access: {status:?}");
-            let _ = this.update(cx, |_, cx| {
+            let _ = this.update(cx, |c, cx| {
                 cx.global_mut::<AppStatus>().mic_asking = false;
                 cx.refresh_windows();
+                c.recheck_tray(cx);
             });
         })
         .detach();
@@ -927,6 +1031,7 @@ impl Controller {
         log::info!("asked for Accessibility access (allowed already: {trusted})");
         cx.global_mut::<AppStatus>().accessibility_prompted = true;
         cx.refresh_windows();
+        self.recheck_tray(cx);
     }
 
     /// Loads the chosen model if it's downloaded and isn't loaded or loading: onboarding's

@@ -104,10 +104,15 @@ fn main() {
         // One channel carries every OS callback and transcript event to the UI thread.
         let (tx, rx) = async_channel::unbounded::<UiEvent>();
 
-        let menu_tx = tx.clone();
-        let tray = match tray::create(move |id| {
-            let _ = menu_tx.send_blocking(UiEvent::Menu(id));
-        }) {
+        let (menu_tx, open_tx) = (tx.clone(), tx.clone());
+        let tray = match tray::create(
+            move |id| {
+                let _ = menu_tx.send_blocking(UiEvent::Menu(id));
+            },
+            move || {
+                let _ = open_tx.send_blocking(UiEvent::TrayOpened);
+            },
+        ) {
             Ok(tray) => {
                 log::info!("tray created");
                 Some(tray)
@@ -177,6 +182,15 @@ fn main() {
         // onboarding. There's no "done" flag to store; the system and the models folder say.
         let launch = onboarding_window::launch_facts(cx);
         controller.update(cx, |c, cx| c.onboard_if_needed(&launch, cx));
+
+        // The menu bar item follows the app's state: whenever the status or the settings change
+        // (the model loads, a download starts, the shortcut changes), it shows what's new, and
+        // nothing if nothing visible changed.
+        let tray_status = controller.clone();
+        cx.observe_global::<AppStatus>(move |cx| tray_status.update(cx, |c, cx| c.refresh_tray(cx))).detach();
+        let tray_settings = controller.clone();
+        cx.observe_global::<AppSettings>(move |cx| tray_settings.update(cx, |c, cx| c.refresh_tray(cx))).detach();
+        controller.update(cx, |c, cx| c.refresh_tray(cx));
 
         #[cfg(feature = "self-test")]
         if let Some(options) = self_test {

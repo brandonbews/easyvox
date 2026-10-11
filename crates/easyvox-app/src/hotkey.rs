@@ -112,10 +112,22 @@ pub fn accept_recorded(ks: &Keystroke) -> Result<String, String> {
     Ok(s)
 }
 
+/// A shortcut as its keys read on a Mac (`alt-space` → `⌥Space`), for words like "Hold ⌥Space
+/// to talk". One that doesn't parse reads as written.
+pub fn label(keystroke: &str) -> String {
+    Keystroke::parse(keystroke).map_or_else(|_| keystroke.to_string(), |ks| gpui_kit::component::kbd::Kbd::format(&ks))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use global_hotkey::hotkey::{Code, Modifiers};
+
+    #[test]
+    fn shortcuts_read_as_their_keys() {
+        assert_eq!(label(DEFAULT_SHORTCUT), "⌥Space");
+        assert_eq!(label("ctrl-shift-k"), "⌃⇧K");
+    }
 
     #[test]
     fn default_shortcut_is_option_space() {

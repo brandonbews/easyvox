@@ -3,15 +3,22 @@
 //! makes a non-activating panel; `platform::OverlayPanel` adds click-through and the key guard
 //! so it can never take focus from the app you're dictating into.
 //!
-//! While you talk, a small level meter (five bars) moves with your voice and rests flat in
-//! silence; when no audio reaches EasyVox it shows "can't hear you" instead (`DESIGN.md`,
-//! "Overlay animation"). It moves only when the core says the level moved visibly
-//! (`TranscriptEvent::Level`), which happens only during a dictation, while the pill is up, and
-//! its bars then ease to the new level.
+//! **The look** (`DESIGN.md`, "The pill"; the design hand-off's boards 07 and 08): a capsule 44 pt
+//! tall and 240–560 pt wide, in a flat 92 % fill with a hairline and a soft shadow. On its left,
+//! a level meter of three vermilion strokes moves with your voice and rests as dots in silence;
+//! once you let go, the dots turn grey; the final text gets a check, and a notice its glyph
+//! ([`Glyph`]). Then one line of text, with a hint after it in the secondary colour while it
+//! helps ("Release to paste"). A notice is two lines: what happened, then what to do ([`Notice`]).
+//! When no audio reaches EasyVox the pill says it can't hear you. The meter moves only when the
+//! core says the level moved visibly (`TranscriptEvent::Level`), which happens only during a
+//! dictation, while the pill is up, and its bars then ease to the new level.
 //!
-//! The colours follow the macOS light or dark appearance ([`Palette`]): read at every draw, and
-//! redrawn when the appearance changes, mid-dictation too. Both palettes keep confirmed and
-//! provisional text at WCAG AA contrast whatever is behind the pill (see the tests).
+//! The colours follow the macOS light or dark appearance ([`Palette`], from `brand.rs`): read at
+//! every draw, and redrawn when the appearance changes, mid-dictation too. Both palettes keep
+//! confirmed and provisional text at WCAG AA contrast whatever is behind the pill (see the tests).
+//!
+//! **Where:** bottom centre, `overlay_dock_gap_pt` above the Dock, on the screen with the
+//! keyboard focus, worked out each time the pill opens ([`Overlay::show`]).
 //!
 //! **Animation** (`DESIGN.md`, "Overlay animation"). Each part is done the cheapest way that
 //! does its job, with its timings in the settings file's `[advanced]` table ([`Motion`]):
@@ -19,14 +26,16 @@
 //!   (`OverlayPanel::show` and `fade_out`), outside the app: no redraws and no wake-ups. The pill
 //!   grows from a little small to full size with a slight overshoot as it fades in, and shrinks a
 //!   little as it fades out. A press during the close reverses it from wherever it is.
-//! - **Inside the pill:** new words fade in, provisional words firm up once confirmed, the pill
-//!   grows and long text scrolls in a glide instead of a jump, and the meter's bars ease to each
-//!   new level. Only GPUI can draw these, so while one runs the pill draws every
-//!   `overlay_frame_ms` (every `overlay_meter_frame_ms` while only the meter moves), and once
-//!   they end it asks for nothing more (`ask_frame`). They follow [`curve::EASE_OUT`].
+//! - **Inside the pill:** new words fade in, provisional words firm up once confirmed, the
+//!   final text's check fades in with them, the pill grows and long text scrolls in a glide
+//!   instead of a jump, and the meter's bars ease to each new level. Only GPUI can draw these,
+//!   so while one runs the pill draws every `overlay_frame_ms` (every `overlay_meter_frame_ms`
+//!   while only the meter moves), and once they end it asks for nothing more (`ask_frame`).
+//!   They follow [`curve::EASE_OUT`].
 //! - **Reduce motion**, read at each open, zeroes the pop's scale, the glide and the meter's
 //!   easing, and keeps the fades: the same code with other numbers.
 
+use crate::brand;
 use crate::curve::{self, EASE_OUT};
 use crate::platform::{self, OverlayPanel};
 use crate::state::{AppSettings, AppTuning};
@@ -35,92 +44,113 @@ use gpui_kit::*;
 use std::ops::Range;
 use std::time::{Duration, Instant};
 
-const WIDTH: f32 = 640.;
-const HEIGHT: f32 = 56.;
-/// Distance from the bottom of the screen to the bottom of the pill's row.
-const BOTTOM_MARGIN: f32 = 140.;
-/// Room either side of the pill's row, inside its window, for the open's overshoot. At the most
-/// `overlay_shrink_pct` allows, the widest pill grows 9.3 points a side past full size at the
-/// pop's peak, and the row's own margin covers 4 of them; above and below, the margin covers it
-/// all. So the window's edge never cuts the pill off.
-const POP_ROOM: f32 = 6.;
-/// Around the pill in its row; inside it, the padding at each end, the border, and the gap
-/// between the meter and the text.
-const MARGIN: f32 = 4.;
-const PAD_X: f32 = 20.;
-const BORDER: f32 = 1.;
+/// The pill: 44 pt tall (60 for a notice's two lines), and 240 to 560 pt wide.
+const PILL_HEIGHT: f32 = 44.;
+const NOTICE_HEIGHT: f32 = 60.;
+const PILL_MIN: f32 = 240.;
+const PILL_MAX: f32 = 560.;
+/// Inside the pill: the padding at each end, the hairline, and the gap after the meter (and
+/// before a hint).
+const PAD_LEFT: f32 = 14.;
+const PAD_RIGHT: f32 = 20.;
+const HAIRLINE: f32 = 0.5;
 const GAP: f32 = 12.;
-const FONT_SIZE: f32 = 16.;
+/// The text and its line; a hint, or a notice's second line, and its line.
+const FONT_SIZE: f32 = 15.;
+const LINE_HEIGHT: f32 = 20.;
+const SMALL_SIZE: f32 = 13.;
+const SMALL_LINE_HEIGHT: f32 = 18.;
+/// The slot left of the text, for the meter, its dots or a glyph. A glyph is 20 pt, centred on
+/// it, reaching 2 pt into the padding: the text never moves when one replaces another.
+const SLOT: f32 = 16.;
+const GLYPH: f32 = 20.;
 /// The pill less its text: what an empty pill measures.
-const CHROME: f32 = 2. * (PAD_X + BORDER) + METER_WIDTH + GAP;
-/// The widest the pill grows: its row, less the margin.
-const PILL_MAX: f32 = WIDTH - 2. * MARGIN;
+const CHROME: f32 = PAD_LEFT + SLOT + GAP + PAD_RIGHT + 2. * HAIRLINE;
+/// The soft shadow under the pill, two layers: each is down by its first number and blurred by
+/// its second (a Gaussian's sigma, so it fades out within three of them).
+const SHADOW: (f32, f32) = (4., 4.);
+const CONTACT_SHADOW: (f32, f32) = (1., 1.5);
+/// Room around the pill inside its window, for the shadow and the open's overshoot. At the most
+/// `overlay_shrink_pct` allows, the widest pill grows 8 pt a side past full size at the pop's
+/// peak, shadow and all, so the window's edge never cuts either off (a unit test checks). The
+/// pill sits at the window's centre, so the pop, which scales about the window's centre, is
+/// about the pill's, and a notice's taller pill grows 8 pt up and 8 pt down.
+const ROOM_X: f32 = 22.;
+const ROOM_Y: f32 = 18.;
+/// The window: the widest and the tallest pill, and the room around them.
+const WINDOW_WIDTH: f32 = PILL_MAX + 2. * ROOM_X;
+const WINDOW_HEIGHT: f32 = NOTICE_HEIGHT + 2. * ROOM_Y;
 /// Text scrolled out at the left fades out over this width, rather than being cut.
 const EDGE_FADE: f32 = 16.;
 /// Room after the text's measured width, so its last glyph is never clipped.
 const TEXT_SLACK: f32 = 2.;
 
-/// The level meter: five bars, `BAR_WIDTH` wide with `BAR_GAP` between them, from
-/// `BAR_MIN` (a dot: flat) to `BAR_MAX` tall, the middle one tallest.
-const BARS: usize = 5;
+/// The level meter (`design/tokens.json`, `pill.meter`): three strokes `BAR_WIDTH` wide, their
+/// centres `BAR_PITCH` apart, from `BAR_MIN` (a dot: flat) to `BAR_MAX` tall, in the shape the
+/// design gives the menu bar's bars (the middle one tallest).
+const BARS: usize = 3;
 const BAR_WIDTH: f32 = 3.;
-const BAR_GAP: f32 = 2.;
+const BAR_PITCH: f32 = 6.;
 const BAR_MIN: f32 = 3.;
-const BAR_MAX: f32 = 18.;
-const BAR_SHAPE: [f32; BARS] = [0.45, 0.75, 1.0, 0.75, 0.45];
-const METER_WIDTH: f32 = BARS as f32 * BAR_WIDTH + (BARS - 1) as f32 * BAR_GAP;
-/// The dot that stands in for the meter once the text is final, or for a notice.
-const DOT: f32 = 10.;
+const BAR_MAX: f32 = 20.;
+const BAR_SHAPE: [f32; BARS] = [0.45, 1.0, 0.7];
 
 /// Self-test: the time spent in the draws `draw_each_redraw` makes (layout and paint, on the
 /// CPU), for `--replay --draw` to report what a draw costs.
 #[cfg(feature = "self-test")]
 pub static DRAWING_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// What the pill says when no audio reaches EasyVox.
-pub const CANT_HEAR: &str = "Can't hear you. Check your microphone.";
+/// What the pill says when no audio reaches EasyVox, and the hint after it.
+pub const CANT_HEAR: &str = "Can't hear you";
+const CANT_HEAR_HINT: &str = "Check your microphone.";
 
-/// The overlay's colours in one appearance. Colours are `0xRRGGBB`, or `0xRRGGBBAA` where they
-/// let what's behind show through.
+/// The overlay's colours in one appearance (`design/tokens.json` and boards 07–08, through
+/// `brand.rs`). Colours are `0xRRGGBB`, or `0xRRGGBBAA` where they let what's behind show through.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
-    /// The pill (`0xRRGGBBAA`): slightly see-through.
+    /// The pill (`0xRRGGBBAA`): a flat 92 % fill, no blur.
     pub background: u32,
-    /// Its outline (`0xRRGGBBAA`).
-    pub border: u32,
+    /// Its 0.5 pt hairline (`0xRRGGBBAA`).
+    pub hairline: u32,
+    /// The text, and the glyphs.
     pub text: u32,
+    /// A hint, a notice's second line, and the meter's dots once you let go.
+    pub secondary: u32,
     /// How much provisional text fades (GPUI's `fade_out`: it's drawn at `1 - this` opacity),
     /// as far as it can while keeping AA contrast.
     pub provisional_fade: f32,
-    /// The level meter while recording; the dot once the text is final; the dot of a notice and
-    /// the meter that can't hear you.
-    pub recording: u32,
-    pub done: u32,
-    pub notice: u32,
+    /// The level meter while it listens: the accent.
+    pub meter: u32,
+    /// The shadow's two layers, and the light along the top edge, inside (`0xRRGGBBAA`).
+    pub shadow: u32,
+    pub contact_shadow: u32,
+    pub highlight: u32,
 }
 
 impl Palette {
-    /// The dark pill EasyVox started with, provisional text a little less faded (it was under
-    /// AA). Apple's dark-mode system colours.
+    /// `#1C1C1E` at 92 %, light text, the dark accent.
     pub const DARK: Palette = Palette {
-        background: 0x1c1c1ef0,
-        border: 0xffffff22,
-        text: 0xffffff,
+        background: brand::DARK.pill_fill,
+        hairline: 0xffffff26,
+        text: brand::DARK.pill_text,
+        secondary: brand::DARK.pill_text2,
         provisional_fade: 0.45,
-        recording: 0xff453a,
-        done: 0x30d158,
-        notice: 0xffd60a,
+        meter: brand::DARK.accent,
+        shadow: 0x00000073,
+        contact_shadow: 0x0000004d,
+        highlight: 0xffffff1a,
     };
-    /// A light pill with near-black text. Apple's accessible (high-contrast) light-mode red,
-    /// green and orange: the usual ones are too pale on white for UI contrast.
+    /// White at 92 %, near-black text, the light accent (3.1:1 at worst: a graphic's 3:1).
     pub const LIGHT: Palette = Palette {
-        background: 0xf5f5f7f0,
-        border: 0x0000001a,
-        text: 0x1d1d1f,
-        provisional_fade: 0.33,
-        recording: 0xd70015,
-        done: 0x248a3d,
-        notice: 0xb25000,
+        background: brand::LIGHT.pill_fill,
+        hairline: 0x0000001c,
+        text: brand::LIGHT.pill_text,
+        secondary: brand::LIGHT.pill_text2,
+        provisional_fade: 0.35,
+        meter: brand::LIGHT.accent,
+        shadow: 0x00000024,
+        contact_shadow: 0x00000014,
+        highlight: 0xffffffff,
     };
 
     pub fn for_appearance(appearance: WindowAppearance) -> &'static Palette {
@@ -282,12 +312,14 @@ fn eases(
     out
 }
 
-/// The pill's width, and where its text starts: points from the left of the text's box, 0 or
-/// less (scrolled).
+/// The pill's width and height, where its text starts (points from the left of the text's
+/// box, 0 or less when scrolled), and the width its hint takes after the text (0 for none).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Geometry {
     width: f32,
     left: f32,
+    height: f32,
+    hint: f32,
 }
 
 /// The pill gliding from one geometry to another since `start`.
@@ -301,7 +333,12 @@ struct Glide {
 impl Glide {
     fn at(&self, k: f32) -> Geometry {
         let lerp = |a: f32, b: f32| a + (b - a) * k;
-        Geometry { width: lerp(self.from.width, self.to.width), left: lerp(self.from.left, self.to.left) }
+        Geometry {
+            width: lerp(self.from.width, self.to.width),
+            left: lerp(self.from.left, self.to.left),
+            height: lerp(self.from.height, self.to.height),
+            hint: lerp(self.from.hint, self.to.hint),
+        }
     }
 }
 
@@ -361,10 +398,126 @@ pub enum Mode {
     Listening,
     /// Live preview text.
     Live,
-    /// The final text, just before the pill hides.
+    /// Released: the last preview, the meter settled to grey dots, until the final text.
+    Finishing,
+    /// The final text, with a check, just before the pill hides.
     Final,
     /// A message (missing permission, model still loading, ...) instead of a transcript.
     Notice,
+}
+
+/// The glyph in the pill's slot: the final text's check, and each notice's. Thin strokes in the
+/// text colour (`brand::GLYPH_*`); the knot for "Getting ready".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Glyph {
+    Warning,
+    NoMicrophone,
+    Info,
+    Pasted,
+    Copied,
+    GettingReady,
+}
+
+impl Glyph {
+    fn path(self) -> &'static str {
+        match self {
+            Self::Warning => brand::GLYPH_WARNING,
+            Self::NoMicrophone => brand::GLYPH_NO_MICROPHONE,
+            Self::Info => brand::GLYPH_INFO,
+            Self::Pasted => brand::GLYPH_PASTED,
+            Self::Copied => brand::GLYPH_COPIED,
+            Self::GettingReady => brand::KNOT,
+        }
+    }
+}
+
+/// A notice: what happened, then what to do, after a glyph. Words carry the meaning, never
+/// colour alone. Text only: the pill can't take a click (it's click-through and never takes
+/// focus), so a notice names where the fix is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Notice {
+    pub glyph: Glyph,
+    pub title: String,
+    pub detail: String,
+}
+
+/// Every notice the pill shows. `shortcut` is the dictation shortcut as its keys read (`⌥Space`).
+impl Notice {
+    fn new(glyph: Glyph, title: &str, detail: impl Into<String>) -> Self {
+        Self { glyph, title: title.into(), detail: detail.into() }
+    }
+
+    /// A press before macOS has asked about the microphone: the menu bar's setup asks.
+    pub fn microphone_not_asked() -> Self {
+        Self::new(Glyph::Warning, "Microphone access needed", "Choose Set Up EasyVox… in the menu bar to allow it.")
+    }
+
+    /// A press with the microphone refused or restricted.
+    pub fn microphone_off() -> Self {
+        Self::new(
+            Glyph::Warning,
+            "Microphone access needed",
+            "Allow EasyVox in System Settings › Privacy & Security › Microphone.",
+        )
+    }
+
+    pub fn no_microphone() -> Self {
+        Self::new(
+            Glyph::NoMicrophone,
+            "No microphone found",
+            "Connect a microphone, or choose another input in System Settings › Sound.",
+        )
+    }
+
+    /// The recording couldn't start for another reason: its first sentence.
+    pub fn cant_start(error: &str) -> Self {
+        Self::new(Glyph::Warning, "Can't start dictating", first_sentence(error))
+    }
+
+    pub fn nothing_heard(shortcut: &str) -> Self {
+        Self::new(Glyph::Info, "Didn't catch that", format!("No speech was heard. Hold {shortcut} and try again."))
+    }
+
+    /// The text is on the clipboard: Accessibility is off, so ⌘V couldn't be sent.
+    pub fn accessibility_off() -> Self {
+        Self::new(
+            Glyph::Warning,
+            "Accessibility needed to paste",
+            "Your text was copied instead. Press ⌘V to paste it.",
+        )
+    }
+
+    /// The text is on the clipboard, and the paste failed (the reason goes to the log).
+    pub fn couldnt_paste() -> Self {
+        Self::new(Glyph::Copied, "Couldn't paste", "Your text was copied instead. Press ⌘V to paste it.")
+    }
+
+    pub fn loading() -> Self {
+        Self::new(Glyph::GettingReady, "Getting ready", "Loading the speech model on this Mac.")
+    }
+
+    pub fn downloading() -> Self {
+        Self::new(Glyph::GettingReady, "Getting ready", "The speech model is still downloading.")
+    }
+
+    pub fn no_model() -> Self {
+        Self::new(Glyph::Warning, "No speech model yet", "Download one in EasyVox Settings › Models.")
+    }
+
+    pub fn model_failed() -> Self {
+        Self::new(Glyph::Warning, "The speech model didn't load", "See EasyVox Settings › Models.")
+    }
+}
+
+/// The first sentence of an error, starting with a capital and ending with a full stop, for a
+/// notice's second line. The whole error goes to the log.
+fn first_sentence(error: &str) -> String {
+    let error = error.trim();
+    let end = error.find(". ").map_or(error.len(), |i| i + 1);
+    let sentence = error[..end].trim_end_matches('.');
+    let mut chars = sentence.chars();
+    let capital = chars.next().map(|c| c.to_uppercase().collect::<String>()).unwrap_or_default();
+    format!("{capital}{}.", chars.as_str())
 }
 
 #[derive(Default)]
@@ -379,6 +532,8 @@ pub struct OverlayView {
     pub level: f32,
     /// No audio reaches EasyVox (`TranscriptEvent::NoInput`): "can't hear you".
     pub cant_hear: bool,
+    /// The notice up now (`Mode::Notice`).
+    pub notice: Option<Notice>,
     /// How this showing moves: set at each open ([`Overlay::show`]).
     pub motion: Motion,
     /// The words fading in or firming up, while they do.
@@ -387,6 +542,8 @@ pub struct OverlayView {
     glide: Option<Glide>,
     /// The meter's bars easing to a new level, while they do.
     meter_ease: Option<MeterEase>,
+    /// The final text's check fading in, since then, while it does.
+    glyph_fade: Option<Instant>,
     /// Where the pill rests: where the glide ends, or where it is.
     geometry: Geometry,
     /// What the pill last laid out this showing (`None` before its first draw).
@@ -439,7 +596,12 @@ impl OverlayView {
 
     /// Whether a fade, glide or the meter's easing is running, or a frame for one is due.
     pub fn is_animating(&self) -> bool {
-        self.fade.is_some() || self.glide.is_some() || self.meter_ease.is_some() || self.frame.is_some()
+        self.fading() || self.meter_ease.is_some() || self.frame.is_some()
+    }
+
+    /// Whether words, the check or the pill's size are on the move: they draw at every frame.
+    fn fading(&self) -> bool {
+        self.fade.is_some() || self.glide.is_some() || self.glyph_fade.is_some()
     }
 
     /// Whether words are fading, whether the pill is gliding, and whether the meter is easing.
@@ -455,8 +617,7 @@ impl OverlayView {
         if self.frame.is_some() {
             return;
         }
-        let every =
-            if self.fade.is_some() || self.glide.is_some() { self.motion.frame } else { self.motion.meter_frame };
+        let every = if self.fading() { self.motion.frame } else { self.motion.meter_frame };
         // A quarter of a frame early: the draw waits for the screen's next refresh, so a timer
         // of a whole frame, started at a refresh, lands just after the next one and waits for
         // the one after (every other refresh, at 16 ms and 60 Hz: 30 frames a second).
@@ -475,6 +636,7 @@ impl OverlayView {
     pub fn settle(&mut self) {
         self.frame = None;
         self.fade = None;
+        self.glyph_fade = None;
         self.meter_ease = None;
         if let Some(glide) = self.glide.take() {
             self.geometry = glide.to;
@@ -498,15 +660,31 @@ impl OverlayView {
     }
 
     pub fn set_partial(&mut self, confirmed: String, provisional: String, cx: &mut Context<Self>) {
-        self.set_text(confirmed, provisional, Mode::Live, cx);
+        // A preview that comes after the release keeps the pill finishing.
+        let mode = if self.mode == Mode::Finishing { Mode::Finishing } else { Mode::Live };
+        self.set_text(confirmed, provisional, mode, cx);
     }
 
+    /// The shortcut is released: the meter settles to grey dots, the text stays until the final
+    /// text replaces it. One redraw, nothing moves.
+    pub fn set_finishing(&mut self, cx: &mut Context<Self>) {
+        if self.recording() {
+            self.mode = Mode::Finishing;
+            self.meter_ease = None;
+            self.redraw(cx);
+        }
+    }
+
+    /// The final text, with its check fading in as its words do.
     pub fn set_final(&mut self, text: String, cx: &mut Context<Self>) {
         self.set_text(text, String::new(), Mode::Final, cx);
+        self.glyph_fade = (!self.motion.words.is_zero()).then(Instant::now);
     }
 
-    pub fn set_notice(&mut self, message: String, cx: &mut Context<Self>) {
-        self.set_text(message, String::new(), Mode::Notice, cx);
+    pub fn set_notice(&mut self, notice: Notice, cx: &mut Context<Self>) {
+        let title = notice.title.clone();
+        self.notice = Some(notice);
+        self.set_text(title, String::new(), Mode::Notice, cx);
     }
 
     /// A note after the text (an error), until the next preview replaces it.
@@ -542,6 +720,7 @@ impl OverlayView {
         self.mode = Mode::Listening;
         self.level = 0.;
         self.cant_hear = false;
+        self.notice = None;
         self.start_over();
         self.redraw(cx);
     }
@@ -571,20 +750,26 @@ impl OverlayView {
         (text, provisional)
     }
 
-    /// Whether the pill is recording: it shows the meter rather than a dot.
+    /// Whether the meter moves (it's listening), for the self-test.
+    #[cfg(feature = "self-test")]
+    pub fn meter_moves(&self) -> bool {
+        self.recording()
+    }
+
+    /// Whether the pill is recording: its meter moves.
     fn recording(&self) -> bool {
         matches!(self.mode, Mode::Listening | Mode::Live)
     }
 
     /// The meter's bars at the level they ease to: their heights in half points (a device pixel
-    /// on a Retina screen), or `None` while a dot shows instead. A change that doesn't move them
-    /// by half a point isn't drawn.
+    /// on a Retina screen), or `None` while the meter doesn't move. A change that doesn't move
+    /// them by half a point isn't drawn.
     fn meter(&self) -> Option<[u8; BARS]> {
         self.bars(self.level).map(|bars| bars.map(|h| (h * 2.).round() as u8))
     }
 
-    /// The bars' heights in points at `level`, or `None` while a dot shows instead. The "can't
-    /// hear you" meter lies flat.
+    /// The bars' heights in points at `level`, or `None` while the meter doesn't move. The
+    /// "can't hear you" meter lies flat.
     fn bars(&self, level: f32) -> Option<[f32; BARS]> {
         let level = if self.cant_hear { 0. } else { level };
         self.recording().then(|| BAR_SHAPE.map(|shape| BAR_MIN + (BAR_MAX - BAR_MIN) * level * shape))
@@ -603,13 +788,13 @@ impl OverlayView {
     /// an error, say) shows as a space, which keeps every byte offset.
     fn display_text(&self, max_chars: usize) -> Shown {
         let placeholder = |text: &str| Shown { text: text.into(), provisional: 0..0, origin: None };
-        let whole = Origin { start: 0, prefix: 0 };
         let one_line = |text: &str| text.replace('\n', " ");
         match self.mode {
             Mode::Listening | Mode::Live if self.cant_hear => return placeholder(CANT_HEAR),
             Mode::Listening => return placeholder("Listening…"),
-            Mode::Notice => return Shown { text: one_line(&self.confirmed), provisional: 0..0, origin: Some(whole) },
-            Mode::Live | Mode::Final => {}
+            Mode::Finishing if self.text().is_empty() => return placeholder("Finishing…"),
+            Mode::Notice => return placeholder(&one_line(&self.confirmed)),
+            Mode::Live | Mode::Finishing | Mode::Final => {}
         }
         let full = self.text();
         let total = full.chars().count();
@@ -626,6 +811,18 @@ impl OverlayView {
         Shown { text, provisional: provisional_start..end, origin: Some(Origin { start, prefix: prefix.len() }) }
     }
 
+    /// The hint after the text, and whether the pill may grow to fit it: how to finish before the
+    /// first words, what to check while it can't hear you, and "Finishing…" once you let go, only
+    /// where it fits already, so the pill doesn't grow for the moment before the final text.
+    fn hint(&self) -> Option<(&'static str, bool)> {
+        match self.mode {
+            Mode::Listening | Mode::Live if self.cant_hear => Some((CANT_HEAR_HINT, true)),
+            Mode::Listening => Some(("Release to paste", true)),
+            Mode::Finishing if !self.text().is_empty() => Some(("Finishing…", false)),
+            _ => None,
+        }
+    }
+
     /// The pill's geometry now. A glide that has ended is dropped.
     fn geometry_at(&mut self, now: Instant) -> Geometry {
         let Some(glide) = self.glide else { return self.geometry };
@@ -637,19 +834,34 @@ impl OverlayView {
         glide.at(along(EASE_OUT, k))
     }
 
-    /// Where the pill and its text go for `shown` (laid out as `line`), gliding there when the
-    /// text moved them. The pill only grows during a showing (a word rewritten shorter doesn't
-    /// shrink it), and a transcript too long for it sits flush right, so the newest words show. When
-    /// the text changes, the words it kept stay where they were on screen and glide from there,
-    /// wherever the cut at `overlay_max_chars` falls.
-    fn place(&mut self, shown: &Shown, line: &ShapedLine, now: Instant) -> Geometry {
-        let text_width = f32::from(line.width()) + TEXT_SLACK;
+    /// Where the pill and its text go for `shown` (laid out as `line`, `text_width` wide with a
+    /// notice's second line), with a `hint` after it (its width, and whether the pill may grow
+    /// for it), `height` tall, gliding there when the text moved them. The pill only grows during
+    /// a showing (a word rewritten shorter doesn't shrink it), and a transcript too long for it
+    /// sits flush right, so the newest words show. When the text changes, the words it kept stay
+    /// where they were on screen and glide from there, wherever the cut at `overlay_max_chars`
+    /// falls.
+    fn place(
+        &mut self,
+        shown: &Shown,
+        line: &ShapedLine,
+        text_width: f32,
+        hint: Option<(f32, bool)>,
+        height: f32,
+        now: Instant,
+    ) -> Geometry {
+        let text_width = text_width + TEXT_SLACK;
         let grown = if self.laid.is_some() { self.geometry.width } else { 0. };
-        let width = (CHROME + text_width).max(grown).min(PILL_MAX);
-        // Only the transcript scrolls; a notice too long for the pill shows its start.
-        let flush_right = shown.origin.is_some() && matches!(self.mode, Mode::Live | Mode::Final);
-        let left = if flush_right { (width - CHROME - text_width).min(0.) } else { 0. };
-        let target = Geometry { width, left };
+        let hint = hint.map_or(0., |(width, may_grow)| {
+            let room = GAP + width;
+            if may_grow || grown >= CHROME + text_width + room { room } else { 0. }
+        });
+        let width = (CHROME + text_width + hint).max(grown).clamp(PILL_MIN, PILL_MAX);
+        // Only the transcript scrolls; a placeholder or a notice too long for the pill shows its
+        // start.
+        let flush_right = shown.origin.is_some() && matches!(self.mode, Mode::Live | Mode::Finishing | Mode::Final);
+        let left = if flush_right { (width - CHROME - hint - text_width).min(0.) } else { 0. };
+        let target = Geometry { width, left, height, hint };
         let current = self.geometry_at(now);
         let kept = self.kept.take();
         let Some(laid) = &self.laid else {
@@ -672,7 +884,7 @@ impl OverlayView {
             // A placeholder came or went: nothing to keep in place.
             _ => target.left,
         };
-        let from = Geometry { width: current.width, left };
+        let from = Geometry { left, ..current };
         self.geometry = target;
         self.glide = (from != target && !self.motion.glide.is_zero()).then_some(Glide { start: now, from, to: target });
         if self.glide.is_some() { from } else { target }
@@ -716,26 +928,36 @@ impl OverlayView {
         out
     }
 
-    /// The meter, or the dot that replaces it, in a box of the meter's width so the text
-    /// doesn't move when one replaces the other.
-    fn indicator(&self, palette: &Palette, now: Instant) -> Div {
-        let slot = div().w(px(METER_WIDTH)).h(px(BAR_MAX)).flex_none().flex().items_center();
-        let Some(bars) = self.bars(self.level_at(now)) else {
-            let color = if self.mode == Mode::Final { palette.done } else { palette.notice };
-            return slot.justify_center().child(div().size(px(DOT)).rounded_full().bg(rgb(color)));
+    /// The slot left of the text: the meter while it listens (flat while it can't hear you),
+    /// grey dots once you let go, the final text's check (at `check` opacity, fading in), or the
+    /// notice's glyph. One width for all, so the text doesn't move when one replaces another.
+    fn indicator(&self, palette: &Palette, check: f32, now: Instant) -> Div {
+        let slot = div().w(px(SLOT)).h_full().flex_none().flex().items_center().justify_center();
+        let glyph = |glyph: Glyph, opacity: f32| {
+            let alpha = (opacity.clamp(0., 1.) * 255.).round() as u32;
+            svg().path(glyph.path()).flex_none().size(px(GLYPH)).text_color(rgba(palette.text << 8 | alpha))
         };
-        let color = rgb(if self.cant_hear { palette.notice } else { palette.recording });
-        slot.justify_between()
-            .children(bars.map(|height| div().w(px(BAR_WIDTH)).h(px(height)).rounded_full().bg(color)))
+        let (bars, colour) = match (self.mode, self.bars(self.level_at(now))) {
+            (Mode::Final, _) => return slot.child(glyph(Glyph::Pasted, check)),
+            (Mode::Notice, _) => return slot.when_some(self.notice.as_ref(), |s, n| s.child(glyph(n.glyph, 1.))),
+            (_, Some(bars)) if !self.cant_hear => (bars, palette.meter),
+            _ => ([BAR_MIN; BARS], palette.secondary),
+        };
+        slot.gap(px(BAR_PITCH - BAR_WIDTH)).children(
+            bars.map(|height| div().w(px(BAR_WIDTH)).h(px(height)).flex_none().rounded_full().bg(rgb(colour))),
+        )
     }
 }
 
-/// `text` in the pill's font, to measure it before it's drawn.
-fn shape(text: &str, window: &mut Window) -> ShapedLine {
+/// `text` in the pill's font at `size`, semibold if `bold`, to measure it before it's drawn.
+fn shape(text: &str, size: f32, bold: bool, window: &mut Window) -> ShapedLine {
     let mut style = window.text_style();
-    style.font_size = px(FONT_SIZE).into();
+    style.font_size = px(size).into();
+    if bold {
+        style.font_weight = FontWeight::SEMIBOLD;
+    }
     let run = style.to_run(text.len());
-    window.text_system().shape_line(SharedString::from(text.to_string()), px(FONT_SIZE), &[run], None)
+    window.text_system().shape_line(SharedString::from(text.to_string()), px(size), &[run], None)
 }
 
 impl Render for OverlayView {
@@ -748,8 +970,19 @@ impl Render for OverlayView {
         self.renders += 1;
         let max_chars = cx.global::<AppSettings>().app.overlay_max_chars;
         let shown = self.display_text(max_chars as usize);
-        let line = shape(&shown.text, window);
-        let geometry = self.place(&shown, &line, now);
+        let notice = if self.mode == Mode::Notice { self.notice.clone() } else { None };
+        let line = shape(&shown.text, FONT_SIZE, notice.is_some(), window);
+        let (text_width, height) = match &notice {
+            Some(n) => {
+                let detail = f32::from(shape(&n.detail, SMALL_SIZE, false, window).width());
+                (f32::from(line.width()).max(detail), NOTICE_HEIGHT)
+            }
+            None => (f32::from(line.width()), PILL_HEIGHT),
+        };
+        let hint = self.hint();
+        let hint_width = hint
+            .map(|(text, may_grow)| (f32::from(shape(text, SMALL_SIZE, false, window).width()) + TEXT_SLACK, may_grow));
+        let geometry = self.place(&shown, &line, text_width, hint_width, height, now);
         // `HighlightStyle::color` blends over the base colour (white over white stays white),
         // so fading needs `fade_out`.
         let highlights = self.highlights(&shown, palette, now);
@@ -759,7 +992,17 @@ impl Render for OverlayView {
         {
             self.meter_ease = None;
         }
-        if self.fade.is_some() || self.glide.is_some() || self.meter_ease.is_some() {
+        // The check fades in with the final text's words.
+        let check = match self.glyph_fade {
+            Some(start) if progress(start, self.motion.words, now) < 1. => {
+                along(EASE_OUT, progress(start, self.motion.words, now))
+            }
+            _ => {
+                self.glyph_fade = None;
+                1.
+            }
+        };
+        if self.fading() || self.meter_ease.is_some() {
             self.ask_frame(cx);
         }
         let text = shown.text.clone();
@@ -772,43 +1015,85 @@ impl Render for OverlayView {
             linear_color_stop(background, 0.),
             linear_color_stop(rgba(palette.background & !0xff), 1.),
         ));
-        // The pill's row, with room either side for the open's overshoot.
-        div().size_full().px(px(POP_ROOM)).child(
-            div().w_full().h(px(HEIGHT)).p(px(MARGIN)).flex().justify_center().child(
-                div()
-                    .w(px(geometry.width))
-                    .h_full()
-                    .flex_none()
-                    .rounded_full()
-                    .bg(background)
-                    .border(px(BORDER))
-                    .border_color(rgba(palette.border))
-                    .px(px(PAD_X))
-                    .flex()
-                    .items_center()
-                    .gap(px(GAP))
-                    .text_color(rgb(palette.text))
-                    .text_size(px(FONT_SIZE))
-                    .child(self.indicator(palette, now))
-                    .child(
-                        div()
-                            .relative()
-                            .w(px((geometry.width - CHROME).max(0.)))
-                            .h_full()
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .overflow_hidden()
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .ml(px(geometry.left))
-                                    .whitespace_nowrap()
-                                    .child(StyledText::new(text).with_highlights(highlights)),
-                            )
-                            .when(scrolled, |this| this.child(edge)),
-                    ),
-            ),
+        let text_box = (geometry.width - CHROME - geometry.hint).max(0.);
+        let shadow = |color: u32, (down, blur): (f32, f32), inset: bool| BoxShadow {
+            color: rgba(color).into(),
+            offset: point(px(0.), px(down)),
+            blur_radius: px(blur),
+            spread_radius: px(0.),
+            inset,
+        };
+        let shadows = vec![
+            shadow(palette.shadow, SHADOW, false),
+            shadow(palette.contact_shadow, CONTACT_SHADOW, false),
+            // A hairline of light along the top, inside.
+            shadow(palette.highlight, (HAIRLINE, 0.), true),
+        ];
+        let body = match notice {
+            // What happened, then what to do.
+            Some(notice) => div()
+                .w(px(text_box))
+                .flex_none()
+                .flex()
+                .flex_col()
+                .child(div().font_weight(FontWeight::SEMIBOLD).truncate().child(text))
+                .child(
+                    div()
+                        .text_size(px(SMALL_SIZE))
+                        .line_height(px(SMALL_LINE_HEIGHT))
+                        .text_color(rgb(palette.secondary))
+                        .truncate()
+                        .child(notice.detail),
+                ),
+            None => div()
+                .relative()
+                .w(px(text_box))
+                .h_full()
+                .flex_none()
+                .flex()
+                .items_center()
+                .overflow_hidden()
+                .child(
+                    div()
+                        .flex_none()
+                        .ml(px(geometry.left))
+                        .whitespace_nowrap()
+                        .child(StyledText::new(text).with_highlights(highlights)),
+                )
+                .when(scrolled, |this| this.child(edge)),
+        };
+        let hint = hint.filter(|_| geometry.hint > 0.5).map(|(hint, _)| {
+            div()
+                .flex_none()
+                .whitespace_nowrap()
+                .text_size(px(SMALL_SIZE))
+                .text_color(rgb(palette.secondary))
+                .child(hint)
+        });
+        // The pill at the window's centre, with room around it for its shadow and the open's
+        // overshoot.
+        div().size_full().flex().items_center().justify_center().child(
+            div()
+                .w(px(geometry.width))
+                .h(px(geometry.height))
+                .flex_none()
+                .rounded_full()
+                .bg(background)
+                .border(px(HAIRLINE))
+                .border_color(rgba(palette.hairline))
+                .shadow(shadows)
+                .overflow_hidden()
+                .pl(px(PAD_LEFT))
+                .pr(px(PAD_RIGHT))
+                .flex()
+                .items_center()
+                .gap(px(GAP))
+                .text_color(rgb(palette.text))
+                .text_size(px(FONT_SIZE))
+                .line_height(px(LINE_HEIGHT))
+                .child(self.indicator(palette, check, now))
+                .child(body)
+                .children(hint),
         )
     }
 }
@@ -822,27 +1107,46 @@ pub struct Overlay {
     pub window: AnyWindowHandle,
     /// Orders the panel out once the close has faded it. A show drops (cancels) it.
     closing: Option<Task<()>>,
+    /// Moves the panel to another place, then opens it, on the next turn of the run loop
+    /// (`OverlayPanel::move_to` says why). A hide drops (cancels) it.
+    opening: Option<Task<()>>,
 }
 
 impl Overlay {
     /// Shows the pill at once: it fades in and pops up to full size from wherever it is, hidden
-    /// or part-way through a close. Reads Reduce motion and the timings for this showing.
+    /// or part-way through a close. Reads Reduce motion and the timings for this showing. Shown
+    /// from hidden, it first goes above the Dock of the screen with the keyboard focus; a pill
+    /// already up stays where it is.
     pub fn show(&mut self, cx: &mut App) {
-        self.closing = None;
-        let motion = Motion::new(&cx.global::<AppSettings>().app, platform::reduce_motion());
+        (self.closing, self.opening) = (None, None);
+        let app = &cx.global::<AppSettings>().app;
+        let motion = Motion::new(app, platform::reduce_motion());
         let fresh = !self.panel.is_visible();
+        let moved = fresh.then(|| self.panel.origin_above_dock(app.overlay_dock_gap_pt.into(), PILL_BOTTOM.into()));
         self.view.update(cx, |view, _| {
             view.motion = motion;
             if fresh {
                 view.start_over();
             }
         });
-        self.panel.show(motion.open, motion.shrink.into());
+        match moved.flatten() {
+            // Usually it's where it was last time, and opens at once. Elsewhere (another screen,
+            // the Dock moved), it opens a turn of the run loop later, from there.
+            Some(origin) => {
+                let panel = self.panel.clone();
+                self.opening = Some(cx.spawn(async move |_| {
+                    panel.move_to(origin);
+                    panel.show(motion.open, motion.shrink.into());
+                }));
+            }
+            None => self.panel.show(motion.open, motion.shrink.into()),
+        }
     }
 
     /// Hides the pill: it fades out and shrinks a little, then is ordered out. Returns at once,
     /// so nothing waits for it, and a show meanwhile takes it back up from where it is.
     pub fn hide(&mut self, cx: &mut App) {
+        self.opening = None;
         if !self.panel.is_visible() {
             return;
         }
@@ -870,19 +1174,23 @@ impl Overlay {
     }
 }
 
-/// Creates the overlay window, hidden, at the bottom centre of the primary display.
+/// How far the 44 pt pill's bottom edge is above its window's: the room, and half what a notice
+/// adds.
+pub const PILL_BOTTOM: f32 = ROOM_Y + (NOTICE_HEIGHT - PILL_HEIGHT) / 2.;
+
+/// Creates the overlay window, hidden, at the bottom centre of the primary display; each show
+/// moves it to the screen with the keyboard focus.
 pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
     let display = cx.primary_display().ok_or_else(|| anyhow::anyhow!("no display"))?;
     let bounds = display.bounds();
-    // The window is the pill's row and the room either side of it; the pill pops about its
-    // centre, which is the window's.
-    let width = px(WIDTH + 2. * POP_ROOM);
-    let origin = point(
-        bounds.origin.x + (bounds.size.width - width) / 2.,
-        bounds.origin.y + bounds.size.height - px(HEIGHT) - px(BOTTOM_MARGIN),
-    );
+    // The window is the biggest pill and the room around it; the pill pops about its centre,
+    // which is the window's. It starts at the bottom of the primary display, hidden, and each
+    // show moves it above the Dock of the screen with the keyboard focus.
+    let (width, height) = (px(WINDOW_WIDTH), px(WINDOW_HEIGHT));
+    let origin =
+        point(bounds.origin.x + (bounds.size.width - width) / 2., bounds.origin.y + bounds.size.height - height);
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(width, px(HEIGHT)) })),
+        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(width, height) })),
         titlebar: None,
         focus: false,
         show: false,
@@ -911,6 +1219,7 @@ pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
         panel: panel.ok_or_else(|| anyhow::anyhow!("overlay panel not built"))??,
         window: window.into(),
         closing: None,
+        opening: None,
     })
 }
 
@@ -918,8 +1227,8 @@ pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
 mod tests {
     // Not `super::*`: that brings in GPUI's own `test` macro, which shadows `#[test]`.
     use super::{
-        BAR_MAX, BAR_MIN, CANT_HEAR, CONFIRMED, Ease, Fade, HEIGHT, HIDDEN, MARGIN, Mode, Motion, OverlayView,
-        PILL_MAX, POP_ROOM, PROVISIONAL, Palette, WIDTH, common_prefix, eases, opacity, word_start,
+        BAR_MAX, BAR_MIN, CANT_HEAR, CONFIRMED, Ease, Fade, HIDDEN, Mode, Motion, NOTICE_HEIGHT, Notice, OverlayView,
+        PILL_MAX, PROVISIONAL, Palette, SHADOW, WINDOW_HEIGHT, WINDOW_WIDTH, common_prefix, eases, opacity, word_start,
     };
     use crate::curve::{POP, along};
     use crate::state::AppTuning;
@@ -991,24 +1300,48 @@ mod tests {
             let mut v = view("Hello", "world");
             (v.mode, v.cant_hear) = (mode, true);
             assert_eq!(v.shown(), (CANT_HEAR.to_string(), 0..0), "{mode:?}");
-            // The meter lies flat.
-            assert_eq!(v.meter(), Some([(BAR_MIN * 2.) as u8; 5]));
+            // The meter lies flat, and the hint says what to check.
+            assert_eq!(v.meter(), Some([(BAR_MIN * 2.) as u8; 3]));
+            assert_eq!(v.hint(), Some(("Check your microphone.", true)));
         }
         let mut v = view("Hello", "");
         (v.mode, v.cant_hear) = (Mode::Final, true);
         assert_eq!(v.shown().0, "Hello");
-        assert_eq!(v.meter(), None, "a dot, not the meter");
+        assert_eq!(v.meter(), None, "a check, not the meter");
+    }
+
+    #[test]
+    fn hints_help_before_the_first_words_and_after_the_release() {
+        let mut v = view("", "");
+        v.mode = Mode::Listening;
+        assert_eq!(v.hint(), Some(("Release to paste", true)));
+        let v = view("Hello", "world");
+        assert_eq!(v.hint(), None, "words take the room");
+        // Released: the words stay, the meter stops, and "Finishing…" shows only if it fits.
+        let mut v = view("Hello", "world");
+        v.mode = Mode::Finishing;
+        assert_eq!(v.shown().0, "Hello world");
+        assert_eq!((v.meter(), v.hint()), (None, Some(("Finishing…", false))));
+        // Released before any words: the placeholder says it.
+        let mut v = view("", "");
+        v.mode = Mode::Finishing;
+        assert_eq!((v.shown().0.as_str(), v.hint()), ("Finishing…", None));
+        for mode in [Mode::Final, Mode::Notice] {
+            let mut v = view("Hello", "");
+            v.mode = mode;
+            assert_eq!(v.hint(), None, "{mode:?}");
+        }
     }
 
     #[test]
     fn the_meter_follows_the_level_and_rests_flat() {
         let mut v = view("", "");
         v.mode = Mode::Listening;
-        assert_eq!(v.meter(), Some([(BAR_MIN * 2.) as u8; 5]), "flat at 0");
+        assert_eq!(v.meter(), Some([(BAR_MIN * 2.) as u8; 3]), "flat at 0");
         v.level = 1.;
         let full = v.meter().unwrap();
-        assert_eq!(full[2], (BAR_MAX * 2.) as u8, "the middle bar fills the meter");
-        assert!(full[0] < full[1] && full[1] < full[2] && full[2] > full[3] && full[3] > full[4]);
+        assert_eq!(full[1], (BAR_MAX * 2.) as u8, "the middle bar fills the meter");
+        assert!(full[0] < full[2] && full[2] < full[1]);
         // A level change smaller than half a point on every bar draws the same bars, so it
         // doesn't redraw.
         v.level = 0.5;
@@ -1057,16 +1390,21 @@ mod tests {
     }
 
     #[test]
-    fn the_window_has_room_for_the_biggest_pop() {
+    fn the_window_has_room_for_the_biggest_pop_and_its_shadow() {
         // The peak past full size, by the share the pill grew.
         let peak = (0..=1000).map(|i| along(POP, i as f64 / 1000.)).fold(0., f64::max);
         let shrink = AppTuning::default().fields().into_iter().find(|f| f.key == "overlay_shrink_pct").unwrap();
         let biggest = (1. + (peak - 1.) * shrink.max.parse::<f64>().unwrap() / 100.) as f32;
-        // The widest pill and the pill's height, at the peak, inside the window.
-        assert!(PILL_MAX * biggest <= WIDTH + 2. * POP_ROOM, "{}", PILL_MAX * biggest);
-        assert!((HEIGHT - 2. * MARGIN) * biggest <= HEIGHT);
-        // With little room to spare.
-        assert!(PILL_MAX * biggest > WIDTH + 2. * POP_ROOM - 2.);
+        // The widest pill and a notice's height, with the shadow's reach (three sigmas, and down
+        // by its offset), at the peak: the pop scales about the window's centre, which is the
+        // pill's.
+        let (down, blur) = SHADOW;
+        let half_width = (PILL_MAX / 2. + 3. * blur) * biggest;
+        let half_height = (NOTICE_HEIGHT / 2. + down + 3. * blur) * biggest;
+        assert!(half_width <= WINDOW_WIDTH / 2., "{half_width}");
+        assert!(half_height <= WINDOW_HEIGHT / 2., "{half_height}");
+        // With little room to spare: the window is what the overlay's frames cost on screen.
+        assert!(half_width > WINDOW_WIDTH / 2. - 2. && half_height > WINDOW_HEIGHT / 2. - 2.);
     }
 
     #[test]
@@ -1140,17 +1478,18 @@ mod tests {
         (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
     }
 
-    /// Contrast ratios in a palette: confirmed text, provisional text and the indicator colours
-    /// against the pill. The pill lets 6 % of what's behind it through, so each is the worst
-    /// over a black and a white backdrop.
-    fn ratios(p: &Palette) -> [f64; 5] {
+    /// Contrast ratios in a palette: confirmed text (and the glyphs, drawn in it), provisional
+    /// text, the secondary text (hints, a notice's second line, the dots) and the meter, against
+    /// the pill. The pill lets 8 % of what's behind it through, so each is the worst over a black
+    /// and a white backdrop.
+    fn ratios(p: &Palette) -> [f64; 4] {
         let alpha = (p.background & 0xff) as f64 / 255.;
-        let mut worst = [f64::INFINITY; 5];
+        let mut worst = [f64::INFINITY; 4];
         for backdrop in [[0.; 3], [1.; 3]] {
             let pill = over(channels(p.background >> 8), alpha, backdrop);
             let text = channels(p.text);
             let provisional = over(text, 1. - p.provisional_fade as f64, pill);
-            let all = [text, provisional, channels(p.recording), channels(p.done), channels(p.notice)];
+            let all = [text, provisional, channels(p.secondary), channels(p.meter)];
             for (w, colour) in worst.iter_mut().zip(all) {
                 *w = w.min(contrast(colour, pill));
             }
@@ -1161,17 +1500,41 @@ mod tests {
     #[test]
     fn text_meets_wcag_aa_contrast_in_light_and_dark() {
         for (name, palette) in [("dark", Palette::DARK), ("light", Palette::LIGHT)] {
-            let [text, provisional, recording, done, notice] = ratios(&palette);
-            // AA for normal text (the pill's 16 px is under "large text"): 4.5:1.
+            let [text, provisional, secondary, meter] = ratios(&palette);
+            // AA for normal text (the pill's 15 and 13 pt are under "large text"): 4.5:1.
             assert!(text >= 7.0, "{name}: confirmed text {text:.2}:1");
             assert!(provisional >= 4.5, "{name}: provisional text {provisional:.2}:1");
+            assert!(secondary >= 4.5, "{name}: secondary text {secondary:.2}:1");
             // Provisional text still reads as fainter than confirmed text.
             assert!(provisional < text / 2., "{name}: {provisional:.2} vs {text:.2}");
-            // The meter and dots, as UI graphics (WCAG 1.4.11): 3:1.
-            for (what, ratio) in [("recording", recording), ("done", done), ("notice", notice)] {
-                assert!(ratio >= 3.0, "{name}: {what} {ratio:.2}:1");
-            }
+            // The meter, as a UI graphic (WCAG 1.4.11): 3:1. The glyphs are in the text colour.
+            assert!(meter >= 3.0, "{name}: meter {meter:.2}:1");
         }
+    }
+
+    #[test]
+    fn notices_say_what_happened_then_what_to_do() {
+        let all = [
+            Notice::microphone_not_asked(),
+            Notice::microphone_off(),
+            Notice::no_microphone(),
+            Notice::cant_start("the input device stopped. try again"),
+            Notice::nothing_heard("⌥Space"),
+            Notice::accessibility_off(),
+            Notice::couldnt_paste(),
+            Notice::loading(),
+            Notice::downloading(),
+            Notice::no_model(),
+            Notice::model_failed(),
+        ];
+        for notice in &all {
+            // A title without a full stop, then one or two sentences ending in one.
+            assert!(!notice.title.is_empty() && !notice.title.ends_with('.'), "{notice:?}");
+            assert!(notice.detail.ends_with('.') && notice.detail.starts_with(char::is_uppercase), "{notice:?}");
+        }
+        assert_eq!(all[3].detail, "The input device stopped.");
+        assert_eq!(all[4].detail, "No speech was heard. Hold ⌥Space and try again.");
+        assert_eq!(super::first_sentence("no default input device"), "No default input device.");
     }
 
     #[test]

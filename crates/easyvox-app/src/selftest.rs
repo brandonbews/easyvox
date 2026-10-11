@@ -37,11 +37,11 @@
 use crate::controller::Controller;
 use crate::onboarding::{Busy, LaunchFacts, Onboarding, Problem, State, StepId};
 use crate::onboarding_window::{Permissions, chosen_model};
-use crate::overlay::CANT_HEAR;
-use crate::overlay::Mode;
+use crate::overlay::{CANT_HEAR, Glyph, Mode, Notice};
 use crate::platform::{self, PanelState};
 use crate::settings::Page;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
+use crate::tray;
 use easyvox_core::MicPermission;
 use easyvox_core::download::{DownloadError, Progress};
 use easyvox_core::models::{self, ModelInfo};
@@ -155,14 +155,15 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
     let started = Instant::now();
     let mut report = Report::default();
 
-    let (tray_created, tray_visible) = cx.update(|cx| {
+    let (tray_created, tray_visible, tray_frame) = cx.update(|cx| {
         let tray = controller.read(cx).tray.as_ref();
-        (tray.is_some(), tray.and_then(|t| platform::status_item_visible(&t.icon)))
+        let frame = tray.and_then(|t| platform::status_item_frame(&t.icon));
+        (tray.is_some(), tray.and_then(|t| platform::status_item_visible(&t.icon)), frame)
     });
     report.check(
         "menu bar icon created",
         tray_created && tray_visible == Some(true),
-        json!({"status_item_visible": tray_visible}),
+        json!({"status_item_visible": tray_visible, "frame": tray_frame}),
     );
 
     let (shortcut, shortcut_error, hotkey_id) = cx.update(|cx| {
@@ -215,6 +216,8 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
         engine_ready,
         json!({"model": model, "status": format!("{engine:?}"), "waited_ms": waited}),
     );
+
+    menu_bar_at_rest(&controller, &mut report, cx);
 
     match (engine_ready, hotkey_id) {
         (true, Some(id)) => {
@@ -310,6 +313,7 @@ async fn dictation(
         draw_each_redraw(controller, false, cx);
         return;
     }
+    let tray_recording = menu_bar(controller, cx);
     sleep(cx, 40).await; // into the open's fade and pop
     let opening = cx.update(|cx| controller.read(cx).overlay.panel.motion_state());
     let shown = panel_state(controller, cx);
@@ -322,6 +326,20 @@ async fn dictation(
             && shown.borderless
             && shown.nonactivating,
         panel_json(&shown),
+    );
+    // Where it opened: centred on the screen with the keyboard focus, its pill's bottom edge
+    // `overlay_dock_gap_pt` above the Dock (or the screen's bottom edge).
+    let (window, screen, gap) = cx.update(|cx| {
+        let (window, screen) = controller.read(cx).overlay.panel.placement();
+        (window, screen, f64::from(cx.global::<AppSettings>().app.overlay_dock_gap_pt))
+    });
+    let pill_bottom = window.1 + f64::from(crate::overlay::PILL_BOTTOM);
+    report.check(
+        "the overlay opens above the Dock, centred on the screen with the keyboard focus",
+        screen.is_some_and(|(x, y, w, _)| {
+            (pill_bottom - (y + gap)).abs() <= 1. && ((window.0 + window.2 / 2.) - (x + w / 2.)).abs() <= 1.
+        }),
+        json!({"window": window, "visible_frame": screen, "gap": gap, "pill_bottom": pill_bottom}),
     );
 
     let mut partials: Vec<(u128, String)> = vec![];
@@ -366,7 +384,23 @@ async fn dictation(
     report.check("the overlay follows light and dark, live, mid-dictation", ok, detail);
 
     let status = platform::post_hotkey_event(hotkey_id, false);
+    let mode_of = |cx: &mut App| controller.read(cx).overlay.view.read(cx).mode;
+    let released =
+        wait_for(cx, Duration::from_secs(2), |cx| !matches!(mode_of(cx), Mode::Live | Mode::Listening)).await;
+    let (released_mode, released_meter) =
+        cx.update(|cx| (mode_of(cx), controller.read(cx).overlay.view.read(cx).meter_moves()));
     let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
+    let (tray_pasted, final_at) = (menu_bar(controller, cx), Instant::now());
+    let final_mode = cx.update(|cx| mode_of(cx));
+    report.check(
+        "on release the pill finishes (its meter stops), then shows the final text with a check",
+        released.is_some()
+            && matches!(released_mode, Mode::Finishing | Mode::Final)
+            && !released_meter
+            && final_mode == Mode::Final,
+        json!({"released_after_ms": released, "on_release": format!("{released_mode:?}"),
+               "meter_moves_on_release": released_meter, "after_final": format!("{final_mode:?}")}),
+    );
     // The final text fades in for `overlay_words_ms`; then the pill, still up for a moment,
     // asks for nothing more.
     sleep(cx, 300).await;
@@ -405,6 +439,26 @@ async fn dictation(
 
     let hidden = wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).overlay.panel.state().visible).await;
     report.check("overlay hides after the final text", hidden.is_some(), json!({"ms": hidden}));
+    let pasted_ms = cx.update(|cx| cx.global::<AppSettings>().app.menubar_pasted_ms);
+    // The check stays `menubar_pasted_ms` from the final text.
+    let left = Duration::from_millis(u64::from(pasted_ms) + 250).saturating_sub(final_at.elapsed());
+    sleep(cx, left.as_millis() as u64).await;
+    let tray_after = menu_bar(controller, cx);
+    let glyph =
+        |snapshot: &Option<(tray::Status, Option<platform::MenuBarImage>)>| snapshot.as_ref().map(|s| s.0.glyph);
+    let at_rest = tray_after.as_ref().map(|(status, _)| rest_glyph(status));
+    let listening_image = tray_recording.as_ref().and_then(|s| s.1.as_ref());
+    report.check(
+        "the menu bar item follows the dictation: listening, pasted, then back",
+        glyph(&tray_recording) == Some(tray::Glyph::Listening)
+            && listening_image.is_some_and(|i| !i.template && i.label == tray::Glyph::Listening.label())
+            && (pasted_ms == 0 || glyph(&tray_pasted) == Some(tray::Glyph::Pasted))
+            && at_rest.is_some()
+            && glyph(&tray_after) == at_rest,
+        json!({"recording": format!("{:?}", glyph(&tray_recording)), "listening_image": format!("{listening_image:?}"),
+               "after_final": format!("{:?}", glyph(&tray_pasted)), "pasted_ms": pasted_ms,
+               "after_the_check": format!("{:?}", glyph(&tray_after))}),
+    );
 
     // Hidden, nothing runs: no frames, no draws, no animation left on the layer.
     let rest_before = cx.update(|cx| overlay_counts(controller, cx));
@@ -450,6 +504,62 @@ async fn dictation(
                "hidden_1_s": {"frames": rest_after.3 - rest_before.3, "renders": rest_after.2 - rest_before.2,
                "redraws": rest_after.1 - rest_before.1, "animating": animating_hidden,
                "layer": motion_json(&resting)}}),
+    );
+}
+
+/// The menu bar item's status and its image as AppKit has it.
+fn menu_bar(
+    controller: &Entity<Controller>,
+    cx: &mut AsyncApp,
+) -> Option<(tray::Status, Option<platform::MenuBarImage>)> {
+    cx.update(|cx| {
+        let tray = controller.read(cx).tray.as_ref()?;
+        Some((tray.status().clone(), platform::menu_bar_image(&tray.icon)))
+    })
+}
+
+/// The glyph between dictations, once nothing is loading: Ready, or Needs attention when the
+/// menu names a problem.
+fn rest_glyph(status: &tray::Status) -> tray::Glyph {
+    if status.problems.is_empty() { tray::Glyph::Ready } else { tray::Glyph::Attention }
+}
+
+/// The menu bar item between dictations: one 30 × 16 pt image with a 1× and a 2× bitmap, a
+/// template, labelled for VoiceOver; and a menu that starts with the status (how to dictate, or
+/// each problem with its fix), above History…, Settings… ⌘,, About EasyVox and Quit EasyVox ⌘Q.
+/// The self-test reads the permissions as they are, so either status can show; nothing is
+/// chosen in the menu.
+fn menu_bar_at_rest(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    let snapshot = cx.update(|cx| {
+        controller.update(cx, |c, cx| c.recheck_tray(cx));
+        let tray = controller.read(cx).tray.as_ref()?;
+        Some((tray.status().clone(), platform::menu_bar_image(&tray.icon), platform::menu_items(&tray.menu)))
+    });
+    let Some((status, image, items)) = snapshot else {
+        return report.check("the menu bar item shows its state", false, json!("no menu bar item"));
+    };
+    let glyph = rest_glyph(&status);
+    let mut widths = image.as_ref().map(|i| i.pixel_widths.clone()).unwrap_or_default();
+    widths.sort_unstable();
+    let image_ok = image
+        .as_ref()
+        .is_some_and(|i| i.size == tray::IMAGE_SIZE && i.template && widths == [30, 60] && i.label == glyph.label());
+    let first = match status.problems.first() {
+        None => status.headline.clone(),
+        Some(problem) => format!("⚠\u{fe0e} {}", problem.title),
+    };
+    let has = |title: &str, key: &str| items.iter().any(|(t, enabled, k)| t == title && *enabled && k == key);
+    let rows_ok = items.first().is_some_and(|(t, ..)| *t == first)
+        && has(tray::HISTORY_TITLE, "")
+        && has(tray::SETTINGS_TITLE, ",")
+        && has(tray::ABOUT_TITLE, "")
+        && has(tray::QUIT_TITLE, "q");
+    report.check(
+        "the menu bar item shows its state in a 30 × 16 pt image and at the top of its menu",
+        status.glyph == glyph && image_ok && rows_ok,
+        json!({"glyph": format!("{:?}", status.glyph), "image": format!("{image:?}"),
+               "problems": status.problems.iter().map(|p| &p.title).collect::<Vec<_>>(),
+               "menu": items.iter().map(|(t, ..)| t).collect::<Vec<_>>()}),
     );
 }
 
@@ -575,7 +685,12 @@ async fn reopen_during_close(controller: &Entity<Controller>, report: &mut Repor
     let show = |cx: &mut AsyncApp| {
         cx.update(|cx| {
             controller.update(cx, |c, cx| {
-                c.overlay.view.update(cx, |v, cx| v.set_notice("Checking the close".into(), cx));
+                c.overlay.view.update(cx, |v, cx| {
+                    v.set_notice(
+                        Notice { glyph: Glyph::Info, title: "Checking the close".into(), detail: String::new() },
+                        cx,
+                    )
+                });
                 let before = c.overlay.panel.motion_state();
                 c.overlay.show(cx);
                 (before, c.overlay.panel.motion_state())
@@ -747,6 +862,7 @@ async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut R
             && started.is_some()
             && finished.is_some()
             && mode == Mode::Notice
+            && notice == "Didn't catch that"
             && hidden.is_some()
             && history_after == history_before
             && clipboard_after == clipboard_before,
@@ -1666,6 +1782,9 @@ async fn replay(controller: &Entity<Controller>, options: &Options, wav: &Path, 
             "overlay_shrink_pct": app.overlay_shrink_pct, "overlay_words_ms": app.overlay_words_ms,
             "overlay_glide_ms": app.overlay_glide_ms, "overlay_frame_ms": app.overlay_frame_ms,
         });
+        // The final text (or the notice) stays up for a moment, then closes: let it, as a person
+        // would see it (and screen captures of the overlay can), before quitting.
+        wait_for(cx, Duration::from_secs(10), |cx| !controller.read(cx).overlay.panel.is_visible()).await;
     }
     match std::fs::write(&options.out, serde_json::to_string_pretty(&out).unwrap_or_default()) {
         Ok(()) => log::info!("self-test: replay report written to {}", options.out.display()),

@@ -100,6 +100,43 @@ impl OverlayPanel {
         Ok(Self { win, view })
     }
 
+    /// Where the panel goes so it sits at the bottom centre of the screen with the keyboard
+    /// focus, the pill's bottom edge `gap` points above the Dock (above the screen's bottom edge
+    /// when the Dock is hidden or on a side), `pill_bottom` being how far that edge is above the
+    /// window's: its origin, in AppKit's screen coordinates. `None` if it's there already (or
+    /// there's no screen).
+    ///
+    /// The screen is AppKit's `mainScreen`, the one holding the key window, whichever app's it
+    /// is; its `visibleFrame` leaves out the Dock and the menu bar.
+    pub fn origin_above_dock(&self, gap: f64, pill_bottom: f64) -> Option<(f64, f64)> {
+        let mtm = objc2::MainThreadMarker::new()?;
+        let screen = objc2_app_kit::NSScreen::mainScreen(mtm)?;
+        let (visible, frame) = (screen.visibleFrame(), self.win.frame());
+        let x = (visible.origin.x + (visible.size.width - frame.size.width) / 2.).round();
+        let y = (visible.origin.y + gap - pill_bottom).round();
+        ((x, y) != (frame.origin.x, frame.origin.y)).then_some((x, y))
+    }
+
+    /// Moves the panel to `origin` (from [`origin_above_dock`](Self::origin_above_dock)).
+    ///
+    /// Not while GPUI is in an update: AppKit tells GPUI about a move, and about a screen with
+    /// another scale factor, there and then, and GPUI can't take it while its app is borrowed (it
+    /// logs "RefCell already borrowed" and keeps the old size and scale). Call it from a task, on
+    /// a turn of the run loop of its own, and only while the panel is hidden: a move mid-open
+    /// would show.
+    pub fn move_to(&self, (x, y): (f64, f64)) {
+        self.win.setFrameOrigin(objc2_foundation::NSPoint::new(x, y));
+    }
+
+    /// The panel's frame, and the visible frame of the screen with the keyboard focus, in
+    /// AppKit's screen coordinates.
+    #[cfg(feature = "self-test")]
+    pub fn placement(&self) -> (Frame, Option<Frame>) {
+        let rect = |r: objc2_foundation::NSRect| (r.origin.x, r.origin.y, r.size.width, r.size.height);
+        let screen = objc2::MainThreadMarker::new().and_then(objc2_app_kit::NSScreen::mainScreen);
+        (rect(self.win.frame()), screen.map(|s| rect(s.visibleFrame())))
+    }
+
     /// Shows the panel without activating the app or making the panel key: at once, fading in
     /// over `duration` as it pops up from `1 - shrink` of its size to full size, overshooting a
     /// little on the way ([`POP`](crate::curve::POP)). Part-way through a close, it turns back from where it is, in
@@ -318,6 +355,100 @@ fn ns_view_of(window: &gpui_kit::Window) -> Option<Retained<NSView>> {
     // SAFETY: GPUI hands out its own live content view, valid while `window` is borrowed.
     let view: &NSView = unsafe { appkit.ns_view.cast::<NSView>().as_ref() };
     Some(view.retain())
+}
+
+// ───────────────────────── Menu bar item ─────────────────────────
+
+/// Sets the status item's image: `size` points, from a 1× and a 2× PNG, a template image or not,
+/// with `label` for VoiceOver.
+///
+/// A small shim around tray-icon, which can't do this: it makes one NSImage from one bitmap and
+/// sizes it by its pixels, capped at 22 pt (`MAX_ICON_HEIGHT`), so a 60 × 32 px image for a
+/// Retina menu bar would be drawn 41 × 22 pt, and a 30 × 16 px one would be blurry there. Here
+/// the image is `size` points with a bitmap for each scale, and AppKit picks the one that fits
+/// the screen, as an asset catalogue would. It goes on the status item's button, through
+/// tray-icon's public `ns_status_item`; tray-icon keeps owning the item, its menu and its clicks.
+pub fn set_menu_bar_image(
+    icon: &tray_icon::TrayIcon,
+    size: (f64, f64),
+    x1: &[u8],
+    x2: &[u8],
+    template: bool,
+    label: &str,
+) -> Result<(), String> {
+    use objc2::AllocAnyThread as _;
+    use objc2_app_kit::{NSAccessibility as _, NSBitmapImageRep, NSImage};
+    use objc2_foundation::NSData;
+    let mtm = objc2::MainThreadMarker::new().ok_or("not on the main thread")?;
+    let button = icon.ns_status_item().and_then(|item| item.button(mtm)).ok_or("no status item button")?;
+    let points = NSSize::new(size.0, size.1);
+    let image = NSImage::initWithSize(NSImage::alloc(), points);
+    for png in [x1, x2] {
+        let rep = NSBitmapImageRep::imageRepWithData(&NSData::with_bytes(png)).ok_or("not a PNG")?;
+        // A bitmap's size is in points: the same for both, so the 2× one has twice the pixels.
+        rep.setSize(points);
+        image.addRepresentation(&rep);
+    }
+    image.setTemplate(template);
+    button.setImage(Some(&image));
+    button.setAccessibilityLabel(Some(&NSString::from_str(label)));
+    Ok(())
+}
+
+/// Whether the menu bar the item sits in is dark, as AppKit draws its button. That follows the
+/// menu bar, not the system's setting: on macOS 26 a light wallpaper can give a dark-mode Mac a
+/// light menu bar.
+pub fn menu_bar_is_dark(icon: &tray_icon::TrayIcon) -> bool {
+    use objc2_app_kit::{NSAppearanceCustomization as _, NSAppearanceNameAqua, NSAppearanceNameDarkAqua};
+    let Some(mtm) = objc2::MainThreadMarker::new() else { return false };
+    let Some(button) = icon.ns_status_item().and_then(|item| item.button(mtm)) else { return false };
+    // SAFETY: AppKit's constant appearance names, valid for the life of the process.
+    let (aqua, dark) = unsafe { (NSAppearanceNameAqua, NSAppearanceNameDarkAqua) };
+    let best = button.effectiveAppearance().bestMatchFromAppearancesWithNames(&NSArray::from_slice(&[aqua, dark]));
+    best.is_some_and(|name| &*name == dark)
+}
+
+/// The status item's image as AppKit has it.
+#[cfg(feature = "self-test")]
+#[derive(Debug)]
+pub struct MenuBarImage {
+    /// In points.
+    pub size: (f64, f64),
+    pub template: bool,
+    /// Each bitmap's width in pixels.
+    pub pixel_widths: Vec<isize>,
+    /// The button's VoiceOver label.
+    pub label: String,
+}
+
+#[cfg(feature = "self-test")]
+pub fn menu_bar_image(icon: &tray_icon::TrayIcon) -> Option<MenuBarImage> {
+    use objc2_app_kit::NSAccessibility as _;
+    let mtm = objc2::MainThreadMarker::new()?;
+    let button = icon.ns_status_item()?.button(mtm)?;
+    let image = button.image()?;
+    let size = image.size();
+    Some(MenuBarImage {
+        size: (size.width, size.height),
+        template: image.isTemplate(),
+        pixel_widths: image.representations().iter().map(|rep| rep.pixelsWide()).collect(),
+        label: button.accessibilityLabel().map(|l| l.to_string()).unwrap_or_default(),
+    })
+}
+
+/// The menu's items as AppKit has them: each title (empty for a separator), whether it's
+/// enabled, and its key equivalent (`,` for ⌘,).
+#[cfg(feature = "self-test")]
+pub fn menu_items(menu: &tray_icon::menu::Menu) -> Vec<(String, bool, String)> {
+    use objc2_app_kit::NSMenu;
+    use tray_icon::menu::ContextMenu as _;
+    // SAFETY: muda's `ns_menu` is the NSMenu it owns, alive as long as `menu`.
+    let ns_menu: &NSMenu = unsafe { &*(menu.ns_menu() as *const NSMenu) };
+    ns_menu
+        .itemArray()
+        .iter()
+        .map(|item| (item.title().to_string(), item.isEnabled(), item.keyEquivalent().to_string()))
+        .collect()
 }
 
 // ───────────────────────── Reduce motion ─────────────────────────
@@ -550,6 +681,10 @@ pub struct MotionState {
     pub window_size: (f64, f64),
 }
 
+/// A rectangle in AppKit's screen coordinates: `(x, y, width, height)`, `y` up from the bottom.
+#[cfg(feature = "self-test")]
+pub type Frame = (f64, f64, f64, f64);
+
 /// What AppKit says about the overlay panel.
 #[cfg(feature = "self-test")]
 #[derive(Debug)]
@@ -586,6 +721,14 @@ pub fn set_app_appearance(dark: Option<bool>) -> Result<(), String> {
 #[cfg(feature = "self-test")]
 pub fn status_item_visible(icon: &tray_icon::TrayIcon) -> Option<bool> {
     icon.ns_status_item().map(|item| item.isVisible())
+}
+
+/// Where the menu bar item is, as the frame of its button's window, for screen captures of it.
+#[cfg(feature = "self-test")]
+pub fn status_item_frame(icon: &tray_icon::TrayIcon) -> Option<Frame> {
+    let mtm = objc2::MainThreadMarker::new()?;
+    let frame = icon.ns_status_item()?.button(mtm)?.window()?.frame();
+    Some((frame.origin.x, frame.origin.y, frame.size.width, frame.size.height))
 }
 
 /// The general pasteboard's change count. Metadata only: it never reads the clipboard, so it

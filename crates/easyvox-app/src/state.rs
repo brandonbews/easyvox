@@ -55,14 +55,20 @@ easyvox_core::tunables! {
         /// to read it; lower gets it out of the way sooner. 0 hides it at once.
         overlay_hide_after_final_ms: u32 = 600, 0..=10_000;
         /// How long a notice (no microphone access, nothing heard, the model still loading)
-        /// stays up. Higher leaves more time to read it.
-        overlay_hide_after_notice_ms: u32 = 2_500, 500..=30_000;
+        /// stays up. It's two lines, what happened and what to do, so it needs a moment to read.
+        /// Higher leaves more time; lower gets it out of the way sooner.
+        overlay_hide_after_notice_ms: u32 = 4_000, 500..=30_000;
         /// The most of the transcript the overlay lays out. The pill shows the end of it, as
         /// much as fits, and scrolls as words come so the newest stay in view; this caps the
         /// text kept out of sight past its left edge, where it's cut. Lower draws a little less
         /// each frame, but under about 120 the cut (an "…") can come into view; higher costs
         /// more to lay out for nothing you'd see.
         overlay_max_chars: u32 = 200, 10..=500;
+        /// How far above the Dock the overlay sits, in points, from the top of the Dock to the
+        /// bottom of the pill; above the bottom of the screen when the Dock is hidden or on a
+        /// side. It goes on the screen with the window you're typing in, centred. Higher keeps it
+        /// further from the Dock; lower, closer to the bottom of the screen.
+        overlay_dock_gap_pt: u32 = 24, 0..=400;
         /// How long the overlay takes to pop open when you press the shortcut: it fades in as
         /// it grows from `overlay_shrink_pct` smaller to full size, just past it and back. It
         /// shows at once and never waits for the model; this is only how it appears. Core
@@ -102,6 +108,9 @@ easyvox_core::tunables! {
         /// overlay moves (the words and the glide use `overlay_frame_ms`). Higher is lighter (33
         /// is 30 frames a second, 50 is 20) and choppier; lower is smoother but draws more often.
         overlay_meter_frame_ms: u32 = 33, 8..=100;
+        /// How long the menu bar item shows a check after EasyVox pastes your text, before it
+        /// goes back to how it was. Higher leaves more time to glance at it; 0 skips the check.
+        menubar_pasted_ms: u32 = 1_000, 0..=10_000;
     }
 }
 
