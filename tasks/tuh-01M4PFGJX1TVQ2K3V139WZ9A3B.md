@@ -1,0 +1,16 @@
+# Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once
+
+`tuh-01M4PFGJX1TVQ2K3V139WZ9A3B`
+
+- **Status:** open — ready
+- **Priority:** none
+- **Labels:** `test` `flaky` `overlay`
+- **Created:** 2026-10-11 21:57 UTC by `brandon`
+
+## Description
+
+11 Oct: failed once in selftest24 (b31d2c4 plus copy-only changes), passed in selftest23, 25 and 26. Detail: with reduce_motion true, the 'open' motion state had scale (0.85, 0.85) and no scale animation (scale_secs null), so scaled_in_place() failed; the samples show scale 1.0 from the second sample on, at opacity 0.14. Likely the previous close's 85% transform read before the open's reset is committed, a race in the check or in the panel's order of operations. Find which; if the panel can really show a frame at 85% under Reduce motion, fix the panel; otherwise make the check read the committed state. Detail in the session scratchpad selftest24.json.
+
+## History
+
+_No activity yet._

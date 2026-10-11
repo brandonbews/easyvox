@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 18 on hold · 41 inbox · 52 done · 1 cancelled
+0 in progress · 2 ready · 2 blocked · 18 on hold · 41 inbox · 52 done · 1 cancelled
 
 ## In progress
 
@@ -11,6 +11,7 @@ _None._
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
+| [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) | Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once | — | `test` `flaky` `overlay` |
 
 ## Blocked / waiting
 
