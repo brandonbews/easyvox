@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 0 ready · 2 blocked · 23 on hold · 10 inbox · 34 done · 0 cancelled
+0 in progress · 0 ready · 2 blocked · 24 on hold · 10 inbox · 34 done · 0 cancelled
 
 ## In progress
 
@@ -46,6 +46,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-q8rd`](tasks/tuh-01M4MFZG1M3EDBMEC1NPD6Q8RD.md) | Decide: delete Parakeet Unified and v3 from the real models folder (1.1 GB, bench-only) | 4 | `decision` `human` `models` |
 | [`tuh-tynb`](tasks/tuh-01M4MFZG2KBAWFT6A7AZ5STYNB.md) | Decide: file the GPUI Kit issue about the block 0.1.6 warning | 4 | `decision` `human` `upstream` |
 | [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) | Decide: onboarding at every launch when Accessibility is off on purpose | 4 | `decision` `human` `app` |
+| [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
 
 ## Inbox
 
