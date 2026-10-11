@@ -89,12 +89,13 @@ meter_interval_ms = 33
 meter_no_input_ms = 3000
 ```
 
-The overlay fades in and out with a short slide, new words fade in, and it grows and scrolls in a glide rather than a jump. With macOS's Reduce motion on, it fades without sliding or gliding. Slower, softer animations; or none at all, for the lightest overlay (it then appears, changes and goes at once):
+The overlay pops open and closed: it fades in as it grows from a little small to full size, just past it and back, and fades out as it shrinks a little. New words fade in, it grows and scrolls in a glide rather than a jump, and its level meter's bars ease from height to height. With macOS's Reduce motion on, it fades without popping, gliding or easing the bars. Slower, softer animations with a smaller pop; or none at all, for the lightest overlay (it then appears, changes and goes at once; the meter's easing is most of what the animations cost while you talk):
 
 ```toml
 [advanced]
-overlay_open_ms = 250
+overlay_open_ms = 300
 overlay_close_ms = 200
+overlay_shrink_pct = 8
 overlay_words_ms = 200
 ```
 
@@ -104,6 +105,7 @@ overlay_open_ms = 0
 overlay_close_ms = 0
 overlay_words_ms = 0
 overlay_glide_ms = 0
+overlay_meter_ms = 0
 ```
 
 ## Every key
@@ -167,37 +169,47 @@ overlay_hide_after_notice_ms = 2500
 # In characters, from 10 to 500.
 overlay_max_chars = 200
 
-# How long the overlay takes to fade in (sliding up `overlay_slide_pt`) when you press
-# the shortcut. It shows at once and never waits for the model; this is only how it
-# appears. Core Animation runs it, so it costs no redraws. Higher is gentler; lower is
-# snappier. 0 shows it at once.
+# How long the overlay takes to pop open when you press the shortcut: it fades in as
+# it grows from `overlay_shrink_pct` smaller to full size, just past it and back. It
+# shows at once and never waits for the model; this is only how it appears. Core
+# Animation runs it, so it costs no redraws. Higher is gentler; lower is snappier. 0
+# shows it at once.
 # In milliseconds, from 0 to 1000.
-overlay_open_ms = 150
+overlay_open_ms = 200
 
-# How long the overlay takes to fade out (sliding down `overlay_slide_pt`) once it
-# hides. The paste has happened by then, and a press during the fade brings the
-# overlay straight back, so it never delays you. Higher is gentler; lower gets it out
-# of the way sooner. 0 hides it at once.
+# How long the overlay takes to close once it hides: it fades out as it shrinks by
+# `overlay_shrink_pct`. The paste has happened by then, and a press during the close
+# brings the overlay straight back, so it never delays you. Higher is gentler; lower
+# gets it out of the way sooner. 0 hides it at once.
 # In milliseconds, from 0 to 1000.
 overlay_close_ms = 120
 
-# How far the overlay slides as it opens and closes. With macOS's Reduce motion on, it
-# doesn't slide at all and only fades. Higher is more noticeable; 0 only fades.
-# In points, from 0 to 16.
-overlay_slide_pt = 8
+# How much smaller than full size the overlay pops open from and closes to. With
+# macOS's Reduce motion on, it doesn't change size at all and only fades. Higher is
+# more noticeable; 0 only fades.
+# In percent, from 0 to 30.
+overlay_shrink_pct = 15
 
 # How long new words take to fade in, and provisional words (drawn fainter) to firm
 # up once they're confirmed. Each change draws the overlay every `overlay_frame_ms`
 # for this long. Higher is softer but redraws more; lower is cheaper and more abrupt.
 # 0 changes the text at once.
 # In milliseconds, from 0 to 1000.
-overlay_words_ms = 120
+overlay_words_ms = 200
 
 # How long the overlay takes to grow to fit new words, and to scroll long text so the
 # newest words stay in view, instead of jumping. With Reduce motion on, both jump.
 # Higher is smoother but redraws for longer; lower is cheaper. 0 jumps.
 # In milliseconds, from 0 to 1000.
-overlay_glide_ms = 150
+overlay_glide_ms = 250
+
+# How long the level meter's bars take to ease to a new height while you talk,
+# instead of jumping there. While only the meter moves, the overlay draws every
+# `overlay_meter_frame_ms` for this long after each change, which is most of the time
+# you're talking. With Reduce motion on, the bars jump. Higher is smoother but draws
+# for longer; lower is cheaper and more abrupt. 0 jumps.
+# In milliseconds, from 0 to 1000.
+overlay_meter_ms = 120
 
 # Time between the frames of the overlay's words fading and gliding, while one runs;
 # nothing is drawn once it ends. The open and close don't use it. Lower is smoother
@@ -205,6 +217,12 @@ overlay_glide_ms = 150
 # lighter and choppier.
 # In milliseconds, from 8 to 100.
 overlay_frame_ms = 16
+
+# Time between the frames of the level meter's easing while nothing else in the
+# overlay moves (the words and the glide use `overlay_frame_ms`). Higher is lighter (33
+# is 30 frames a second, 50 is 20) and choppier; lower is smoother but draws more often.
+# In milliseconds, from 8 to 100.
+overlay_meter_frame_ms = 33
 
 # How often the preview re-decodes the newest audio while the key is held. 0 turns the
 # preview off (long dictations are still polished in chunks). Lower shows words sooner

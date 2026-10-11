@@ -568,12 +568,12 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 43);
+        assert_eq!(keys.len(), 45);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
             assert!(!easyvox_core::tuning::unit_of(key).is_empty(), "{key}: end the key in a unit");
         }
-        assert!(text.contains("# In points, from 0 to 16.\noverlay_slide_pt = 8\n"));
+        assert!(text.contains("# In percent, from 0 to 30.\noverlay_shrink_pct = 15\n"));
         assert!(
             text.contains("# In dBFS (decibels relative to full scale), from -120 to 0.\ngate_silence_dbfs = -55\n")
         );

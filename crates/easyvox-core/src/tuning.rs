@@ -314,6 +314,7 @@ pub fn unit_of(key: &str) -> &'static str {
         ("_passes", "passes"),
         ("_chars", "characters"),
         ("_pt", "points"),
+        ("_pct", "percent"),
     ];
     UNITS.iter().find(|(end, _)| key.ends_with(end)).map_or("", |(_, unit)| unit)
 }

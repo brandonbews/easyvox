@@ -466,7 +466,7 @@ Run at midday on 10 October 2026, same M4, for the overlay's level meter and its
 - **The app's CPU is the measure to read.** It comes from the app's own CPU time (`getrusage`), so other processes don't touch it, and both runs of each setting agree within 0.1 points. Drawn at 15 a second, the meter adds 0.30 points of one core to the app's 11 % while you talk: 2.7 % more. Of that, 0.08 points are the meter itself (its thread, the events, the app waking for them) and 0.22 the drawing (about 0.3 ms a frame). At 30 a second it's 0.43 points (3.9 % more). 15 a second stays the default: cheaper, and whether 30 looks better needs a person at the screen.
 - **Energy doesn't show it.** The GPU's power is the same in every row (0.51 W), and so is DRAM's. The totals differ by the CPU rail, which swings by ±0.1 W with whatever else the Mac does (see [Lightness](#lightness)): the meter drawn at 15 a second came out at 35.4 J a minute against 35.5 J without it. Both runs at 30 a second were the highest of the eight (40.8 and 44.9 J), which may be a real cost of waking twice as often, but it's within that noise. The whole dictation, about 36 J a minute here, is in line with the 39 J of [Lightness](#lightness).
 - **How often it moves.** At 15 ticks a second the meter moved 7.2 times a second over the ramble, pauses included; at 30 ticks, 10.9 times. Most ticks send nothing: a steady voice or a pause doesn't move it by 2 dB. The text, for comparison, changes 0.6 times a second. A simulation of the same logic on the ramble's frame levels gave 7.7 and 11.7, and 9.3 at 20 ticks a second.
-- **Not measured: drawing on screen.** With the screen locked, the frames were never presented, so the GPU's and WindowServer's share of each redraw is missing. It's about 8 small frames a second (a 640 × 56 pill, five bars and a line of text), and only while you talk. Measuring it needs a person at an unlocked screen (the same command, without `--draw`; it's on the task).
+- **Not measured: drawing on screen.** With the screen locked, the frames were never presented, so the GPU's and WindowServer's share of each redraw is missing. It's about 8 small frames a second (a 640 × 56 pill, five bars and a line of text), and only while you talk. It was measured later, with the screen unlocked, along with the meter's easing: [On screen](#on-screen).
 - **The bench runs the meter too.** `easyvox-bench session` sessions now include the meter's thread (not the overlay). `--set meter_interval_ms=0` gives the pipeline the sections above measured. From the agents' shell, timers are coalesced (a 66 ms sleep took about 190 ms), so a bench session there ticks the meter about 5 times a second, not 15.
 
 ```sh
@@ -498,7 +498,7 @@ Run in the evening of 10 October 2026, same M4, for the overlay's open and close
 - **5.6 more draws a second**, about 9 frames for each change of the text (0.6 a second on this clip): 150 ms of glide at one frame every 16 ms, plus the timer's slack. None while nothing changes, and none once the pill is hidden (the self-test checks both).
 - **About 0.2 points of a core**, 12.5 % to 12.7 % (1.8 % more), or 0.4 points against the same build with the animations off; both are about the spread between runs of one build (0.2 points). The part that can be timed directly, drawing the frames, is 0.14 points.
 - **30 frames a second instead of 60** saved 2.6 draws a second and 0.02 points of drawing, and nothing measurable in the app's CPU, so the default stays at 60 for a smoother glide.
-- **Not measured: putting the frames on screen.** The GPU presenting the extra frames, WindowServer compositing them, and the open and close (which run there entirely) need a person at an unlocked screen: the same command without `--draw` (it's on the task).
+- **Putting the frames on screen** wasn't measured here (the GPU presenting them, WindowServer compositing them, and the open and close, which run there entirely). It was later, with the screen unlocked: [On screen](#on-screen).
 
 ```sh
 # One run. The settings file picks the setting: empty (the defaults), or [advanced]
@@ -508,6 +508,77 @@ open -W --env EASYVOX_CONFIG=$PWD/overlay.toml dist/EasyVox.app \
 ```
 
 - **Where the numbers come from:** `run.json` has the app's CPU (`cpu_pct_of_one_core`), the draws (`renders`), the animation frames (`animation_frames`) and the forced draws' own time (`drawing_pct_of_one_core`, `drawing_ms_per_render`).
+
+
+### On screen
+
+Run in the evening of 10 October 2026, same M4, with the screen unlocked: GPUI drew the pill by itself and the window server put it on screen, the part the runs above couldn't measure. Same command, without `--draw`.
+
+**The setup.** For the first two tables the Mac was driven over Jump Desktop: its only screen was Jump Desktop's virtual display (3488 × 2204 pixels, 1744 × 1102 points, 60 Hz), and Jump Desktop Connect captured and streamed it throughout, so every change on screen was also captured and encoded. Some of WindowServer's share and of the GPU's in those tables is that capture, and JumpConnect's is all of it: a Mac nobody is sharing pays neither. Midway the session ended, and the [third table](#the-eased-meter-and-the-softer-glide) ran on the plain display the Mac fell back to (1920 × 1080, not Retina, 60 Hz), with nothing capturing it. Other agents shared the Mac throughout; each run waited for a quiet moment as before (CPU under 1.4 W for 15 s, nothing building), but simulators and test runs came and went during the runs, so the CPU rail moved by up to 3 W between idle minutes and no energy total here means anything. **Idle**, over the minute before and after each run, on Jump Desktop: GPU 3 mW and 0.3 % active, WindowServer 1.1–1.4 % of a core, JumpConnect 11–13 %, the SoC 0.9–4.0 W (the CPU rail moving).
+
+**Measured:** the app's CPU and draws from `run.json`; WindowServer's and JumpConnect's CPU time from `ps` every second, the idle minutes' rate taken off; the GPU from `macmon` as in [Lightness](#lightness), less the idle minutes.
+
+**The fade and slide** (the build of commit 5bd95f9), the 3-minute clip, three runs each, alternating:
+
+| Setting | Draws a second (animation frames) | The app's CPU, share of one core | WindowServer, over idle | JumpConnect, over idle | GPU over idle: power / active |
+|---|---:|---:|---:|---:|---:|
+| Animations off | 6.84 (0) | 11.7 % (11.1–12.8) | 3.0 points (2.7–3.2) | 38 points (34–41) | 0.506 W / 7.9 % |
+| **The defaults** | **9.87 (3.20)** | **13.0 % (11.2–13.9)** | **4.3 points (3.6–5.1)** | **51 points (46–55)** | **0.534 W / 8.6 %** |
+
+- **GPUI draws 3.0 more frames a second for the animations on screen,** not the 5.6 the forced draws asked for. Its 16 ms timer, started at a draw, fired just after the next screen refresh, so each frame waited for the one after: 30 a second, not 60 (see [the third table](#the-eased-meter-and-the-softer-glide), which fixed it).
+- **WindowServer: 1.4 points of a core more** for the animations' frames (0.4–2.0 by pair), and 3.0 for having the pill up at all, at 7 draws a second. Both include compositing each frame for the capture of the whole 7.7-megapixel display.
+- **The GPU: 28 mW more**, the ranges well apart (the decode is the other 0.5 W), and 0.75 points more active. Some of it is the capture too.
+- **The app: about a point more, unresolved.** 1.3 points on average, but runs of one setting spread by 2.7 points, falling through the evening as other work on the Mac changed its clocks; the last pair differed by 0.03 points. The draws' own time measured above was 0.14 points.
+- **JumpConnect** spent 14 points of a core more on the animations, and 38 on the pill being up at all: streaming each change. That's the remote session's cost, not EasyVox's.
+
+**Open and close alone,** on the pop build: 40 dictations in a row of a 1.7 s clip (`cmd_moira`), each with its pop open, its words, the final text and its close (`--repeat 40`, new); the defaults (a 200 ms open, a 120 ms close, from 85 % of full size) against the open and close at 0, two runs each, alternating. Totals over the 40:
+
+| Setting | Time | Draws | The app's CPU | WindowServer, over idle | GPU, over idle |
+|---|---:|---:|---:|---:|---:|
+| Open and close at 0 | 108 s | 1,151–1,170 | 11.4–12.9 s | 5.1–5.3 s | 28 J |
+| **The pop** | **113 s** | **1,173–1,176** | **11.3–11.4 s** | **7.5–8.3 s** | **32 J** |
+
+- **The app does nothing for them:** the same draws and CPU time either way (the 5 s more is the 40 closes and their waits).
+- **WindowServer does it all:** 60–75 ms of CPU for each open and close, about 20 frames of the pill changing size and opacity, so 3–4 ms a frame, captured for Jump Desktop included. That's 0.07 s for a dictation, against the 2.7 s that the text's animations cost it over the 3-minute clip above. The GPU spent about 0.1 J for each, with the capture.
+
+**The eased meter and the softer glide.** After the runs above, the meter's bars ease to each level (120 ms, a frame every 33 ms while only they move), the words fade in over 200 ms and the pill glides over 250 ms, on CSS's ease-out, and the frame timer wakes a quarter of a frame early so frames land at every screen refresh (`DESIGN.md`, "Overlay animation"). The 3-minute clip again, on the pop build, against the build of 5bd95f9. These runs fell either side of the Jump Desktop session's end and start, so they come in two setups:
+
+| Build and setting | Draws a second (animation frames) | The app's CPU | WindowServer, over idle | GPU over idle: power / active |
+|---|---:|---:|---:|---:|
+| *Jump Desktop's display (1800 × 1132 points, Retina), connected, little streamed* | | | | |
+| The fade and slide (5bd95f9), its defaults | 9.86 (3.18) | 13.2 % | 3.9 points | 0.527 W / 8.6 % |
+| This build, the meter's easing off | 15.2 (9.2) | 12.2 % | 5.0 points | 0.569 W / 9.9 % |
+| **This build, its defaults** | **28.9 (25.3)** | **13.8 %** | **8.8 points** | **0.617 W / 13.2 %** |
+| *The plain display (1920 × 1080, not Retina), nothing capturing; the first 140 s* | | | | |
+| This build, the meter's easing off | 15.7 (9.6) | 11.1 % | 3.2 points | 0.463 W / 8.5 % |
+| **This build, its defaults** | **29.2 (25.7)** | **13.4 %** | **6.8 points** | **0.441 W / 10.9 %** |
+
+- **The draws** are the app's own and don't depend on the screen: the meter's easing adds 13.5 a second, and the longer words and glide at every refresh 5.3. In all, 19 more than the fade and slide's 9.9.
+- **On screen a draw costs the app about 1.2–1.7 ms** of CPU (the meter's easing: 1.6 and 2.3 points of a core for its 13.5 draws a second, one pair in each setup), several times the 0.3 ms of layout and paint measured with the screen locked: the rest is GPUI handing the frame to Metal and the screen. And **the window server about 2.7 ms** to composite it: 3.6 and 3.8 points for the meter's easing, and 1.0 for the longer words and glide.
+- **The GPU** spends 48 mW more on the meter's easing on the Retina display, and 42 mW more on the longer words and glide: against the fade and slide, this build's defaults take 0.09 W more there, next to the decode's 0.5 W. On the plain display (a quarter of the pixels) the meter's pair differed by less than the noise, and the GPU was busier (10.9 % against 8.5 % of the time) without drawing more power.
+- **In all, while you talk,** this build's animations cost about 5 points of a core more in the window server, 0.09 W more on the GPU and a point or two in the app: roughly 0.15–0.2 W, by estimate (the GPU's measured, the CPU's from its CPU time, since the CPU rail was too noisy here to read), against the 0.65 W dictating took in [Lightness](#lightness). Most of it is the meter's easing; `overlay_meter_ms = 0` takes that back.
+- **The meter at 20 frames a second** (`overlay_meter_frame_ms = 50`, two runs) drew 24.4–24.9 times a second instead of 28.9: its frames coincide with the words' and the glide's often, so a slower rate saves little. The default stays at 30.
+- **Native layers for the bars** were weighed against GPUI's frames (`DESIGN.md`): they would spare the app its share, about 1.6–2.3 points of a core, but not the window server's, which is the larger.
+- **The app's CPU** is noisy here, as above: the fade and slide's run came out above this build's with the meter off. The pairs taken minutes apart in one setup are the ones to read.
+- **The setups moved under the runs:** the Jump Desktop session ended before the plain-display pair and started again during its first run (whose last 55 s, streamed, are left out), and both runs with the meter at 20 frames a second were streamed throughout, so only their draws are used.
+
+```sh
+# On screen: the run above without --draw, the screen unlocked. CPU time of WindowServer and
+# JumpConnect from ps, every second, around each run:
+while :; do echo "T $(date +%s)"; ps -A -o pid=,pcpu=,cputime=,comm=; sleep 1; done > ps.log &
+macmon pipe -i 500 > run.jsonl & sleep 60
+open -W --env EASYVOX_CONFIG=$PWD/overlay.toml dist/EasyVox.app \
+  --args --self-test --replay $PWD/testdata/longform/clips/lf_3m.wav --out $PWD/run.json
+sleep 60; kill %1 %2
+# overlay.toml: empty (the defaults), or [advanced] with the four durations at 0, or
+# overlay_meter_ms = 0, or overlay_meter_frame_ms = 50.
+# Open and close alone: 40 dictations of a short clip in a row, each after the last one's close;
+# overlay.toml empty, or [advanced] overlay_open_ms = 0 and overlay_close_ms = 0.
+open -W --env EASYVOX_CONFIG=$PWD/overlay.toml dist/EasyVox.app \
+  --args --self-test --replay $PWD/testdata/cmd_moira.wav --repeat 40 --out $PWD/run.json
+```
+
+- **What it looks like** was checked from the screen itself: `screencapture -v -R` of the overlay's region only, with the frames pulled out of the recording and the pill's edges and bars measured in each. The pop: its centre within a pixel of the window's, 1.0–1.6 % wider at its peak than at rest. A glide: 13–15 frames 17 ms apart, each step smaller than the last, where the old ones came in 4–5 frames 33 ms apart, half the way in the first. The bars: easing over 3–4 frames 33 ms apart. With Reduce motion: no change of size in the open or close, the glide in one frame, the bars jumping.
 
 ## Whisper's preview
 

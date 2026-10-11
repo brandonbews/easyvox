@@ -13,6 +13,7 @@
 mod about;
 mod config;
 mod controller;
+mod curve;
 mod history;
 mod hotkey;
 mod logger;

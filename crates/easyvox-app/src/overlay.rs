@@ -5,8 +5,9 @@
 //!
 //! While you talk, a small level meter (five bars) moves with your voice and rests flat in
 //! silence; when no audio reaches EasyVox it shows "can't hear you" instead (`DESIGN.md`,
-//! "Overlay animation"). It redraws only when the core says the level moved visibly
-//! (`TranscriptEvent::Level`), which happens only during a dictation, while the pill is up.
+//! "Overlay animation"). It moves only when the core says the level moved visibly
+//! (`TranscriptEvent::Level`), which happens only during a dictation, while the pill is up, and
+//! its bars then ease to the new level.
 //!
 //! The colours follow the macOS light or dark appearance ([`Palette`]): read at every draw, and
 //! redrawn when the appearance changes, mid-dictation too. Both palettes keep confirmed and
@@ -14,16 +15,19 @@
 //!
 //! **Animation** (`DESIGN.md`, "Overlay animation"). Each part is done the cheapest way that
 //! does its job, with its timings in the settings file's `[advanced]` table ([`Motion`]):
-//! - **Open and close:** a fade and a short slide that Core Animation runs on the panel's layer
-//!   (`OverlayPanel::show` and `fade_out`), outside the app: no redraws and no wake-ups. A press
-//!   during the close reverses it from wherever it is.
-//! - **Inside the pill:** new words fade in, provisional words firm up once confirmed, and the
-//!   pill grows and long text scrolls in a glide instead of a jump. Only GPUI can draw these, so
-//!   while one runs the pill draws every `overlay_frame_ms`, and once they end it asks for
-//!   nothing more (`ask_frame`).
-//! - **Reduce motion**, read at each open, zeroes the slide and the glide and keeps the fades:
-//!   the same code with other numbers.
+//! - **Open and close:** a fade and a pop that Core Animation runs on the panel's layer
+//!   (`OverlayPanel::show` and `fade_out`), outside the app: no redraws and no wake-ups. The pill
+//!   grows from a little small to full size with a slight overshoot as it fades in, and shrinks a
+//!   little as it fades out. A press during the close reverses it from wherever it is.
+//! - **Inside the pill:** new words fade in, provisional words firm up once confirmed, the pill
+//!   grows and long text scrolls in a glide instead of a jump, and the meter's bars ease to each
+//!   new level. Only GPUI can draw these, so while one runs the pill draws every
+//!   `overlay_frame_ms` (every `overlay_meter_frame_ms` while only the meter moves), and once
+//!   they end it asks for nothing more (`ask_frame`). They follow [`curve::EASE_OUT`].
+//! - **Reduce motion**, read at each open, zeroes the pop's scale, the glide and the meter's
+//!   easing, and keeps the fades: the same code with other numbers.
 
+use crate::curve::{self, EASE_OUT};
 use crate::platform::{self, OverlayPanel};
 use crate::state::{AppSettings, AppTuning};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -35,9 +39,11 @@ const WIDTH: f32 = 640.;
 const HEIGHT: f32 = 56.;
 /// Distance from the bottom of the screen to the bottom of the pill's row.
 const BOTTOM_MARGIN: f32 = 140.;
-/// Room below the pill's row, inside its window, for the open and close's slide: the most
-/// `overlay_slide_pt` allows, so the window's edge never cuts the pill off.
-pub const SLIDE_ROOM: f32 = 16.;
+/// Room either side of the pill's row, inside its window, for the open's overshoot. At the most
+/// `overlay_shrink_pct` allows, the widest pill grows 9.3 points a side past full size at the
+/// pop's peak, and the row's own margin covers 4 of them; above and below, the margin covers it
+/// all. So the window's edge never cuts the pill off.
+const POP_ROOM: f32 = 6.;
 /// Around the pill in its row; inside it, the padding at each end, the border, and the gap
 /// between the meter and the text.
 const MARGIN: f32 = 4.;
@@ -127,20 +133,25 @@ impl Palette {
 
 /// How the overlay moves during one showing: the `overlay_*` timings of the settings file's
 /// `[advanced]` table, with macOS's Reduce motion applied. Reduce motion zeroes the movement
-/// (the slide, the glide) and keeps the fades, so no animation needs a second code path.
+/// (the pop's scale, the glide, the meter's easing) and keeps the fades, so no animation needs a
+/// second code path.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Motion {
-    /// The open's fade (and slide), and the close's.
+    /// The open's fade and pop, and the close's.
     pub open: Duration,
     pub close: Duration,
-    /// How far the pill slides up as it opens and down as it closes, in points.
-    pub slide: f32,
+    /// How much smaller than full size the pill pops open from and closes to, as a fraction
+    /// (0.15 is 85 % of its size).
+    pub shrink: f32,
     /// New words fading in, and provisional words firming up.
     pub words: Duration,
     /// The pill growing and long text scrolling.
     pub glide: Duration,
-    /// Between two frames of the words' fade or the glide.
+    /// The level meter's bars easing to a new height.
+    pub meter: Duration,
+    /// Between two frames of the words' fade or the glide; and while only the meter moves.
     pub frame: Duration,
+    pub meter_frame: Duration,
 }
 
 impl Motion {
@@ -150,10 +161,12 @@ impl Motion {
         Self {
             open: ms(app.overlay_open_ms),
             close: ms(app.overlay_close_ms),
-            slide: (app.overlay_slide_pt * moving) as f32,
+            shrink: (app.overlay_shrink_pct * moving) as f32 / 100.,
             words: ms(app.overlay_words_ms),
             glide: ms(app.overlay_glide_ms * moving),
+            meter: ms(app.overlay_meter_ms * moving),
             frame: ms(app.overlay_frame_ms),
+            meter_frame: ms(app.overlay_meter_frame_ms),
         }
     }
 }
@@ -166,9 +179,9 @@ fn progress(start: Instant, duration: Duration, now: Instant) -> f32 {
     (now.saturating_duration_since(start).as_secs_f32() / duration.as_secs_f32()).min(1.)
 }
 
-/// A quick start that settles gently (cubic ease-out), for `t` from 0 to 1.
-fn ease_out(t: f32) -> f32 {
-    1. - (1. - t.clamp(0., 1.)).powi(3)
+/// How far along `curve` an animation is at `t`, its share of the time.
+fn along(curve: curve::Curve, t: f32) -> f32 {
+    curve::along(curve, t.into()) as f32
 }
 
 /// How strongly a stretch of text is drawn: hidden, provisional (faded) or confirmed (full).
@@ -292,6 +305,13 @@ impl Glide {
     }
 }
 
+/// The meter's bars easing to the level since `start`, from the level they showed then.
+#[derive(Clone, Copy, Debug)]
+struct MeterEase {
+    start: Instant,
+    from: f32,
+}
+
 /// Where the shown text starts in the transcript.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Origin {
@@ -365,6 +385,8 @@ pub struct OverlayView {
     fade: Option<Fade>,
     /// The pill growing or the text scrolling, while it does.
     glide: Option<Glide>,
+    /// The meter's bars easing to a new level, while they do.
+    meter_ease: Option<MeterEase>,
     /// Where the pill rests: where the glide ends, or where it is.
     geometry: Geometry,
     /// What the pill last laid out this showing (`None` before its first draw).
@@ -415,24 +437,30 @@ impl OverlayView {
         }
     }
 
-    /// Whether a fade or glide is running, or a frame for one is due.
+    /// Whether a fade, glide or the meter's easing is running, or a frame for one is due.
     pub fn is_animating(&self) -> bool {
-        self.fade.is_some() || self.glide.is_some() || self.frame.is_some()
+        self.fade.is_some() || self.glide.is_some() || self.meter_ease.is_some() || self.frame.is_some()
     }
 
-    /// Whether words are fading, and whether the pill is gliding.
+    /// Whether words are fading, whether the pill is gliding, and whether the meter is easing.
     #[cfg(feature = "self-test")]
-    pub fn animations(&self) -> (bool, bool) {
-        (self.fade.is_some(), self.glide.is_some())
+    pub fn animations(&self) -> (bool, bool, bool) {
+        (self.fade.is_some(), self.glide.is_some(), self.meter_ease.is_some())
     }
 
-    /// Asks for the next frame, `motion.frame` from now, unless one is already due. Only
-    /// `render` calls it, and only while a fade or glide runs, so frames stop when they end.
+    /// Asks for the next frame, unless one is already due: `motion.frame` after the last while
+    /// words fade or the pill glides, `motion.meter_frame` while only the meter moves. Only
+    /// `render` calls it, and only while one of them runs, so frames stop when they end.
     fn ask_frame(&mut self, cx: &mut Context<Self>) {
         if self.frame.is_some() {
             return;
         }
-        let wait = self.motion.frame;
+        let every =
+            if self.fade.is_some() || self.glide.is_some() { self.motion.frame } else { self.motion.meter_frame };
+        // A quarter of a frame early: the draw waits for the screen's next refresh, so a timer
+        // of a whole frame, started at a refresh, lands just after the next one and waits for
+        // the one after (every other refresh, at 16 ms and 60 Hz: 30 frames a second).
+        let wait = every * 3 / 4;
         self.frame = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(wait).await;
             let _ = this.update(cx, |view, cx| {
@@ -447,6 +475,7 @@ impl OverlayView {
     pub fn settle(&mut self) {
         self.frame = None;
         self.fade = None;
+        self.meter_ease = None;
         if let Some(glide) = self.glide.take() {
             self.geometry = glide.to;
         }
@@ -458,7 +487,7 @@ impl OverlayView {
         let now = Instant::now();
         let (old, old_provisional) = self.transcript();
         let old_fade = self.fade.take();
-        let old_k = old_fade.as_ref().map_or(1., |f| ease_out(progress(f.start, self.motion.words, now)));
+        let old_k = old_fade.as_ref().map_or(1., |f| along(EASE_OUT, progress(f.start, self.motion.words, now)));
         (self.confirmed, self.provisional, self.mode) = (confirmed, provisional, mode);
         let (new, provisional) = self.transcript();
         let kept = word_start(&new, common_prefix(&old, &new));
@@ -489,8 +518,12 @@ impl OverlayView {
     pub fn set_level(&mut self, level: f32, cx: &mut Context<Self>) {
         self.levels += 1;
         let before = self.meter();
+        let now = Instant::now();
+        let from = self.level_at(now);
         self.level = level.clamp(0., 1.);
         if self.meter() != before {
+            // The bars ease there from where they are, unless motion is reduced: then they jump.
+            self.meter_ease = (!self.motion.meter.is_zero()).then_some(MeterEase { start: now, from });
             self.redraw(cx);
         }
     }
@@ -543,12 +576,26 @@ impl OverlayView {
         matches!(self.mode, Mode::Listening | Mode::Live)
     }
 
-    /// The meter's bars as drawn: their heights in half points (a device pixel on a Retina
-    /// screen), or `None` while a dot shows instead. The "can't hear you" meter lies flat.
+    /// The meter's bars at the level they ease to: their heights in half points (a device pixel
+    /// on a Retina screen), or `None` while a dot shows instead. A change that doesn't move them
+    /// by half a point isn't drawn.
     fn meter(&self) -> Option<[u8; BARS]> {
-        let level = if self.cant_hear { 0. } else { self.level };
-        self.recording()
-            .then(|| BAR_SHAPE.map(|shape| ((BAR_MIN + (BAR_MAX - BAR_MIN) * level * shape) * 2.).round() as u8))
+        self.bars(self.level).map(|bars| bars.map(|h| (h * 2.).round() as u8))
+    }
+
+    /// The bars' heights in points at `level`, or `None` while a dot shows instead. The "can't
+    /// hear you" meter lies flat.
+    fn bars(&self, level: f32) -> Option<[f32; BARS]> {
+        let level = if self.cant_hear { 0. } else { level };
+        self.recording().then(|| BAR_SHAPE.map(|shape| BAR_MIN + (BAR_MAX - BAR_MIN) * level * shape))
+    }
+
+    /// The level the bars show at `now`: part-way to `level` while they ease there.
+    fn level_at(&self, now: Instant) -> f32 {
+        match self.meter_ease {
+            Some(e) => e.from + (self.level - e.from) * along(EASE_OUT, progress(e.start, self.motion.meter, now)),
+            None => self.level,
+        }
     }
 
     /// The text in the pill: the last `max_chars` of [`text`](Self::text) (the pill scrolls to
@@ -587,7 +634,7 @@ impl OverlayView {
             self.glide = None;
             return glide.to;
         }
-        glide.at(ease_out(k))
+        glide.at(along(EASE_OUT, k))
     }
 
     /// Where the pill and its text go for `shown` (laid out as `line`), gliding there when the
@@ -643,7 +690,7 @@ impl OverlayView {
             (Some(fade), Some(_)) => fade.eases.iter().filter_map(|e| Some((shown.range_of(&e.range)?, e))).collect(),
             _ => vec![],
         };
-        let k = k.map_or(1., ease_out);
+        let k = k.map_or(1., |k| along(EASE_OUT, k));
         let p = &shown.provisional;
         let mut cuts = vec![0, p.start, p.end, shown.text.len()];
         cuts.extend(fading.iter().flat_map(|(r, _)| [r.start, r.end]));
@@ -671,16 +718,15 @@ impl OverlayView {
 
     /// The meter, or the dot that replaces it, in a box of the meter's width so the text
     /// doesn't move when one replaces the other.
-    fn indicator(&self, palette: &Palette) -> Div {
+    fn indicator(&self, palette: &Palette, now: Instant) -> Div {
         let slot = div().w(px(METER_WIDTH)).h(px(BAR_MAX)).flex_none().flex().items_center();
-        let Some(bars) = self.meter() else {
+        let Some(bars) = self.bars(self.level_at(now)) else {
             let color = if self.mode == Mode::Final { palette.done } else { palette.notice };
             return slot.justify_center().child(div().size(px(DOT)).rounded_full().bg(rgb(color)));
         };
         let color = rgb(if self.cant_hear { palette.notice } else { palette.recording });
-        slot.justify_between().children(
-            bars.map(|half_points| div().w(px(BAR_WIDTH)).h(px(half_points as f32 / 2.)).rounded_full().bg(color)),
-        )
+        slot.justify_between()
+            .children(bars.map(|height| div().w(px(BAR_WIDTH)).h(px(height)).rounded_full().bg(color)))
     }
 }
 
@@ -707,7 +753,13 @@ impl Render for OverlayView {
         // `HighlightStyle::color` blends over the base colour (white over white stays white),
         // so fading needs `fade_out`.
         let highlights = self.highlights(&shown, palette, now);
-        if self.fade.is_some() || self.glide.is_some() {
+        // The meter's easing ends when it gets there, or when there's no meter to ease.
+        if let Some(e) = self.meter_ease
+            && (progress(e.start, self.motion.meter, now) >= 1. || !self.recording() || self.cant_hear)
+        {
+            self.meter_ease = None;
+        }
+        if self.fade.is_some() || self.glide.is_some() || self.meter_ease.is_some() {
             self.ask_frame(cx);
         }
         let text = shown.text.clone();
@@ -720,8 +772,8 @@ impl Render for OverlayView {
             linear_color_stop(background, 0.),
             linear_color_stop(rgba(palette.background & !0xff), 1.),
         ));
-        // The pill's row at the top; below it, the room the open and close slide through.
-        div().size_full().child(
+        // The pill's row, with room either side for the open's overshoot.
+        div().size_full().px(px(POP_ROOM)).child(
             div().w_full().h(px(HEIGHT)).p(px(MARGIN)).flex().justify_center().child(
                 div()
                     .w(px(geometry.width))
@@ -737,7 +789,7 @@ impl Render for OverlayView {
                     .gap(px(GAP))
                     .text_color(rgb(palette.text))
                     .text_size(px(FONT_SIZE))
-                    .child(self.indicator(palette))
+                    .child(self.indicator(palette, now))
                     .child(
                         div()
                             .relative()
@@ -773,8 +825,8 @@ pub struct Overlay {
 }
 
 impl Overlay {
-    /// Shows the pill at once: it fades in and slides up from wherever it is, hidden or part-way
-    /// through a close. Reads Reduce motion and the timings for this showing.
+    /// Shows the pill at once: it fades in and pops up to full size from wherever it is, hidden
+    /// or part-way through a close. Reads Reduce motion and the timings for this showing.
     pub fn show(&mut self, cx: &mut App) {
         self.closing = None;
         let motion = Motion::new(&cx.global::<AppSettings>().app, platform::reduce_motion());
@@ -785,17 +837,17 @@ impl Overlay {
                 view.start_over();
             }
         });
-        self.panel.show(motion.open, motion.slide.into());
+        self.panel.show(motion.open, motion.shrink.into());
     }
 
-    /// Hides the pill: it fades out and slides down, then is ordered out. Returns at once, so
-    /// nothing waits for it, and a show meanwhile takes it back up from where it is.
+    /// Hides the pill: it fades out and shrinks a little, then is ordered out. Returns at once,
+    /// so nothing waits for it, and a show meanwhile takes it back up from where it is.
     pub fn hide(&mut self, cx: &mut App) {
         if !self.panel.is_visible() {
             return;
         }
         let motion = self.view.read(cx).motion;
-        let fading = self.panel.fade_out(motion.close, motion.slide.into());
+        let fading = self.panel.fade_out(motion.close, motion.shrink.into());
         let (panel, view) = (self.panel.clone(), self.view.clone());
         let order_out = move |cx: &mut App| {
             panel.order_out();
@@ -822,13 +874,15 @@ impl Overlay {
 pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
     let display = cx.primary_display().ok_or_else(|| anyhow::anyhow!("no display"))?;
     let bounds = display.bounds();
-    // The pill's row keeps its place; the slide's room hangs below it.
+    // The window is the pill's row and the room either side of it; the pill pops about its
+    // centre, which is the window's.
+    let width = px(WIDTH + 2. * POP_ROOM);
     let origin = point(
-        bounds.origin.x + (bounds.size.width - px(WIDTH)) / 2.,
+        bounds.origin.x + (bounds.size.width - width) / 2.,
         bounds.origin.y + bounds.size.height - px(HEIGHT) - px(BOTTOM_MARGIN),
     );
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(WIDTH), px(HEIGHT + SLIDE_ROOM)) })),
+        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(width, px(HEIGHT)) })),
         titlebar: None,
         focus: false,
         show: false,
@@ -864,9 +918,10 @@ pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
 mod tests {
     // Not `super::*`: that brings in GPUI's own `test` macro, which shadows `#[test]`.
     use super::{
-        BAR_MAX, BAR_MIN, CANT_HEAR, CONFIRMED, Ease, Fade, HIDDEN, Mode, Motion, OverlayView, PROVISIONAL, Palette,
-        SLIDE_ROOM, common_prefix, eases, opacity, word_start,
+        BAR_MAX, BAR_MIN, CANT_HEAR, CONFIRMED, Ease, Fade, HEIGHT, HIDDEN, MARGIN, Mode, Motion, OverlayView,
+        PILL_MAX, POP_ROOM, PROVISIONAL, Palette, WIDTH, common_prefix, eases, opacity, word_start,
     };
+    use crate::curve::{POP, along};
     use crate::state::AppTuning;
     use std::time::{Duration, Instant};
 
@@ -968,33 +1023,50 @@ mod tests {
     fn reduce_motion_drops_the_movement_and_keeps_the_fades() {
         let app = AppTuning::default();
         let moving = Motion::new(&app, false);
-        assert_eq!(moving.open, Duration::from_millis(150));
+        assert_eq!(moving.open, Duration::from_millis(200));
         assert_eq!(moving.close, Duration::from_millis(120));
-        assert_eq!((moving.slide, moving.glide), (8., Duration::from_millis(150)));
-        let still = Motion::new(&app, true);
-        assert_eq!((still.slide, still.glide), (0., Duration::ZERO));
         assert_eq!(
-            (still.open, still.close, still.words, still.frame),
-            (moving.open, moving.close, moving.words, moving.frame)
+            (moving.shrink, moving.glide, moving.meter),
+            (0.15, Duration::from_millis(250), Duration::from_millis(120))
+        );
+        let still = Motion::new(&app, true);
+        assert_eq!((still.shrink, still.glide, still.meter), (0., Duration::ZERO, Duration::ZERO));
+        assert_eq!(
+            (still.open, still.close, still.words, still.frame, still.meter_frame),
+            (moving.open, moving.close, moving.words, moving.frame, moving.meter_frame)
         );
         // Every timing at 0 turns its animation off.
         let off = AppTuning {
             overlay_open_ms: 0,
             overlay_close_ms: 0,
-            overlay_slide_pt: 0,
+            overlay_shrink_pct: 0,
             overlay_words_ms: 0,
             overlay_glide_ms: 0,
+            overlay_meter_ms: 0,
             ..app
         };
         let off = Motion::new(&off, false);
-        assert!(off.open.is_zero() && off.close.is_zero() && off.words.is_zero() && off.glide.is_zero());
-        assert_eq!(off.slide, 0.);
+        assert!(
+            off.open.is_zero()
+                && off.close.is_zero()
+                && off.words.is_zero()
+                && off.glide.is_zero()
+                && off.meter.is_zero()
+        );
+        assert_eq!(off.shrink, 0.);
     }
 
     #[test]
-    fn the_window_has_room_for_the_longest_slide() {
-        let slide = AppTuning::default().fields().into_iter().find(|f| f.key == "overlay_slide_pt").unwrap();
-        assert_eq!(slide.max.parse::<f32>().unwrap(), SLIDE_ROOM);
+    fn the_window_has_room_for_the_biggest_pop() {
+        // The peak past full size, by the share the pill grew.
+        let peak = (0..=1000).map(|i| along(POP, i as f64 / 1000.)).fold(0., f64::max);
+        let shrink = AppTuning::default().fields().into_iter().find(|f| f.key == "overlay_shrink_pct").unwrap();
+        let biggest = (1. + (peak - 1.) * shrink.max.parse::<f64>().unwrap() / 100.) as f32;
+        // The widest pill and the pill's height, at the peak, inside the window.
+        assert!(PILL_MAX * biggest <= WIDTH + 2. * POP_ROOM, "{}", PILL_MAX * biggest);
+        assert!((HEIGHT - 2. * MARGIN) * biggest <= HEIGHT);
+        // With little room to spare.
+        assert!(PILL_MAX * biggest > WIDTH + 2. * POP_ROOM - 2.);
     }
 
     #[test]

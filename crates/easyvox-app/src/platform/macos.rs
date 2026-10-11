@@ -2,16 +2,14 @@
 //! animations, Reduce motion, and the right-⌥ event tap. Small helpers the self-test needs sit
 //! at the bottom, behind the `self-test` feature.
 
+use crate::curve::{Curve, EASE_IN, FADE_IN, POP, along};
 use anyhow::Context as _;
 use objc2::Message as _;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_app_kit::{NSPanel, NSView, NSWindow, NSWindowAnimationBehavior, NSWindowStyleMask, NSWorkspace};
-use objc2_foundation::{NSNumber, NSString};
-use objc2_quartz_core::{
-    CABasicAnimation, CALayer, CAMediaTiming as _, CAMediaTimingFunction, CAMediaTimingFunctionName, CATransaction,
-    kCAFillModeForwards, kCAMediaTimingFunctionEaseIn, kCAMediaTimingFunctionEaseOut,
-};
+use objc2_foundation::{NSArray, NSNumber, NSSize, NSString, NSValue};
+use objc2_quartz_core::{CAKeyframeAnimation, CALayer, CAMediaTiming as _, CATransaction, kCAFillModeForwards};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 use std::time::Duration;
@@ -35,11 +33,11 @@ pub const PRIVACY_INPUT_MONITORING: &str =
 /// style mask (GPUI always adds Titled), no shadow, `hidesOnDeactivate = NO`, and a panel that
 /// refuses key status (see [`key_guard`]).
 ///
-/// The open and close are Core Animation on the layer of GPUI's view: a fade and a slide that
-/// the window server runs, so the app neither redraws nor wakes up for them. Moving the window
-/// instead would make GPUI redraw the pill at every step (it redraws whenever its window
-/// moves). Each animation starts from the layer as it's drawn at that moment, so a show during
-/// a close turns it around without a jump.
+/// The open and close are Core Animation on the layer of GPUI's view: a fade and a pop (a scale
+/// about the layer's centre) that the window server runs, so the app neither redraws nor wakes
+/// up for them. Resizing the window instead would make GPUI lay out and redraw the pill at every
+/// step. Each animation starts from the layer as it's drawn at that moment, so a show during a
+/// close turns it around without a jump.
 #[derive(Clone)]
 pub struct OverlayPanel {
     win: Retained<NSWindow>,
@@ -54,7 +52,16 @@ const NONACTIVATING_PANEL: usize = 1 << 7;
 /// The keys of the open and close's animations on the layer. Adding one under the same key
 /// replaces the one running.
 const FADE: &str = "easyvox-fade";
-const SLIDE: &str = "easyvox-slide";
+const SCALE: &str = "easyvox-scale";
+const SHIFT: &str = "easyvox-shift";
+
+/// Each animation is its curve sampled into keyframes, this many a second: twice a 60 Hz
+/// screen's frames, so the straight lines between them can't be told from the curve. Why
+/// keyframes rather than the curve as a timing function: Core Animation's presentation layer,
+/// which the app reads to turn a close around and the self-test reads to check the pop, stops
+/// a timing function at the end value where it overshoots, although the window server draws
+/// the overshoot. Keyframes carry the overshoot in their values, so both see the same.
+const KEYFRAMES_PER_SEC: f64 = 120.;
 
 impl OverlayPanel {
     /// Configures the window GPUI created for the overlay. Call it inside `open_window`.
@@ -94,40 +101,38 @@ impl OverlayPanel {
     }
 
     /// Shows the panel without activating the app or making the panel key: at once, fading in
-    /// over `duration` as it slides up `slide` points into place. Part-way through a close, it
-    /// turns back from where it is, in the share of `duration` that's left.
-    pub fn show(&self, duration: Duration, slide: f64) {
+    /// over `duration` as it pops up from `1 - shrink` of its size to full size, overshooting a
+    /// little on the way ([`POP`](crate::curve::POP)). Part-way through a close, it turns back from where it is, in
+    /// the share of `duration` that's left.
+    pub fn show(&self, duration: Duration, shrink: f64) {
         if let Some(layer) = self.view.layer() {
-            let (opacity, offset) = if self.win.isVisible() { drawn(&layer) } else { (0., self.down() * slide) };
+            let (opacity, scale) = if self.win.isVisible() { drawn(&layer) } else { (0., 1. - shrink) };
             let secs = duration.as_secs_f64() * (1. - opacity).clamp(0., 1.);
-            // SAFETY: AppKit's constant timing function names, valid for the life of the process.
-            let ease_out = unsafe { kCAMediaTimingFunctionEaseOut };
             without_implicit_animations(|| {
                 self.view.setAlphaValue(1.);
-                animate(&layer, FADE, "opacity", (opacity, 1.), secs, ease_out, false);
-                animate(&layer, SLIDE, "transform.translation.y", (offset, 0.), secs, ease_out, false);
+                animate(&layer, Animated::Opacity, (opacity, 1.), secs, FADE_IN, false);
+                resize(&layer, (scale, 1.), secs, POP, false);
             });
         }
         self.win.orderFrontRegardless();
     }
 
-    /// Starts the close: fades the panel out over `duration` as it slides `slide` points down,
-    /// from wherever it is. It stays ordered in, held transparent, until [`order_out`]. Returns
-    /// how long the fade takes: the share of `duration` that the opacity left calls for.
+    /// Starts the close: fades the panel out over `duration` as it shrinks to `1 - shrink` of
+    /// its size, from wherever it is. It stays ordered in, held transparent, until
+    /// [`order_out`]. Returns how long the fade takes: the share of `duration` that the opacity
+    /// left calls for.
     ///
     /// [`order_out`]: Self::order_out
-    pub fn fade_out(&self, duration: Duration, slide: f64) -> Duration {
+    pub fn fade_out(&self, duration: Duration, shrink: f64) -> Duration {
         let Some(layer) = self.view.layer() else { return Duration::ZERO };
-        let (opacity, offset) = drawn(&layer);
+        let (opacity, scale) = drawn(&layer);
         let secs = duration.as_secs_f64() * opacity.clamp(0., 1.);
         if secs <= 0. {
             return Duration::ZERO;
         }
-        // SAFETY: as in `show`.
-        let ease_in = unsafe { kCAMediaTimingFunctionEaseIn };
         without_implicit_animations(|| {
-            animate(&layer, FADE, "opacity", (opacity, 0.), secs, ease_in, true);
-            animate(&layer, SLIDE, "transform.translation.y", (offset, self.down() * slide), secs, ease_in, true);
+            animate(&layer, Animated::Opacity, (opacity, 0.), secs, EASE_IN, true);
+            resize(&layer, (scale, 1. - shrink), secs, EASE_IN, true);
         });
         Duration::from_secs_f64(secs)
     }
@@ -140,7 +145,8 @@ impl OverlayPanel {
             without_implicit_animations(|| {
                 self.view.setAlphaValue(0.);
                 layer.removeAnimationForKey(&NSString::from_str(FADE));
-                layer.removeAnimationForKey(&NSString::from_str(SLIDE));
+                layer.removeAnimationForKey(&NSString::from_str(SCALE));
+                layer.removeAnimationForKey(&NSString::from_str(SHIFT));
             });
         }
     }
@@ -148,14 +154,6 @@ impl OverlayPanel {
     /// Whether the panel is on screen (ordered in), closing included.
     pub fn is_visible(&self) -> bool {
         self.win.isVisible()
-    }
-
-    /// Down along the layer's y axis: AppKit's y goes up, unless the view GPUI's sits in is
-    /// flipped.
-    fn down(&self) -> f64 {
-        // SAFETY: a plain getter, on the main thread like every overlay call.
-        let flipped = unsafe { self.view.superview() }.is_some_and(|s| s.isFlipped());
-        if flipped { 1. } else { -1. }
     }
 
     #[cfg(feature = "self-test")]
@@ -176,28 +174,55 @@ impl OverlayPanel {
     #[cfg(feature = "self-test")]
     pub fn motion_state(&self) -> MotionState {
         let Some(layer) = self.view.layer() else { return MotionState::default() };
-        let (opacity, offset) = drawn(&layer);
+        let shown = presentation(&layer);
+        let t = shown.transform();
+        // Where the transform drawn now puts the layer's centre, against where it is.
+        let (dx, dy) = to_centre(&layer);
+        let centre_shift = (t.m11 * dx + t.m21 * dy + t.m41 - dx).hypot(t.m12 * dx + t.m22 * dy + t.m42 - dy);
         let animation = |key: &str| {
-            // SAFETY: only read for whether it exists, and its duration.
-            unsafe { layer.animationForKey(&NSString::from_str(key)) }.map(|a| a.duration())
+            // SAFETY: only read for whether it exists, its duration and where it starts.
+            unsafe { layer.animationForKey(&NSString::from_str(key)) }
         };
+        let secs = |key: &str| animation(key).map(|a| a.duration());
+        let from = |key: &str| {
+            let keyframes = animation(key)?.downcast::<CAKeyframeAnimation>().ok()?;
+            keyframes.values()?.firstObject()?.downcast_ref::<NSNumber>().map(|n| n.doubleValue())
+        };
+        let (bounds, anchor, frame) = (layer.bounds(), layer.anchorPoint(), self.win.frame());
         MotionState {
-            opacity,
-            offset_down: offset * self.down(),
+            opacity: f64::from(shown.opacity()),
+            scale: (t.m11, t.m22),
+            centre_shift,
             resting_opacity: self.view.alphaValue(),
-            fade_secs: animation(FADE),
-            slide_secs: animation(SLIDE),
+            fade_secs: secs(FADE),
+            scale_secs: secs(SCALE),
+            fade_from: from(FADE),
+            scale_from: from(SCALE),
+            layer_size: (bounds.size.width, bounds.size.height),
+            anchor: (anchor.x, anchor.y),
+            window_size: (frame.size.width, frame.size.height),
         }
     }
 }
 
-/// The layer's opacity and slide (its y translation) as drawn now, part-way through an
-/// animation or not.
-fn drawn(layer: &CALayer) -> (f64, f64) {
+/// The layer as drawn now, part-way through an animation or not.
+fn presentation(layer: &CALayer) -> Retained<CALayer> {
     // SAFETY: `presentationLayer` returns a copy of this layer, of its own class; it's `nil`
     // until the layer has been committed once, and then the layer itself is what's drawn.
-    let shown = unsafe { layer.presentationLayer() }.unwrap_or_else(|| layer.retain());
-    (f64::from(shown.opacity()), shown.transform().m42)
+    unsafe { layer.presentationLayer() }.unwrap_or_else(|| layer.retain())
+}
+
+/// The layer's opacity and scale as drawn now.
+fn drawn(layer: &CALayer) -> (f64, f64) {
+    let shown = presentation(layer);
+    (f64::from(shown.opacity()), shown.transform().m11)
+}
+
+/// From the layer's anchor point, about which its transform applies, to its centre, in its own
+/// coordinates. AppKit puts the anchor of a view's layer at a corner.
+fn to_centre(layer: &CALayer) -> (f64, f64) {
+    let (bounds, anchor) = (layer.bounds(), layer.anchorPoint());
+    ((0.5 - anchor.x) * bounds.size.width, (0.5 - anchor.y) * bounds.size.height)
 }
 
 /// Runs `f` in a Core Animation transaction with implicit animations off, so a change made there
@@ -209,33 +234,75 @@ fn without_implicit_animations(f: impl FnOnce()) {
     CATransaction::commit();
 }
 
-/// Animates the layer's `path` from `from` to `to` over `secs`, under `key`, replacing what ran
-/// there. `hold` keeps the end value until the animation is removed; otherwise the layer's own
-/// value shows once it ends. Nothing to animate removes the key's animation.
-fn animate(
-    layer: &CALayer,
-    key: &str,
-    path: &str,
-    (from, to): (f64, f64),
-    secs: f64,
-    timing: &CAMediaTimingFunctionName,
-    hold: bool,
-) {
-    let key = NSString::from_str(key);
+/// What the open and close animate on the layer, each given by the layer's opacity or its scale
+/// (a fraction of full size).
+#[derive(Clone, Copy)]
+enum Animated {
+    Opacity,
+    /// The scale of its transform, which applies about the anchor point.
+    Scale,
+    /// The translation of its transform that keeps the centre in place at that scale: the
+    /// centre moves by `(1 - scale)` of the way from the anchor point to it, so this moves it
+    /// back. Core Animation applies a transform's scale before its translation.
+    Shift,
+}
+
+impl Animated {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Opacity => FADE,
+            Self::Scale => SCALE,
+            Self::Shift => SHIFT,
+        }
+    }
+
+    fn path(self) -> &'static str {
+        match self {
+            Self::Opacity => "opacity",
+            Self::Scale => "transform.scale",
+            Self::Shift => "transform.translation",
+        }
+    }
+
+    fn value(self, layer: &CALayer, v: f64) -> Retained<NSValue> {
+        match self {
+            Self::Opacity | Self::Scale => Retained::into_super(NSNumber::new_f64(v)),
+            Self::Shift => {
+                let (dx, dy) = to_centre(layer);
+                // SAFETY: a plain value constructor.
+                unsafe { NSValue::valueWithSize(NSSize::new(dx * (1. - v), dy * (1. - v))) }
+            }
+        }
+    }
+}
+
+/// Animates the layer's size, about its centre, from `from` to `to` of full size: its scale and
+/// the shift that keeps its centre in place, from the same keyframes, so they move in step and
+/// the centre stays put all the way, overshoot included.
+fn resize(layer: &CALayer, (from, to): (f64, f64), secs: f64, curve: Curve, hold: bool) {
+    animate(layer, Animated::Scale, (from, to), secs, curve, hold);
+    animate(layer, Animated::Shift, (from, to), secs, curve, hold);
+}
+
+/// Animates `what` on the layer from `from` to `to` over `secs` along `curve`, replacing its
+/// animation that ran. `hold` keeps the end value until the animation is removed; otherwise the
+/// layer's own value (opaque at full size) shows once it ends. Nothing to animate removes its
+/// animation.
+fn animate(layer: &CALayer, what: Animated, (from, to): (f64, f64), secs: f64, curve: Curve, hold: bool) {
+    let key = NSString::from_str(what.key());
     if secs <= 0. || (from - to).abs() < 1e-3 {
         layer.removeAnimationForKey(&key);
         return;
     }
-    let animation = CABasicAnimation::animationWithKeyPath(Some(&NSString::from_str(path)));
-    let (from, to) = (NSNumber::new_f64(from), NSNumber::new_f64(to));
-    let (from, to): (&AnyObject, &AnyObject) = (&from, &to);
-    // SAFETY: an opacity and a translation both animate between NSNumbers.
-    unsafe {
-        animation.setFromValue(Some(from));
-        animation.setToValue(Some(to));
-    }
+    // Evenly spaced in time (Core Animation's default), and straight lines between them.
+    let steps = ((secs * KEYFRAMES_PER_SEC).ceil() as usize).max(1);
+    let values: Vec<Retained<NSValue>> =
+        (0..=steps).map(|i| what.value(layer, from + (to - from) * along(curve, i as f64 / steps as f64))).collect();
+    let values: Vec<&AnyObject> = values.iter().map(|v| -> &AnyObject { v }).collect();
+    let animation = CAKeyframeAnimation::animationWithKeyPath(Some(&NSString::from_str(what.path())));
+    // SAFETY: an opacity and a scale animate between NSNumbers, a translation between NSSizes.
+    unsafe { animation.setValues(Some(&NSArray::from_slice(&values))) };
     animation.setDuration(secs);
-    animation.setTimingFunction(Some(&CAMediaTimingFunction::functionWithName(timing)));
     if hold {
         // SAFETY: Core Animation's constant fill mode name.
         animation.setFillMode(unsafe { kCAFillModeForwards });
@@ -464,12 +531,23 @@ pub fn force_reduce_motion(on: Option<bool>) {
 #[derive(Debug, Default)]
 pub struct MotionState {
     pub opacity: f64,
-    /// How far below its place the pill is drawn, in points.
-    pub offset_down: f64,
+    /// The scale drawn, across and up (1 is full size).
+    pub scale: (f64, f64),
+    /// How far the transform drawn moves the layer's centre, in points: 0 when it scales about
+    /// it.
+    pub centre_shift: f64,
     pub resting_opacity: f64,
-    /// The durations of the fade and the slide on the layer, if there are any.
+    /// The durations of the fade and the scale on the layer, if there are any, and the opacity
+    /// and scale they start from.
     pub fade_secs: Option<f64>,
-    pub slide_secs: Option<f64>,
+    pub scale_secs: Option<f64>,
+    pub fade_from: Option<f64>,
+    pub scale_from: Option<f64>,
+    /// The layer's size, its anchor point (0 to 1 across and up its bounds) and the window's
+    /// size, in points.
+    pub layer_size: (f64, f64),
+    pub anchor: (f64, f64),
+    pub window_size: (f64, f64),
 }
 
 /// What AppKit says about the overlay panel.
