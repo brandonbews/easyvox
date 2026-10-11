@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 1 ready · 2 blocked · 19 on hold · 41 inbox · 51 done · 1 cancelled
+0 in progress · 1 ready · 2 blocked · 18 on hold · 41 inbox · 52 done · 1 cancelled
 
 ## In progress
 
@@ -41,7 +41,6 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-q8rd`](tasks/tuh-01M4MFZG1M3EDBMEC1NPD6Q8RD.md) | Decide: delete Parakeet Unified and v3 from the real models folder (1.1 GB, bench-only) | 4 | `decision` `human` `models` |
 | [`tuh-q74f`](tasks/tuh-01M4MH1YSZE3SCWJJGVEZSQ74F.md) | Copy recordings/ to the new Mac mini by hand (gitignored, private) | 2 | `human` `setup` |
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
-| [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) | Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap | 2 | `decision` `human` `overlay` `energy` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
 | [`tuh-82ya`](tasks/tuh-01M4NQE2KBMZ8WST33GWHJ82YA.md) | Hands-on: the DMG window on macOS 26 in light and dark (do Finder labels stay black over the background?) | — | `design` `hands-on` `human` `release` |
 
@@ -136,6 +135,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-5q2q`](tasks/tuh-01M4M9M5JX0YQFJAX82XK15Q2Q.md) Hands-on: overlay animation (pop in and out, eased bars, words fading in, Reduce motion)
 - [`tuh-2hxs`](tasks/tuh-01M4MFZG3JZFJ0WYF4XYQ82HXS.md) Decide: onboarding at every launch when Accessibility is off on purpose
 - [`tuh-h1mn`](tasks/tuh-01M4MMD8EE6D7T5F8S7NFAH1MN.md) Decide: website plan questions (stack, hosting, domain, public docs)
+- [`tuh-ze0q`](tasks/tuh-01M4MN8V38N92B7MF4MJB4ZE0Q.md) Decide: keep the level bars easing (~0.15–0.2 W while talking) or let them snap
 - [`tuh-jexj`](tasks/tuh-01M4N0BZXWBR99VD2A6KVBJEXJ.md) Bench every candidate model on the real recordings with the current pipeline (adds Whisper large-v3-turbo)
 - [`tuh-5k6c`](tasks/tuh-01M4NKB6DT8QWFK2EKTH3Q5K6C.md) Offer Cohere Transcribe as a 'maximum accuracy' model?
 - [`tuh-p35y`](tasks/tuh-01M4NR75GB4AD01K44V0W0P35Y.md) Restyle the app to the design hand-off: brand, icon, menu bar, pill, notices, placement (lane A1-A6)

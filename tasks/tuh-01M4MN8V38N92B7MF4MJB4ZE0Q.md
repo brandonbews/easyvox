@@ -2,7 +2,7 @@
 
 `tuh-01M4MN8V38N92B7MF4MJB4ZE0Q`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 2
 - **Labels:** `decision` `human` `overlay` `energy`
 - **Created:** 2026-10-11 04:59 UTC by `brandon`
@@ -18,6 +18,14 @@ Options:
 
 Decide after the hands-on check (tuh-01M4M9M5JX0YQFJAX82XK15Q2Q), step 6.
 
+Decided, Brandon, 11 Oct: keep the bars gliding (the default; nothing changes). He tried both (Reduce motion makes them jump) and both looked good; in real terms the glide costs about 0.1 Wh for 30 min of dictation a day, about 0.2% of a MacBook Air battery, and nothing while idle.
+
 ## History
 
-_No activity yet._
+### 2026-10-11 21:52 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-11 21:52 UTC — edit by `brandon`
+
+status held→done
