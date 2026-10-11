@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 3 ready · 2 blocked · 18 on hold · 40 inbox · 52 done · 1 cancelled
+0 in progress · 3 ready · 2 blocked · 19 on hold · 40 inbox · 52 done · 1 cancelled
 
 ## In progress
 
@@ -45,6 +45,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Vercel project for the website (root site/, no domain) | 3 | `human` `website` |
 | [`tuh-82ya`](tasks/tuh-01M4NQE2KBMZ8WST33GWHJ82YA.md) | Hands-on: the DMG window on macOS 26 in light and dark (do Finder labels stay black over the background?) | — | `design` `hands-on` `human` `release` |
+| [`tuh-3m33`](tasks/tuh-01M4PG20BW9EH44AS97E1J3M33.md) | Decide: move internal docs (DESIGN.md process notes, plans, branding, research notes, design hand-off, the tuhdoo ledger branch) to a private companion repo before EasyVox goes public | — | `human` `decision` `release` `repo` |
 
 ## Inbox
 
