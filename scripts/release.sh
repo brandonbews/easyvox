@@ -18,7 +18,7 @@
 # Writes dist/EasyVox.app and the DMG, and dist/release-notes.md (the version's CHANGELOG.md
 # section and the DMG's SHA-256). When notarizing, it also writes the notary service's logs in
 # dist/notary/ and dist/release.env (version, tag, dmg, sha256, url and notes, as key=value
-# lines), and prints the Homebrew cask's values. docs/releasing.md has the whole release.
+# lines), and prints the Homebrew cask's values. docs/releasing.md describes how a release is built.
 set -euo pipefail
 
 usage() {

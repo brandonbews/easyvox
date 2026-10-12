@@ -11,8 +11,9 @@
 
 .DS_Store
 
-# Private voice recordings for local benchmarks (never committed)
-/recordings/
-
 # Agent worktrees (Claude Code)
 /.claude/worktrees/
+
+# Maintainer notes (a separate private repo) and local agent instructions
+/internal
+/CLAUDE.local.md

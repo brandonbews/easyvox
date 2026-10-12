@@ -20,8 +20,6 @@ Website: [easyvox.dev](https://easyvox.dev)
 - Settings → Models downloads, switches and deletes the offered models: Parakeet TDT v2 (the default) and Whisper base.en (the small one). A download is checked against its sha256 before it's used, goes through macOS's own networking (so system proxy settings apply), and is saved with a LICENSE.txt that credits the model.
 - On the first launch, onboarding asks for the Microphone and Accessibility, downloads the default model and loads it once, so the first dictation doesn't wait for the one-time shader compile. It opens again at launch whenever one of those is missing; Settings → Permissions opens it any time.
 
-The plan and the decisions behind it are in [DESIGN.md](DESIGN.md).
-
 ## Build from source
 
 You need an Apple silicon Mac on macOS 26 or later, with Xcode (or its Command Line Tools), cmake and Rust through rustup.

@@ -1,11 +1,11 @@
 # Model bench, October 2026
 
-Run on 9 October 2026 to settle two questions from `DESIGN.md` ("Models"):
+Run on 9 October 2026 to settle two questions about the models:
 
 1. **The small-model slot.** Canary 180M Flash was to replace Whisper base.en only if it came back clean: across all test clips, repeated at least 3 times, no empty or cut-short transcripts, a word error rate no worse than Whisper base.en's, and no crash or hang.
 2. **Parakeet TDT 0.6B v2's quantization.** Can Q5_K_M (539 MB) replace Q8_0 (730 MB) without losing accuracy or speed?
 
-Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk; see `DESIGN.md`, "Live text while speaking"). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk. [Overlay animation](#overlay-animation) measured what the overlay's fades and glides cost. [Whisper's preview](#whispers-preview) re-measured Whisper base.en's flickering, costly preview on those defaults, and lines the preview's passes up by text as well as time. [Every candidate, one pipeline](#every-candidate-one-pipeline-11-october) then ran all fourteen candidate models, Whisper large-v3-turbo among them, through today's pipeline on the same audio: the first table where every model compares directly.
+Later the same day the engine moved to one pipeline for every model (no native streaming, long dictations polished chunk by chunk). [One pipeline](#one-pipeline) re-runs the session numbers for the three models offered then, and [Long dictation](#long-dictation) adds recordings of 3 and 9 minutes. Those re-runs made Parakeet TDT v2 the default in place of Parakeet Unified (see [What we decided](#what-we-decided)). [Idle and energy](#idle-and-energy) covers the app while it waits, and the preview while you pause. [Real voice](#real-voice) runs the three models on the author's own voice, and checks the chunk cuts and joins on a 5-minute ramble in an office. [Lightness](#lightness) then made the preview about six times lighter: it now re-decodes only the words that may still change, every 1.6 s instead of every 0.4 s. The sections before it ran the old preview. [First words and silence](#first-words-and-silence) brought the first words back to about half a second after you start speaking, and stopped decoding recordings that hold no speech. [Parakeet TDT v3 against v2](#parakeet-tdt-v3-against-v2) then ran v2's multilingual successor on the same two recordings, with those defaults. [Level meter](#level-meter) measured what the overlay's new level meter costs the app while you talk. [Overlay animation](#overlay-animation) measured what the overlay's fades and glides cost. [Whisper's preview](#whispers-preview) re-measured Whisper base.en's flickering, costly preview on those defaults, and lines the preview's passes up by text as well as time. [Every candidate, one pipeline](#every-candidate-one-pipeline-11-october) then ran all fourteen candidate models, Whisper large-v3-turbo among them, through today's pipeline on the same audio: the first table where every model compares directly.
 
 ## Results
 
@@ -35,7 +35,7 @@ How to read it:
 
 ## What we decided
 
-**Default: Parakeet TDT 0.6B v2 replaces Parakeet Unified** (decided after the [one pipeline](#one-pipeline) and [long dictation](#long-dictation) re-runs below). Unified had been the default because it streamed the preview natively; with one pipeline both models re-decode, and they cost the same and show first words as fast. v2 then made fewer errors on long dictations (0.40 % against 0.86 % over 9 minutes) and ended every clip with a full stop, where Unified left it out on 4 of 13. Unified stays as an alternative: it scores a little better on public benchmarks, which these text-to-speech clips can't confirm or rule out. (Update, 10 October: it left the app and is bench only. On the author's own voice it was a word behind v2, see [Real voice](#real-voice), and its license would need an "I agree" step in the app; `DESIGN.md`, "Bench only".)
+**Default: Parakeet TDT 0.6B v2 replaces Parakeet Unified** (decided after the [one pipeline](#one-pipeline) and [long dictation](#long-dictation) re-runs below). Unified had been the default because it streamed the preview natively; with one pipeline both models re-decode, and they cost the same and show first words as fast. v2 then made fewer errors on long dictations (0.40 % against 0.86 % over 9 minutes) and ended every clip with a full stop, where Unified left it out on 4 of 13. Unified stays as an alternative: it scores a little better on public benchmarks, which these text-to-speech clips can't confirm or rule out. (Update, 10 October: it left the app and is bench only. On the author's own voice it was a word behind v2, see [Real voice](#real-voice), and its license would need an "I agree" step in the app.)
 
 **Small slot: Whisper base.en stays; Canary 180M Flash is bench only.** Canary was clean on two of the three counts: no empty transcripts (the [transcribe.cpp #140](https://github.com/handy-computer/transcribe.cpp/issues/140) bug never showed up), nothing written on silence, and no crash or hang. But on transcribe-cpp 0.3.1 it writes every number as words: "$342" came out as "three hundred and forty two dollars", and a phone number as "five five five zero one four two". The runtime has no number-formatting (ITN) switch for Canary. On the three number clips that's 57 % WER, against 0 % for every other model. On the other eleven clips Canary and Whisper tie (1.52 % each). So it fails the "no worse than Whisper base.en" bar (7.12 % vs 1.37 %), and digits matter for dictation. Its Q8_0 file wasn't tried: that test was only for empty transcripts, which didn't happen, and quantization can't add number formatting.
 
@@ -45,9 +45,9 @@ Whisper base.en's own flaw showed up too: it wrote "you" for 2 s of silence and 
 
 ## Every candidate, one pipeline (11 October)
 
-Run on 11 October 2026, same M4, for the ledger task "Bench every candidate model on the real recordings with the current pipeline". The sections below measured the models on different days, on different subsets, and on the pipeline of their day: [Results](#results) and [Real voice](#real-voice) ran a preview pass every 0.4 s, Parakeet v3 and Canary ran on different days with different subsets, and Whisper large-v3-turbo only ran in the first spike (`docs/spikes/core.md`), through whisper-rs, on the text-to-speech clips. Here every candidate ran through one build, with its defaults and nothing changed (no `--set`): a preview pass every 1.6 s from 1 s before the confirmed words, passes lined up by text, chunks of about 30 s, and nothing decoded before speech. Same audio, same conditions, so these numbers compare with each other.
+Run on 11 October 2026, same M4, for the ledger task "Bench every candidate model on the real recordings with the current pipeline". The sections below measured the models on different days, on different subsets, and on the pipeline of their day: [Results](#results) and [Real voice](#real-voice) ran a preview pass every 0.4 s, Parakeet v3 and Canary ran on different days with different subsets, and Whisper large-v3-turbo only ran in the first spike, through whisper-rs, on the text-to-speech clips. Here every candidate ran through one build, with its defaults and nothing changed (no `--set`): a preview pass every 1.6 s from 1 s before the confirmed words, passes lined up by text, chunks of about 30 s, and nothing decoded before speech. Same audio, same conditions, so these numbers compare with each other.
 
-**The models.** Fourteen: the five transcribe.cpp models in the catalog until now, Whisper large-v3-turbo, and every other model in `DESIGN.md`'s "Other models we looked at" that runs on transcribe-cpp 0.3.1. The new ones are bench-only catalog entries (`crates/easyvox-core/src/models.rs`, `scripts/fetch-model.sh`), each pinned to a Hugging Face commit, with its size and sha256 checked against Hugging Face's LFS metadata; the app never lists a bench-only entry.
+**The models.** Fourteen: the five transcribe.cpp models in the catalog until now, Whisper large-v3-turbo, and every other model we had looked at that runs on transcribe-cpp 0.3.1. The new ones are bench-only catalog entries (`crates/easyvox-core/src/models.rs`, `scripts/fetch-model.sh`), each pinned to a Hugging Face commit, with its size and sha256 checked against Hugging Face's LFS metadata; the app never lists a bench-only entry.
 
 - **Files:** Q5_K_M from `handy-computer` (transcribe.cpp's authors) wherever it's published. Moonshine Streaming comes in Q8_0 only. Distil-Whisper has no GGUF at all: transcribe.cpp also loads whisper.cpp's own `.bin` format, and the authors publish theirs in F16 only, so that's the file.
 - **Sizes:** Moonshine Streaming ran as Medium, the most accurate of its three; Granite Speech 4.x as 4.1 2B, the newest of four (4.0 1B, 4.1 2B-NAR and 4.1 2B-plus are also published); Distil-Whisper as large-v3.5.
@@ -132,7 +132,7 @@ What the numbers say:
 source "$HOME/.cargo/env"
 cargo build -p easyvox-bench --release    # once; the runs used a copy of this binary
 B=target/release/easyvox-bench
-R=recordings                              # private, gitignored
+R=recordings                              # private, not in the repo
 export EASYVOX_MODELS_DIR=~/Library/Caches/easyvox-bench/models   # the new downloads, and links
                                           # to the four models already in the app's folder
 export EASYVOX_CONFIG=$PWD/empty.toml     # an empty file
@@ -171,7 +171,7 @@ Every model now takes the same path: the preview re-decodes the recent audio eve
 
 ## Long dictation
 
-Holding the key for minutes is normal use (`DESIGN.md`, "Requirements"). The old engine decoded the whole recording in one pass on release, and that pass grows quadratically: the text came 1.2 / 4.3 / 9.2 / 21.6 s after 1 / 3 / 5 / 9 minutes, and Whisper silently lost text past 30 s. Now chunks of about 30 s are polished while you talk and only the rest is decoded on release. Real-time replays, one run each, the same day:
+Holding the key for minutes is normal use. The old engine decoded the whole recording in one pass on release, and that pass grows quadratically: the text came 1.2 / 4.3 / 9.2 / 21.6 s after 1 / 3 / 5 / 9 minutes, and Whisper silently lost text past 30 s. Now chunks of about 30 s are polished while you talk and only the rest is decoded on release. Real-time replays, one run each, the same day:
 
 | Model | Recording | Text ready after release (one pass → now) | Word error rate (one pass → now) | Peak memory (one pass → now) | CPU while talking, now (one pass) | GPU while talking | Preview behind the speech, median / 95th pct |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -191,9 +191,9 @@ Holding the key for minutes is normal use (`DESIGN.md`, "Requirements"). The old
 
 ## Idle and energy
 
-Three changes for the time EasyVox spends waiting, measured the same day on the same M4 with Parakeet Unified (release builds; `DESIGN.md`, "Keeping it light and fast"):
+Three changes for the time EasyVox spends waiting, measured the same day on the same M4 with Parakeet Unified (release builds):
 
-1. **No timer while idle.** Every binary sets `GGML_METAL_NO_RESIDENCY=1` first thing in `main`, so ggml-metal's residency thread never starts (`DESIGN.md`, "Engine and macOS gotchas").
+1. **No timer while idle.** Every binary sets `GGML_METAL_NO_RESIDENCY=1` first thing in `main`, so ggml-metal's residency thread never starts.
 2. **The model is freed after 10 minutes without use**, and reloaded on the next key press while the session already records.
 3. **The preview rests in pauses.** A preview pass runs only if something louder than the pause threshold arrived since the last one, plus two more after the speech stops (`SpeechGate` in `crates/easyvox-core/src/pause.rs`).
 
@@ -250,7 +250,7 @@ To reproduce: `easyvox-bench session … --idle-before 300` and `--unload` for t
 
 ## Real voice
 
-Run on the evening of 9 October 2026, same M4, on two recordings of the author's own voice. They're private and not in the repo (`recordings/` is gitignored), so this section gives numbers only, no transcript text. Both are 16 kHz mono WAVs:
+Run on the evening of 9 October 2026, same M4, on two recordings of the author's own voice. They're private and not in the repo, so this section gives numbers only, no transcript text. Both are 16 kHz mono WAVs:
 
 - **Read aloud** (`structured.wav`): 81 s, a 238-word script with names, times, sums of money and technical terms, read at a normal pace. Its reference transcript gives the word error rate.
 - **Ramble** (`ramble.wav`): 5:00 of unscripted talking, on cheap AirPods in an office. There's no reference. Room noise sits around −50 dBFS and speech around −17 dBFS (90th percentile of 30 ms frames). The file starts with 1 s of digital silence, and the speech starts at 1.5 s.
@@ -338,19 +338,19 @@ Before → after, one run each after the change. The "before" ramble and read-al
 - **What's there.** `vad/silero_vad.onnx` (644 KB) runs only on sherpa-onnx's ONNX runtime, which the app doesn't build in (it would add 18.5 MB). In the bench (`--features sherpa`, then `--vad`), it only trims leading and trailing silence before the final decodes (`EngineConfig::vad_trim`). Nothing uses it for the cuts or the speech gate.
 - **Would a VAD help?** Not for the cuts on this recording. A VAD tells speech from steady noise better than loudness does, but loudness found every pause here with 12 dB to spare. The one word v2 lost (see "Joins") was a soft word at the edge of a real pause. A VAD would still cut in that pause, and the word would still be lost: the fix for that is in the join rules. Voices or typing nearby fool both, since a VAD hears any speech, not just the speaker's.
 - **Recommendation: keep the energy pause finder as it is.** If louder rooms start forcing cuts, the cheap fix is a noise-floor term in `quiet_level`: quiet = the louder of (speech − 20 dB) and (floor + 6 dB), where the floor is the 10th percentile of the window's frames. In the replay this gave the same 13 cuts on the real recording, and kept all 13 in pauses with up to −32 dBFS of added noise, where today's rule forces cuts from −38 dBFS. The speech gate uses the same threshold, so the preview would need checking too.
-- **Whisper's "you" before the first word** comes from the speech gate, which decodes room noise until it has heard speech, so that quiet first words aren't missed. A plain level check would stop it. That's the same check `DESIGN.md` asks for before the final pass, and it needs no VAD. (Done: nothing is decoded before speech now; see [First words and silence](#first-words-and-silence).)
+- **Whisper's "you" before the first word** comes from the speech gate, which decodes room noise until it has heard speech, so that quiet first words aren't missed. A plain level check would stop it, with no VAD. (Done: nothing is decoded before speech now; see [First words and silence](#first-words-and-silence).)
 
 ### What it means for the model list
 
 - **v2 stays the default.** On a real voice it was the most accurate of the three (by one word over Unified), used the least CPU, was as fast as Unified, and had fewer join problems on the ramble. Unified's small edge on public benchmarks didn't show on this voice. One speaker and two recordings can't rank v2 and Unified firmly, but nothing here argues against v2.
-- **Whisper base.en** is the small-memory pick, not an accurate one: 6.7 % of errors on a real voice. Its "pick this if" line in `DESIGN.md` could say so.
+- **Whisper base.en** is the small-memory pick, not an accurate one: 6.7 % of errors on a real voice. Its "Pick this if" line in Settings could say so.
 - **The ledger task also asked for Parakeet Unified at 160 ms chunks** (`EASYVOX_PK_CHUNK_MS`). That setting went away with native streaming, so there was nothing to run.
 
 ### Commands
 
 ```sh
 B=target/release/easyvox-bench
-R=recordings      # private, gitignored
+R=recordings      # private, not in the repo
 V2=parakeet-tdt-0.6b-v2-q5_k_m-gguf; UNI=parakeet-unified-en-0.6b-q5_k_m-gguf; WH=whisper-base.en-q8_0-gguf
 
 # Read aloud: 3 rounds over the three models, in a different order each round.
@@ -402,7 +402,7 @@ Same recordings and methods as above: real-time `session` replays, the models ta
 
 ```sh
 B=target/release/easyvox-bench      # a scratch copy printing the cut and word lines described above
-R=recordings                        # private, gitignored
+R=recordings                        # private, not in the repo
 V2=parakeet-tdt-0.6b-v2-q5_k_m-gguf; V3=parakeet-tdt-0.6b-v3-q5_k_m-gguf
 scripts/fetch-model.sh $V3
 # Read aloud: 3 rounds (v2 then v3, v3 then v2, v2 then v3), then one pass each.
@@ -420,7 +420,7 @@ $B bench --model $V3 --reps 3 --out tts-v3.json
 
 ## Lightness
 
-Run on the night of 9–10 October 2026, same M4 (a Mac mini, on AC), for the requirement "Light on the machine while you dictate" in `DESIGN.md`: make dictation as light as it can be, while the final text stays as accurate and as quick, and the preview's words still show up within about 2 s most of the time.
+Run on the night of 9–10 October 2026, same M4 (a Mac mini, on AC), for the requirement "Light on the machine while you dictate": make dictation as light as it can be, while the final text stays as accurate and as quick, and the preview's words still show up within about 2 s most of the time.
 
 **What changed** (`Tuning` in `crates/easyvox-core/src/tuning.rs`; the same for every model):
 
@@ -470,7 +470,7 @@ Side checks at 1.2 s, two runs each: starting passes 2 s or 3 s before the confi
 
 ```sh
 B=target/release/easyvox-bench
-R=recordings      # private, gitignored
+R=recordings      # private, not in the repo
 M=parakeet-tdt-0.6b-v2-q5_k_m-gguf
 
 # One energy run.
@@ -496,7 +496,7 @@ $B session --model $M --wav testdata/punct_samantha.wav --out lat.json
 
 ## First words and silence
 
-Run on the morning of 10 October 2026, same M4, against the build before (commit 6e59ccc) with the same defaults otherwise. Two changes, the same for every model (`Tuning` in `crates/easyvox-core/src/tuning.rs`; `DESIGN.md`, "Live text while speaking"):
+Run on the morning of 10 October 2026, same M4, against the build before (commit 6e59ccc) with the same defaults otherwise. Two changes, the same for every model (`Tuning` in `crates/easyvox-core/src/tuning.rs`):
 
 - **No speech, no decode.** Until a recording holds speech, nothing is decoded: no preview pass, no chunk, no final pass. A recording that never does ends with empty text. Speech is 120 ms in a row of 30 ms frames at least 6 dB louder than the room (the recording's 10th percentile, leaving out digital silence), or louder than -35 dBFS whatever the room, never at or under -55 dBFS (`speech_above_noise_db`, `speech_loud_dbfs`, `speech_min_ms`, `gate_silence_dbfs`; `SpeechDetector` in `pause.rs`).
 - **The first preview pass runs 0.5 s after speech starts** (`preview_first_ms`), instead of 1.6 s after the key press. Until the preview shows words, the next passes come 0.5 s apart too, then every 1.6 s.
@@ -562,11 +562,11 @@ $B session --model whisper-base.en-q8_0-gguf --wav testdata/silence_2s.wav --out
 
 ## Level meter
 
-Run at midday on 10 October 2026, same M4, for the overlay's level meter and its "can't hear you" state (`DESIGN.md`, "Overlay animation"). The bar: the meter mustn't undo [Lightness](#lightness).
+Run at midday on 10 October 2026, same M4, for the overlay's level meter and its "can't hear you" state. The bar: the meter mustn't undo [Lightness](#lightness).
 
 **What it does** (`crates/easyvox-core/src/level.rs`; its numbers are the `meter_*` fields of `Tuning`). While a dictation captures, a thread ticks every 66 ms. It reads the 30 ms frame levels the capture thread already measures for speech detection, and sends `TranscriptEvent::Level` only when the meter would move by 2 dB or more. The overlay redraws only when a bar changes by half a point. Nothing runs between dictations.
 
-**The runs.** The app itself, not the bench: `dist/EasyVox.app` (release build with the `self-test` feature) with `--self-test --replay recordings/ramble.wav`. It starts, loads Parakeet TDT v2, waits 5 s, dictates the 5-minute ramble in real time with the overlay up (a key press's path, with the file in place of the microphone), and quits after the final text. `macmon` ran around each run as in [Lightness](#lightness), in two rounds, the second in reverse order, each on a quiet machine. The Mac's screen was locked, so GPUI drew nothing on its own (views ask for a redraw, but no frame comes). The "drawn" rows draw the overlay at each redraw it asks for, as the next frame would: layout and paint, on the CPU. No row includes the GPU presenting the frame or WindowServer compositing it.
+**The runs.** The app itself, not the bench: `dist/EasyVox.app` (release build with the `self-test` feature) with `--self-test --replay <recordings>/ramble.wav`. It starts, loads Parakeet TDT v2, waits 5 s, dictates the 5-minute ramble in real time with the overlay up (a key press's path, with the file in place of the microphone), and quits after the final text. `macmon` ran around each run as in [Lightness](#lightness), in two rounds, the second in reverse order, each on a quiet machine. The Mac's screen was locked, so GPUI drew nothing on its own (views ask for a redraw, but no frame comes). The "drawn" rows draw the overlay at each redraw it asks for, as the next frame would: layout and paint, on the CPU. No row includes the GPU presenting the frame or WindowServer compositing it.
 
 | Setting | Energy per minute of dictation | Added power: all / GPU | GPU active | The app's CPU, share of one core | Meter moves / overlay redraws a second |
 |---|---:|---:|---:|---:|---:|
@@ -586,7 +586,7 @@ Run at midday on 10 October 2026, same M4, for the overlay's level meter and its
 # or [advanced] meter_interval_ms = 0 (off) or 33 (30 a second). The app quits after the final text.
 macmon pipe -i 500 > run.jsonl & sleep 60
 open -W --env EASYVOX_CONFIG=$PWD/meter.toml dist/EasyVox.app \
-  --args --self-test --replay $PWD/recordings/ramble.wav --out $PWD/run.json   # add --draw to draw
+  --args --self-test --replay /path/to/recordings/ramble.wav --out $PWD/run.json   # add --draw to draw
 sleep 60; kill %1
 ```
 
@@ -594,7 +594,7 @@ sleep 60; kill %1
 
 ## Overlay animation
 
-Run in the evening of 10 October 2026, same M4, for the overlay's open and close, its words fading in and its glides (`DESIGN.md`, "Overlay animation"). The bar, as for the meter: it mustn't undo [Lightness](#lightness).
+Run in the evening of 10 October 2026, same M4, for the overlay's open and close, its words fading in and its glides. The bar, as for the meter: it mustn't undo [Lightness](#lightness).
 
 **What it does.** The open and close are Core Animation on the panel's layer, run by the window server, so they don't touch the app. Inside the pill, each change of the text starts a fade of the words (120 ms) and maybe a glide of the pill's width or the text's scroll (150 ms), and GPUI draws a frame every `overlay_frame_ms` (16) until both end.
 
@@ -655,7 +655,7 @@ Run in the evening of 10 October 2026, same M4, with the screen unlocked: GPUI d
 
 #### The eased meter and the softer glide
 
-After the runs above, the meter's bars ease to each level (120 ms, a frame every 33 ms while only they move), the words fade in over 200 ms and the pill glides over 250 ms, on CSS's ease-out, and the frame timer wakes a quarter of a frame early so frames land at every screen refresh (`DESIGN.md`, "Overlay animation"). The 3-minute clip again, on the pop build, against the build of 5bd95f9. These runs fell either side of the Jump Desktop session's end and start, so they come in two setups:
+After the runs above, the meter's bars ease to each level (120 ms, a frame every 33 ms while only they move), the words fade in over 200 ms and the pill glides over 250 ms, on CSS's ease-out, and the frame timer wakes a quarter of a frame early so frames land at every screen refresh. The 3-minute clip again, on the pop build, against the build of 5bd95f9. These runs fell either side of the Jump Desktop session's end and start, so they come in two setups:
 
 | Build and setting | Draws a second (animation frames) | The app's CPU | WindowServer, over idle | GPU over idle: power / active |
 |---|---:|---:|---:|---:|
@@ -672,7 +672,7 @@ After the runs above, the meter's bars ease to each level (120 ms, a frame every
 - **The GPU** spends 48 mW more on the meter's easing on the Retina display, and 42 mW more on the longer words and glide: against the fade and slide, this build's defaults take 0.09 W more there, next to the decode's 0.5 W. On the plain display (a quarter of the pixels) the meter's pair differed by less than the noise, and the GPU was busier (10.9 % against 8.5 % of the time) without drawing more power.
 - **In all, while you talk,** this build's animations cost about 5 points of a core more in the window server, 0.09 W more on the GPU and a point or two in the app: roughly 0.15–0.2 W, by estimate (the GPU's measured, the CPU's from its CPU time, since the CPU rail was too noisy here to read), against the 0.65 W dictating took in [Lightness](#lightness). Most of it is the meter's easing; `overlay_meter_ms = 0` takes that back.
 - **The meter at 20 frames a second** (`overlay_meter_frame_ms = 50`, two runs) drew 24.4–24.9 times a second instead of 28.9: its frames coincide with the words' and the glide's often, so a slower rate saves little. The default stays at 30.
-- **Native layers for the bars** were weighed against GPUI's frames (`DESIGN.md`): they would spare the app its share, about 1.6–2.3 points of a core, but not the window server's, which is the larger.
+- **Native layers for the bars** were weighed against GPUI's frames: they would spare the app its share, about 1.6–2.3 points of a core, but not the window server's, which is the larger.
 - **The app's CPU** is noisy here, as above: the fade and slide's run came out above this build's with the meter off. The pairs taken minutes apart in one setup are the ones to read.
 - **The setups moved under the runs:** the Jump Desktop session ended before the plain-display pair and started again during its first run (whose last 55 s, streamed, are left out), and both runs with the meter at 20 frames a second were streamed throughout, so only their draws are used.
 
@@ -729,7 +729,7 @@ How it was measured: the "words written, then rewritten" share, and the passes t
 
 ```sh
 B=target/release/easyvox-bench
-R=recordings                     # private, gitignored
+R=recordings                     # private, not in the repo
 WH=whisper-base.en-q8_0-gguf; V2=parakeet-tdt-0.6b-v2-q5_k_m-gguf
 # One energy run, as in "Lightness", keeping the partial lines for the flicker and the lag.
 macmon pipe -i 500 > run.jsonl & sleep 60

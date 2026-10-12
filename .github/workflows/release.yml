@@ -4,7 +4,7 @@ name: Release
 # Releases page, as a pre-release, and publishing creates the tag. The `release` job builds
 # EasyVox, signs it with the Developer ID, and notarizes and staples the app and the DMG
 # (scripts/release.sh). The `publish` job then attaches the DMG to that release, sets its notes
-# and makes it the latest release. docs/releasing.md has the whole release.
+# and makes it the latest release. docs/releasing.md describes how a release is built.
 #
 # A draft starts nothing: its tag doesn't exist until it's published.
 #

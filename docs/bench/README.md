@@ -234,7 +234,7 @@ python3 -I scripts/bench/extract.py --s1 <9 Oct evening to 10 Oct folder> --s2 <
     --s3 <9 Oct evening to 10 Oct folder>/candidates
 ```
 
-It also reads `recordings/structured.wav`, if it's there, for where the speech starts in the read-aloud stress copies. The raw run files, and any audio cut from the private recordings, stay private.
+It also reads the private `structured.wav` (from `--recordings`), if it's there, for where the speech starts in the read-aloud stress copies. The raw run files, and any audio cut from the private recordings, stay private.
 
 The other scripts in `scripts/bench/` make and read new runs. All of them print numbers only.
 

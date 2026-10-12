@@ -1,15 +1,10 @@
 # EasyVox
 
-## Working with tuhdoo
+## Building and testing
 
-- The backlog is on the ledger: `tuhdoo backlog`. Agents: `tuhdoo protocol`, then `claim_next`.
-- Ideas: `tuhdoo create "<title>" --status inbox`. Title-only is fine. Ideas do not go in markdown files.
-- Open questions: on the ledger as `held` tasks labelled `decision` and `human`.
-- Tasks that need Brandon carry the `human` label and stay `held`, so agents are never served them. Hands-on checks (a person at an unlocked screen) also carry `hands-on`.
-
-## Private recordings
-
-- `recordings/` holds Brandon's own voice recordings for local benchmarks. It's gitignored: never commit, upload, publish or delete these files, and don't paste their transcripts into committed files or artifacts. Bench results (WER, latency, energy) are fine to record.
+- `docs/building.md` has every step: the tools, the speech model, the build, the tests, the self-test and `scripts/bundle.sh`.
+- Before a commit, run what CI runs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` (and again with `-p easyvox-app --features self-test`), and `cargo test --workspace --locked`.
+- The site in `site/` has its own commands and rules: `site/AGENTS.md`.
 
 ## Writing
 
