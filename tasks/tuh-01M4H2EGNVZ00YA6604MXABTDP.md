@@ -1,4 +1,4 @@
-# Shipping build: cargo-packager for Developer ID signing, notarization and the DMG
+# Shipping build: hardened runtime, DMG (dmgbuild), release script and a GitHub Actions workflow that signs and notarizes on a tag
 
 `tuh-01M4H2EGNVZ00YA6604MXABTDP`
 
@@ -10,15 +10,19 @@
 
 ## Description
 
-Context: DESIGN.md "Signing and notarization (macOS)" and "Platform and distribution". A downloaded app opens without a warning only if it's signed with a Developer ID and notarized. cargo-packager is the planned tool, automated in GitHub Actions with the certificate and an App Store Connect API key as secrets. The DMG holds only the app (~25 MB).
+Context: DESIGN.md "Signing and notarization (macOS)" and "Platform and distribution". A downloaded app opens without a warning only if it's signed with a Developer ID and notarized. Plan (12 Oct, replacing cargo-packager): extend scripts/bundle.sh and add scripts/release.sh; dmgbuild 1.6.7 via uvx for the DMG; GitHub Actions signs and notarizes on a v* tag in a `release` environment with Brandon as the required reviewer; the DMG goes on GitHub Releases (the repo goes public first). Release plan: the previous session's scratchpad release/plan.md.
 
-The ask: cargo-packager config that builds EasyVox.app with the hardened runtime and the com.apple.security.device.audio-input entitlement, signs it with the Developer ID, notarizes and staples it, and wraps it in a DMG; a release workflow that does this on a version tag using the secrets; README steps for a local signed build.
+The ask:
+- packaging/EasyVox.entitlements with only com.apple.security.device.audio-input; bundle.sh signs dist and release builds with --options runtime and the entitlements (ad hoc locally), never --dev builds.
+- packaging/dmg/settings.py (dmgbuild) with the Finder layout below.
+- scripts/release.sh: ad hoc by default; --identity and --notarize for CI; notarize and staple the app, then sign, notarize and staple the DMG; prints the sha256 and the cask values; refuses a dirty tree or a tag that doesn't match the Cargo.toml version.
+- .github/workflows/release.yml: temporary keychain, notarytool with an App Store Connect API key, uploads EasyVox-<version>.dmg to the GitHub Release. Workflow edits need Brandon's review.
+- CHANGELOG.md; docs/releasing.md (short, public).
+- Agents sign ad hoc only and never trigger or approve a signing run.
 
 Acceptance: a CI-built DMG opens on a clean Mac with no Gatekeeper prompt (`spctl -a -vv` reports a notarized Developer ID); `codesign --verify --deep --strict` passes; the Microphone prompt and dictation work under the hardened runtime.
 
-Pointers: scripts/bundle.sh (today's ad-hoc bundle), packaging/Info.plist, .github/workflows/ci.yml.
-
-Constraints: bundle id dev.easyvox.EasyVox never changes (macOS ties permissions and the shader cache to it); no secrets in the repo; ad-hoc dev builds keep working.
+Constraints: bundle id dev.easyvox.EasyVox never changes (macOS ties permissions and the shader cache to it); no secrets in the repo or on the Mac; ad-hoc dev builds keep working.
 
 Design hand-off (11 October): the DMG background and Finder window settings are in design/assets/dmg/ (README.md). Ship the light background.
 
@@ -40,3 +44,7 @@ description edited
 ### 2026-10-11 15:36 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-12 06:44 UTC — edit by `brandon`
+
+retitled · description edited
