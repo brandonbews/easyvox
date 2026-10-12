@@ -13,8 +13,14 @@ Brandon, 12 Oct: no private repo; docs stay if nothing personal or odd was ever 
 
 12 Oct: started. Brandon confirmed the path (public repo, signing on GitHub Actions, DMG on GitHub Releases). Two read-only agents: history, secrets, images, recordings, ledger branch and GitHub (audit-history); current docs and comments against the writing rule (audit-content). Findings go to Brandon before anything changes.
 
+12 Oct, audits back (orchestrator scratchpad audit-history/findings.md, audit-content/findings.md). Privacy: no history rewrite needed. Brandon: (1) testdata say clips: fix forward, no rewrite; (3) the claude.ai session and artifact links are private. (2) Ledger and agent-written design docs: Brandon doesn't want them public, a separate repo felt heavy, and they must survive losing a Mac. Under discussion: a private working repo with an automatic one-way public mirror.
+
 ## History
 
 ### 2026-10-12 06:44 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-12 07:10 UTC — edit by `brandon`
 
 description edited
