@@ -44,6 +44,8 @@ Built and rehearsed ad hoc (12 October, agent, uncommitted in worktree agent-a5c
 
 12 Oct: built, reviewed and fixed (F1-F14 except F13); gates OK without the self-test. Committed on the worktree branch as 36111a2; it merges to main after the self-test passes under the hardened runtime (waiting on Brandon's OK to quit his EasyVox). Release flow: Brandon publishes a pre-release with a new v* tag in GitHub's web UI, approves the run; a separate publish job attaches the DMG. The runbook for Brandon is in the orchestrator's scratchpad (release-eng/runbook.md).
 
+12 Oct: self-test under the hardened runtime: 41 checks, 4 of 6 runs passed. The 2 misses are the Permissions read-count flake (tuh-01M4R9NS9WJW1NQR7TVT7QBXH4), not the runtime: no AMFI, library-validation or JIT denials in the log. Merged and pushed to main as 36111a2. Still to do: Brandon's hands-on check that the microphone prompts and works in a hardened build, and the first real signed run.
+
 ## History
 
 ### 2026-10-11 14:56 UTC — edit by `brandon`
@@ -63,5 +65,9 @@ retitled · description edited
 description edited
 
 ### 2026-10-12 07:55 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-12 14:57 UTC — edit by `brandon`
 
 description edited
