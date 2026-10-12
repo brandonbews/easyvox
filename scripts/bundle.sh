@@ -8,11 +8,11 @@
 #
 # Then: open dist/EasyVox.app
 #
-# This is for development and testing. Shipping needs a Developer ID signature, notarization
-# and a DMG, and `cargo-packager` is the planned replacement for this script there (see
-# DESIGN.md, "Signing and notarization"). That build will also need the hardened runtime
-# (`--options runtime`) and the `com.apple.security.device.audio-input` entitlement, or the
-# microphone stays off.
+# The default and --release builds are signed with the hardened runtime and
+# packaging/EasyVox.entitlements, as a shipping build is, so a missing entitlement shows up in
+# day-to-day use. --dev builds aren't: the hardened runtime blocks attaching a debugger.
+# scripts/release.sh builds on this script for shipping: a Developer ID signature, notarization
+# and the DMG (see docs/releasing.md).
 #
 # MACOSX_DEPLOYMENT_TARGET (26.0, matching Info.plist's LSMinimumSystemVersion) is set in
 # .cargo/config.toml, not here, so `cargo build`, the tests, CI and the model bench build the
@@ -86,8 +86,18 @@ plutil -lint "$staging/Contents/Info.plist" >/dev/null
 # --deep (deprecated for signing) isn't needed. macOS ties the Microphone and Accessibility
 # grants to the signature, and an ad-hoc one changes with every build, so expect to grant them
 # again.
-echo "==> signing (ad hoc)"
-codesign --force --sign - "$staging"
+#
+# The hardened runtime needs the audio-input entitlement, or macOS shows no Microphone prompt
+# and the microphone records silence. Nothing else is needed: Metal compiles shaders in its own
+# process, and the binary loads only system libraries.
+sign_args=(--force --sign -)
+signature="ad hoc"
+if [[ $profile != dev ]]; then
+  sign_args+=(--options runtime --entitlements packaging/EasyVox.entitlements)
+  signature="ad hoc, hardened runtime"
+fi
+echo "==> signing ($signature)"
+codesign "${sign_args[@]}" "$staging"
 codesign --verify --strict --deep --verbose=2 "$staging"
 
 rm -rf "$app"

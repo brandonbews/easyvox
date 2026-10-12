@@ -36,12 +36,12 @@ CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs rustfmt, cli
 ## The app
 
 ```sh
-scripts/bundle.sh             # shipping build, thin LTO (about 1.5 min from clean)
+scripts/bundle.sh             # optimized build (thin LTO), about 1.5 min from clean
 scripts/bundle.sh --release   # faster, for day-to-day work
 open dist/EasyVox.app
 ```
 
-This writes `dist/EasyVox.app`, signed ad hoc. macOS ties permissions to the signature, so after a rebuild it may ask for the Microphone and Accessibility again. Other arguments are passed to `cargo build`.
+This writes `dist/EasyVox.app`, signed ad hoc with the hardened runtime, as a release is. `--dev` makes a debug build without the hardened runtime, so a debugger can attach. macOS ties permissions to the signature, so after a rebuild it may ask for the Microphone and Accessibility again. Other arguments are passed to `cargo build`.
 
 ### Self-test
 

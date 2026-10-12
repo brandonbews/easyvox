@@ -5,11 +5,7 @@
 | `background.png` | 660 × 400 px | 1× picture |
 | `background@2x.png` | 1320 × 800 px | 2× picture (Retina) |
 
-Combine both into one HiDPI TIFF; Finder picks the right resolution for the screen:
-
-```sh
-tiffutil -cathidpicheck background.png background@2x.png -out background.tiff
-```
+`packaging/dmg/background.tiff` holds both in one HiDPI TIFF (`tiffutil -cathidpicheck background.png background@2x.png -out background.tiff`), and Finder picks the right one for the screen.
 
 The PNGs hold only the paper, the arrow (a grey line that runs through the vermilion wave) and the line
 “Drag EasyVox to Applications”. Finder draws the app icon, the Applications alias and the file names on top.
@@ -26,25 +22,11 @@ The PNGs hold only the paper, the arrow (a grey line that runs through the vermi
 | Arrange by | None |
 | `EasyVox.app` position (icon centre) | 170, 164 |
 | `Applications` alias position (icon centre) | 490, 164 |
-| Background | `background.tiff`, stored in a hidden `.background` folder on the volume |
+| Background | `background.tiff`, stored on the volume as the hidden file `.background.tiff` |
 | Volume name | EasyVox |
-| Disk image | `EasyVox-1.0.dmg` |
+| Disk image | `EasyVox-<version>.dmg`, from the crate version |
 
-Example with [create-dmg](https://github.com/create-dmg/create-dmg):
-
-```sh
-create-dmg \
-  --volname "EasyVox" \
-  --background "background.tiff" \
-  --window-pos 200 120 \
-  --window-size 660 400 \
-  --icon-size 128 \
-  --text-size 13 \
-  --icon "EasyVox.app" 170 164 \
-  --hide-extension "EasyVox.app" \
-  --app-drop-link 490 164 \
-  "EasyVox-1.0.dmg" "dist/"
-```
+`packaging/dmg/settings.py` holds these settings for [dmgbuild](https://github.com/dmgbuild/dmgbuild), and `scripts/release.sh` builds the DMG with it.
 
 ## Notes
 
