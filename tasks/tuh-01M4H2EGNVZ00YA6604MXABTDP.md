@@ -42,6 +42,8 @@ Built and rehearsed ad hoc (12 October, agent, uncommitted in worktree agent-a5c
 - The workflow is dormant until the release environment and its five secrets exist. zizmor 1.30.1 and actionlint 1.7.12 (with shellcheck) report nothing.
 - Still to do: the self-test under the hardened runtime (an EasyVox was running), the DMG window check (tuh-01M4NQE2KBMZ8WST33GWHJ82YA), the certificate, key and GitHub setup (Brandon's runbook), and the first CI run.
 
+12 Oct: built, reviewed and fixed (F1-F14 except F13); gates OK without the self-test. Committed on the worktree branch as 36111a2; it merges to main after the self-test passes under the hardened runtime (waiting on Brandon's OK to quit his EasyVox). Release flow: Brandon publishes a pre-release with a new v* tag in GitHub's web UI, approves the run; a separate publish job attaches the DMG. The runbook for Brandon is in the orchestrator's scratchpad (release-eng/runbook.md).
+
 ## History
 
 ### 2026-10-11 14:56 UTC — edit by `brandon`
@@ -57,5 +59,9 @@ description edited
 retitled · description edited
 
 ### 2026-10-12 07:20 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-12 07:55 UTC — edit by `brandon`
 
 description edited
