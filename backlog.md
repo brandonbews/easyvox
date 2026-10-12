@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 19 on hold · 40 inbox · 55 done · 1 cancelled
+0 in progress · 2 ready · 2 blocked · 18 on hold · 40 inbox · 56 done · 1 cancelled
 
 ## In progress
 
@@ -30,7 +30,6 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-dw5x`](tasks/tuh-01M4H2EG2HY0EK9T9EFHSEDW5X.md) | Hands-on: overlay and paste over full-screen apps and in other Spaces | 1 | `human` `hands-on` |
 | [`tuh-h9ja`](tasks/tuh-01M4H2EG3AT1WSW8YRH9DXH9JA.md) | Hands-on: the debug "Test dictation" menu item | 1 | `human` `hands-on` |
 | [`tuh-2645`](tasks/tuh-01M4H2EGM7TG4S96QNRQHV2645.md) | Create a Developer ID Application certificate and a notarization key | 3 | `human` `release` |
-| [`tuh-tz3a`](tasks/tuh-01M4H2EGN1Y7XVCGM2JVNSTZ3A.md) | Decide: which auto-updater | 3 | `human` `decision` `release` |
 | [`tuh-xm3z`](tasks/tuh-01M4H2EGQHWYDW7WSWNPARXM3Z.md) | Upgrade transcribe-cpp to 0.4 for Parakeet Ultra (French) | 4 | `models` `engine` |
 | [`tuh-n7dz`](tasks/tuh-01M4H2EGRBQ8Q57SAH4YT0N7DZ.md) | Decide: how LLM cleanup gets around the one-ggml-per-binary rule | 4 | `human` `decision` `engine` |
 | [`tuh-b8rb`](tasks/tuh-01M4HDR400G242K017BJ1HB8RB.md) | Energy spike: GPU vs cheaper preview vs Neural Engine | 2 | `engine` `perf` `energy` `spike` |
@@ -118,6 +117,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-04zz`](tasks/tuh-01M4H2EGHS8QGWQCZ7TGRT04ZZ.md) Check, and likely set, MACOSX_DEPLOYMENT_TARGET=26.0 in .cargo/config.toml
 - [`tuh-y75b`](tasks/tuh-01M4H2EGJKYV58RHW70R9YY75B.md) Future-incompat warning from the block 0.1.6 dependency
 - [`tuh-66zt`](tasks/tuh-01M4H2EGKDEZ7NPDTDRYRD66ZT.md) Dependabot for the GitHub Actions SHA pins
+- [`tuh-tz3a`](tasks/tuh-01M4H2EGN1Y7XVCGM2JVNSTZ3A.md) Decide: which auto-updater
 - [`tuh-vbtm`](tasks/tuh-01M4HDR3YH6F52Q77NJFQ7VBTM.md) Decide the default model: Parakeet TDT v2 or Unified
 - [`tuh-4p1s`](tasks/tuh-01M4HDR3Z8GQ7132ZNSN5Q4P1S.md) Skip preview passes when nothing new was heard
 - [`tuh-6htq`](tasks/tuh-01M4HDR40PA99G6HQDAN026HTQ.md) Test chunk cutting on real-voice long recordings; consider a VAD

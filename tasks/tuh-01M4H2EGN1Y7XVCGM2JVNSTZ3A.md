@@ -2,7 +2,7 @@
 
 `tuh-01M4H2EGN1Y7XVCGM2JVNSTZ3A`
 
-- **Status:** on hold — deliberately paused
+- **Status:** done
 - **Priority:** 3
 - **Labels:** `human` `decision` `release`
 - **Created:** 2026-10-09 19:32 UTC by `brandon`
@@ -20,8 +20,18 @@ Options:
 
 Design hand-off (11 October): Check for Updates… in the menu and on About. If built, explicit and user-initiated (the only other network use is model downloads).
 
+Decided (Brandon, 12 Oct): an explicit "Check for Updates…" that fetches https://dl.easyvox.dev/latest.json only when clicked and offers the download page (release plan §8, option A). No Sparkle, no background check. Ships in 0.1.0. Brew users use brew upgrade (no auto_updates in the cask).
+
 ## History
 
 ### 2026-10-11 14:56 UTC — edit by `brandon`
 
 description edited
+
+### 2026-10-12 06:26 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-12 06:26 UTC — edit by `brandon`
+
+status held→done
