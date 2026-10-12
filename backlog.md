@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 18 on hold · 40 inbox · 56 done · 1 cancelled
+0 in progress · 2 ready · 2 blocked · 18 on hold · 41 inbox · 56 done · 1 cancelled
 
 ## In progress
 
@@ -89,6 +89,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-by9a`](tasks/tuh-01M4NQE2GPXDMKGVYBMW1MBY9A.md) Website docs: an "On this page" rail, and "Edit this page on GitHub" links at launch
 - [`tuh-cgh4`](tasks/tuh-01M4NQE2HHPJ7HRPFXRBMECGH4.md) Website: docs search without page JavaScript, or decide it's worth an island
 - [`tuh-bf4j`](tasks/tuh-01M4NQE2JFPWJHN7KPRFH0BF4J.md) Website: a release notes page at the first DMG
+- [`tuh-bxh4`](tasks/tuh-01M4R9NS9WJW1NQR7TVT7QBXH4.md) Self-test flake: Settings › Permissions counted 1 read while all allowed (expects 0)
 
 ## Done
 
