@@ -263,12 +263,21 @@ fn to_centre(layer: &CALayer) -> (f64, f64) {
 }
 
 /// Runs `f` in a Core Animation transaction with implicit animations off, so a change made there
-/// only moves if an explicit animation moves it.
+/// only moves if an explicit animation moves it, and commits it there and then.
+///
+/// A transaction begun while the run loop's turn already has one open only commits with that
+/// one, at the end of the turn, and `orderOut` opens one, as does reading a layer. Until it
+/// commits, the window server and the presentation layer (what [`drawn`] and the self-test read)
+/// have the layer as it was: after an order-out and a show in one turn, still the close's held
+/// end, transparent and shrunk. The flush commits it at once, so the open's first frame reaches
+/// the window server before the panel is ordered in, and the layer as drawn is never older than
+/// the last change to it.
 fn without_implicit_animations(f: impl FnOnce()) {
     CATransaction::begin();
     CATransaction::setDisableActions(true);
     f();
     CATransaction::commit();
+    CATransaction::flush();
 }
 
 /// What the open and close animate on the layer, each given by the layer's opacity or its scale

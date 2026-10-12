@@ -88,16 +88,12 @@ pub fn page(c: &'static Colors, _cx: &App) -> Div {
                 .child("EasyVox"),
         )
         .child(div().mt(px(2.)).text_color(secondary).child(format!("Version {}", env!("CARGO_PKG_VERSION"))))
-        .child(div().text_color(secondary).child("Free and open source (MIT) · © 2026 Brandon Bews"))
+        .child(div().text_color(secondary).child("Free and open source (MIT) · Made by Brandon Bews"))
         .child(h_flex().mt(px(14.)).gap_2().child(brand::button("about-license", "License").on_click(|_, _, cx| {
             open(LICENSE, cx);
         })))
         .child(
-            div()
-                .mt(px(14.))
-                .text_size(brand::TEXT_SMALL)
-                .text_color(secondary)
-                .child("Simple, local voice-to-text."),
+            div().mt(px(14.)).text_size(brand::TEXT_SMALL).text_color(secondary).child("Simple, local voice-to-text."),
         );
 
     let offered = models::offered();
