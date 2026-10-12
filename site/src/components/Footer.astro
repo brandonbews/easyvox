@@ -1,6 +1,5 @@
 ---
 import { REPO_URL, repoUrl } from "../config";
-import { docsNav, routeFor } from "../lib/nav";
 import Lockup from "./Lockup.astro";
 
 // null while the repo is private (REPO_PUBLIC in src/config.ts).
@@ -10,61 +9,28 @@ const notices = repoUrl("packaging/THIRD_PARTY_NOTICES.html");
 
 <footer class="site-footer">
   <div class="site-footer-inner">
-    <div class="footer-top">
-      <div class="footer-brand">
-        <a class="lockup-link" href="/"><Lockup /></a>
-        <p>Free, open source dictation for the Mac.</p>
-      </div>
-      <nav class="footer-cols" aria-label="Footer">
-        <div>
-          <h2>EasyVox</h2>
-          <ul>
-            <li><a href="/results">Results</a></li>
-            <li><a href="/#models">Models</a></li>
-            <li><a href="/#install">Install</a></li>
-          </ul>
-        </div>
-        <div>
-          <h2>Docs</h2>
-          <ul>
-            {
-              docsNav.map((entry) => (
-                <li>
-                  <a href={routeFor(entry)}>{entry.title}</a>
-                </li>
-              ))
-            }
-          </ul>
-        </div>
+    <a class="lockup-link" href="/"><Lockup /></a>
+    <nav aria-label="Footer">
+      <ul class="footer-links">
+        <li><a href="/results">Results</a></li>
+        <li><a href="/docs">Docs</a></li>
         {
           license && notices && (
-            <div>
-              <h2>Project</h2>
-              <ul>
-                <li>
-                  <a href={REPO_URL}>GitHub</a>
-                </li>
-                <li>
-                  <a href={license}>License</a>
-                </li>
-                <li>
-                  <a href={notices}>Third-party notices</a>
-                </li>
-              </ul>
-            </div>
+            <>
+              <li>
+                <a href={REPO_URL}>GitHub</a>
+              </li>
+              <li>
+                <a href={license}>License</a>
+              </li>
+              <li>
+                <a href={notices}>Third-party notices</a>
+              </li>
+            </>
           )
         }
-      </nav>
-    </div>
-    <div class="footer-legal">
-      <p>
-        © 2026 Brandon Bews. EasyVox is free and open source, under the MIT license.
-        {!notices && " Its third-party notices are in the app, under Settings → About."}
-      </p>
-      <p>
-        Speech models: Parakeet TDT 0.6B v2 by NVIDIA (CC BY 4.0) and Whisper base.en by OpenAI (Apache
-        2.0). EasyVox isn't affiliated with or endorsed by NVIDIA or OpenAI.
-      </p>
-    </div>
+      </ul>
+    </nav>
+    <p class="footer-legal">Made by Brandon Bews · Free and open source (MIT)</p>
   </div>
 </footer>

@@ -1,26 +1,19 @@
 ---
-// The homepage (docs/plans/website.md §5, laid out as design boards 21–23). It leads with what's
-// different: simple, local, fast, light, free. Readers know what dictation is, so the page doesn't
-// explain it, and it never mentions AI. Every number here matches /results (the bench, from
-// ../docs/bench) and docs/model-bench.md, with the same caveats: one Mac, one speaker. Every claim
-// is true of the app today: no "model inside the app", no Esc to cancel, no history retention, no
-// other languages, nothing to download yet.
+// The homepage (docs/plans/website.md §5, laid out as design boards 21–23). Short on purpose
+// (Brandon, 11 October): the pitch, then fast, the preview, local, and free and open source, then
+// three numbers on lightness. Readers know what dictation is, so the page doesn't explain it, and
+// it never mentions AI. Every number here matches /results (the bench, from ../docs/bench) and
+// docs/model-bench.md. Every claim is true of the app today: no "model inside the app", no Esc to
+// cancel, no history retention, no other languages, nothing to download yet.
 import Demo from "../components/Demo.astro";
-import Mark from "../components/Mark.astro";
 import { REPO_PUBLIC, REPO_URL } from "../config";
 import Base from "../layouts/Base.astro";
 ---
 
-<Base description="Simple, local, fast speech-to-text for the Mac. It runs on your Mac and works offline after one download. Free and open source.">
+<Base description="Simple, local, fast speech-to-text for the Mac. Free and open source.">
   <main id="main" class="landing">
     <section class="hero container" aria-labelledby="top">
-      <p class="eyebrow">Early development: there's nothing to install yet.</p>
-      <Mark height={52} class="hero-mark" />
-      <h1 id="top">Simple, local, fast speech-to-text. <span>That's it.</span></h1>
-      <p class="lede">
-        It runs on your Mac and works offline after one download.
-        <span>Free and open source.</span>
-      </p>
+      <h1 id="top">Simple, local, fast speech-to-text.</h1>
       <div class="actions">
         <a class="button button-primary" href="/docs/building">Build from source</a>
         <span class="button button-soon">Download: coming soon</span>
@@ -33,19 +26,24 @@ import Base from "../layouts/Base.astro";
       <h2 id="why" class="section-title">Why EasyVox</h2>
       <ul class="features">
         <li>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.25" y="3.25" width="17.5" height="17.5" rx="4.25"></rect><path d="M7.25 9.25h2.6l3.9 5.75h3M13.6 9.25h3.15"></path></svg>
-          <h3>Simple</h3>
-          <p>Hold ⌥Space, or a shortcut you pick, and talk. No account, and nothing to set up after the first run.</p>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.6 13.2A7.5 7.5 0 1 0 6.4 6.9M6.6 3.6l-0.4 3.5 3.5 0.3M12 8.25V12l2.75 2"></path></svg>
+          <h3>Fast</h3>
+          <p>Your text is in place under half a second after you let go.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.75" y="8.25" width="18.5" height="7.5" rx="3.75"></rect><path d="M6.5 12h4.75M13.25 12h1.5M16.75 12h0.75"></path></svg>
+          <h3>Preview as you talk</h3>
+          <p>Your words appear while you're still talking.</p>
         </li>
         <li>
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.75" y="4.75" width="16.5" height="11.5" rx="1.75"></rect><path d="M2 19.25h20M10 9v3.5M12 8v5.5M14 9.25v3"></path></svg>
           <h3>Local</h3>
-          <p>The speech model runs on your Mac. After one download, it works offline.</p>
+          <p>Everything runs on your Mac. Nothing you say goes to a server.</p>
         </li>
         <li>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.6 13.2A7.5 7.5 0 1 0 6.4 6.9M6.6 3.6l-0.4 3.5 3.5 0.3M12 8.25V12l2.75 2"></path></svg>
-          <h3>Fast</h3>
-          <p>Words show up about 0.6 s after you start. The text is in place under half a second after you let go.</p>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="5.5" r="2.25"></circle><circle cx="17" cy="5.5" r="2.25"></circle><circle cx="12" cy="18.5" r="2.25"></circle><path d="M7 7.75v1.25a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V7.75M12 12v4.25"></path></svg>
+          <h3>Free and open source</h3>
+          <p>MIT license. Fork it, change it, share it.</p>
         </li>
       </ul>
     </section>
@@ -55,59 +53,24 @@ import Base from "../layouts/Base.astro";
       <ul class="stats">
         <li>
           <p class="stat">~0 %</p>
-          <p>Of the CPU while idle: 0.003 % of one core. EasyVox wakes about once every 3 seconds.</p>
+          <p>CPU at idle</p>
         </li>
         <li>
           <p class="stat">0.65 W</p>
-          <p>
-            Added to what the Mac draws while you dictate. Drawing the pill's animations on screen adds roughly
-            0.15–0.2 W more.
-          </p>
+          <p>Extra power while dictating</p>
         </li>
         <li>
           <p class="stat">90 MB</p>
-          <p>
-            Of memory once the model is freed, after 10 minutes without use (about 670 MB with it loaded). Your next
-            dictation still starts recording at once.
-          </p>
+          <p>Memory at idle</p>
         </li>
       </ul>
-      <p class="caveat">
-        Measured on one Mac (an M4 Mac mini) with one speaker's voice.
-        <a href="/results">All the results</a>, with thirteen other models for comparison.
-      </p>
-    </section>
-
-    <section class="band" aria-labelledby="private">
-      <div class="band-inner container">
-        <div class="band-text">
-          <h2 id="private">What you say stays on this Mac.</h2>
-          <p>
-            Your voice and your text never leave it. EasyVox goes online once, to download a speech model, and checks the
-            file before using it.
-          </p>
-        </div>
-        <ul class="checks">
-          <li>
-            <h3>No account, no sign-in</h3>
-            <p>Allow the microphone and Accessibility, download a model, and start talking.</p>
-          </li>
-          <li>
-            <h3>Works offline</h3>
-            <p>After the one download, you can dictate with Wi‑Fi off.</p>
-          </li>
-          <li>
-            <h3>Stored locally</h3>
-            <p>History keeps the text of each dictation on this Mac. The audio is never saved.</p>
-          </li>
-        </ul>
-      </div>
+      <p class="caveat">Measured on an M4 Mac mini. <a href="/results">See how 14 models compared</a>.</p>
     </section>
 
     <section class="section container" aria-labelledby="models">
       <div class="section-head">
         <h2 id="models">Two models</h2>
-        <p>Pick one in the app. EasyVox downloads it from Hugging Face, once.</p>
+        <p>Pick one in the app. It downloads once.</p>
       </div>
       <ul class="models">
         <li class="model">
@@ -121,20 +84,15 @@ import Base from "../layouts/Base.astro";
         <li class="model">
           <p class="badge">The small one</p>
           <h3>Whisper base.en</h3>
-          <p>
-            For an 8 GB Mac, or when memory matters more than accuracy: on a real voice it got four times as many words
-            wrong as the default. An 85 MB download.
-          </p>
+          <p>For an 8 GB Mac: smaller, but less accurate. An 85 MB download.</p>
           <p class="model-credit">
             By OpenAI, under Apache 2.0. <a href="https://huggingface.co/openai/whisper-base.en">Model card</a>
           </p>
         </li>
       </ul>
       <p class="caveat">
-        <a href="/results">How they compare</a> with twelve other models. Both run on
-        <a href="https://github.com/handy-computer/transcribe.cpp">transcribe.cpp</a>, from the team behind
-        <a href="https://github.com/cjpais/Handy">Handy</a>, another open source dictation app. The same team makes the
-        GGUF builds of both models.
+        Both run on <a href="https://github.com/handy-computer/transcribe.cpp">transcribe.cpp</a>, from the team behind
+        <a href="https://github.com/cjpais/Handy">Handy</a>.
       </p>
     </section>
 
@@ -196,12 +154,7 @@ import Base from "../layouts/Base.astro";
     </section>
 
     <section class="cta container" aria-labelledby="install">
-      <Mark height={44} class="hero-mark" />
       <h2 id="install">Get EasyVox.</h2>
-      <p class="lede">
-        A DMG and a Homebrew cask are coming soon. For now, you can build EasyVox from source: you need Xcode, cmake and
-        Rust.
-      </p>
       <div class="actions">
         <a class="button button-primary" href="/docs/building">Build from source</a>
         <span class="button button-soon">Download: coming soon</span>

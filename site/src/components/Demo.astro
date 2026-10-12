@@ -5,7 +5,7 @@
 import Pill from "./Pill.astro";
 ---
 
-<figure class="demo">
+<figure class="demo" aria-label="The EasyVox pill showing words as you talk">
   <div class="demo-stage">
     <div class="demo-menubar" aria-hidden="true">
       <span class="demo-menus"><b>Notes</b><span>File</span><span>Edit</span><span>Format</span><span>View</span></span>
@@ -39,5 +39,4 @@ import Pill from "./Pill.astro";
       <Pill confirmed={["Let's", "move", "the", "design", "review"]} provisional={["to", "Thursday", "at", "two"]} animate />
     </div>
   </div>
-  <figcaption>The pill as you talk. Fainter words may still change. (The text here is made up.)</figcaption>
 </figure>

@@ -168,6 +168,8 @@ Afterwards, once the repo is public: `config.rs:53` prints a GitHub link to `doc
 
 ## 5. Homepage outline
 
+> **As built (Brandon, 11 October):** the outline below was trimmed. The page is now the pitch ("Simple, local, fast speech-to-text."), the buttons and the pill demo; Fast, Preview as you talk, Local, and Free and open source, a line each; three numbers on lightness; the two models; the questions; and install. The footer is the logo, Results and Docs (plus GitHub, License and Third-party notices once the repo is public), and "Made by Brandon Bews · Free and open source (MIT)". `site/src/pages/index.astro` is the source of truth.
+
 This follows `docs/branding.md` V9, with a few additions from this plan:
 
 1. **Hero:** the wordmark. "A free, open source voice-to-text app for macOS." Then "Hold a shortcut and speak. EasyVox shows the words as it hears them, and when you let go it pastes the text where your cursor is." Below that, a **pill demo** in CSS only: words fade in once, with a static frame under `prefers-reduced-motion`. It uses invented sample text, never text from recordings. The buttons say "Coming soon" or "Build from source" until a DMG exists, then Download and GitHub.

@@ -402,73 +402,38 @@ kbd {
 }
 
 .site-footer-inner {
-  max-width: calc(var(--width-site) + 2 * var(--gutter));
-  margin: 0 auto;
-  padding: 4rem var(--gutter) 3rem;
-}
-
-.footer-top {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 2rem 3rem;
+  gap: 1rem 2rem;
+  max-width: calc(var(--width-site) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 2.5rem var(--gutter);
 }
 
-.footer-brand p {
-  margin: 0.9rem 0 0;
-}
-
-.footer-cols {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2rem 3rem;
-}
-
-@media (min-width: 48rem) {
-  .footer-cols {
-    display: flex;
-  }
-
-  .footer-cols > div {
-    min-width: 8.75rem;
-  }
-}
-
-.footer-cols h2 {
-  margin: 0 0 0.75rem;
-  color: var(--color-fg);
-  font-size: 0.8125rem;
-  letter-spacing: 0;
-}
-
-.footer-cols ul {
-  list-style: none;
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
-.footer-cols li {
-  margin: 0 0 0.75rem;
-}
-
-.footer-cols a {
+.footer-links a {
   color: var(--color-fg-muted);
   text-decoration: none;
 }
 
-.footer-cols a:hover {
+.footer-links a:hover {
   color: var(--color-fg);
 }
 
 .footer-legal {
-  margin-top: 3.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--color-rule);
+  flex-basis: 100%;
+  margin: 0;
   font-size: 0.8125rem;
-}
-
-.footer-legal p {
-  margin: 0 0 0.4rem;
 }
 
 /* ---------- homepage ---------- */
@@ -504,15 +469,6 @@ kbd {
   }
 }
 
-.eyebrow {
-  margin: 0 0 1.75rem;
-  padding: 0.3rem 0.85rem;
-  border-radius: 999px;
-  background: var(--color-bg-raised);
-  color: var(--color-fg-muted);
-  font-size: 0.8125rem;
-}
-
 .hero-mark {
   margin-bottom: 1.75rem;
 }
@@ -523,9 +479,17 @@ kbd {
   line-height: 1.06;
 }
 
-/* The pitch, then "That's it." on a line of its own. */
-.hero h1 span {
-  display: block;
+/* The homepage's headline and the closing heading go straight to the buttons. */
+.hero h1 + .actions,
+.cta h2 + .actions {
+  margin-top: 2rem;
+}
+
+@media (min-width: 48rem) {
+  .hero h1 + .actions,
+  .cta h2 + .actions {
+    margin-top: 2.5rem;
+  }
 }
 
 .lede {
@@ -567,8 +531,7 @@ kbd {
   padding-top: 0;
 }
 
-.section-flush::before,
-.band + .section::before {
+.section-flush::before {
   content: none;
 }
 
@@ -698,6 +661,20 @@ kbd {
   }
 }
 
+/* Four features: two by two on a tablet, one row on a wide screen. */
+@media (min-width: 48rem) {
+  .features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .features {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3.5rem 2.5rem;
+  }
+}
+
 /* Light: three numbers, with the caveat under them. */
 
 .stats li {
@@ -716,96 +693,6 @@ kbd {
   .stat {
     margin-bottom: 0.75rem;
     font-size: 2.5rem;
-  }
-}
-
-/* The privacy band: the page's one tinted band. Links on it are ink (contrast). */
-
-.band {
-  padding-block: 4rem;
-  background: var(--color-bg-raised);
-}
-
-.band a {
-  color: var(--color-fg);
-}
-
-.band-inner {
-  display: grid;
-  gap: 2rem;
-}
-
-.band-text p {
-  max-width: 31rem;
-  margin: 1.25rem 0 0;
-  color: var(--color-fg-muted);
-  letter-spacing: -0.01em;
-}
-
-.checks {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.checks li {
-  position: relative;
-  padding: 1.25rem 0 1.25rem 2rem;
-  border-top: 1px solid var(--color-rule-raised);
-}
-
-.checks li::before {
-  content: "";
-  position: absolute;
-  left: 0.3rem;
-  top: 1.45rem;
-  width: 0.35rem;
-  height: 0.7rem;
-  border: solid var(--color-fg);
-  border-width: 0 1.6px 1.6px 0;
-  transform: rotate(45deg);
-}
-
-.checks h3 {
-  font-size: 1.0625rem;
-  letter-spacing: -0.01em;
-}
-
-.checks p {
-  margin: 0.25rem 0 0;
-  color: var(--color-fg-muted);
-}
-
-@media (min-width: 48rem) {
-  .band {
-    padding-block: 7.5rem;
-  }
-
-  .band-inner {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-    gap: 6rem;
-    align-items: start;
-  }
-
-  .band-text h2 {
-    max-width: 32.5rem;
-  }
-
-  .band-text p {
-    margin-top: 1.5rem;
-    font-size: 1.1875rem;
-  }
-
-  .checks li {
-    padding-block: 1.5rem;
-  }
-
-  .checks li::before {
-    top: 1.75rem;
-  }
-
-  .checks h3 {
-    font-size: 1.1875rem;
   }
 }
 
@@ -959,16 +846,8 @@ kbd {
   text-align: center;
 }
 
-.cta .hero-mark {
-  margin-bottom: 1.5rem;
-}
-
 .landing .cta h2 {
   font-size: clamp(2rem, 1.2rem + 2.6vw, 3.5rem);
-}
-
-.cta .lede {
-  margin-top: 1rem;
 }
 
 .requirements {
@@ -1017,10 +896,6 @@ kbd {
 @media (min-width: 48rem) {
   .cta {
     padding-block: 8rem 8.5rem;
-  }
-
-  .cta .hero-mark {
-    margin-bottom: 2rem;
   }
 }
 
@@ -1215,12 +1090,6 @@ kbd {
   .demo-pill {
     bottom: 9.6%;
   }
-}
-
-.demo figcaption {
-  margin-top: 0.75rem;
-  color: var(--color-fg-muted);
-  font-size: 0.875rem;
 }
 
 /* ---------- the pill (design board 07, at 1:1) ---------- */
