@@ -260,7 +260,7 @@ impl SettingsView {
             .mx(px(12.)),
             (None, []) => brand::footnote(
                 c,
-                "Every setting is in this file, including advanced ones this window doesn't show (docs/settings.md \
+                "Every setting is in this file, including advanced ones this window doesn't show (docs/settings-reference.md \
                  lists them). Edits to it apply as soon as you save, and changes here are written to it.",
             ),
             (None, warnings) => {

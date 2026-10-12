@@ -1,459 +1,54 @@
 # Settings
 
-EasyVox keeps its settings in one TOML file, so you can set it up from a text editor, your dotfiles or a script, as well as from its Settings window. Everything is in the file, including the advanced numbers the window doesn't show: how long the model stays loaded, and how the live preview, the chunks and the pauses work.
+EasyVox reads one TOML file: `~/.config/easyvox/config.toml`, or `$XDG_CONFIG_HOME/easyvox/config.toml` when that's set. The Settings window writes the same file. Changes apply when you save, with no restart.
 
-## Where the file is
+Set only the keys you want to change. Keys you leave out use their defaults, so a release that improves a default reaches you.
 
-- `~/.config/easyvox/config.toml`, on macOS too (not `~/Library/Preferences`).
-- `$XDG_CONFIG_HOME/easyvox/config.toml` instead, when `XDG_CONFIG_HOME` is set to an absolute path.
-- `EASYVOX_CONFIG=/some/file.toml` points EasyVox at any other file, for tests or a second setup: `open --env EASYVOX_CONFIG=/tmp/test.toml dist/EasyVox.app`.
+## In the Settings window
 
-The file doesn't have to exist: without it, everything is at its default. EasyVox creates the folder when it starts (so it can watch it), and the file the first time you change something in the Settings window. A symlink is fine, say into a dotfiles repository: EasyVox writes through it and watches where it points.
+| Key | Default | Effect |
+|---|---|---|
+| `shortcut` | `"alt-space"` | Hold to dictate, release to paste. Modifiers (`ctrl`, `alt`, `shift`, `cmd`) and a key, joined by `-`: `"ctrl-shift-space"`, `"f5"`. |
+| `hold_right_option` | `false` | Also dictate while right ⌥ is held on its own. Needs Input Monitoring. |
+| `model` | `"parakeet-tdt-0.6b-v2-q5_k_m-gguf"` | The speech model. The other one offered is `"whisper-base.en-q8_0-gguf"`. |
+| `keep_model_loaded` | `false` | Keep the model in memory. When off, the model is freed after `unload_after_secs` and reloads (about 0.15 s) when you next press the shortcut. Recording starts at once either way. |
 
-The file holds no permissions. Microphone, Accessibility and Input Monitoring are granted in System Settings, by a person.
+## Under `[advanced]`
 
-## How it works
+| Key | Default | Effect |
+|---|---|---|
+| `unload_after_secs` | `600` | Idle seconds before the model is freed: about 670 MB down to 90 MB. 1 to 86400. |
+| `overlay_hide_after_final_ms` | `600` | How long the pill stays up after pasting. 0 to 10000. |
+| `overlay_dock_gap_pt` | `24` | Gap between the Dock and the pill, in points. 0 to 400. |
+| `preview_interval_ms` | `1600` | Time between preview updates. Lower updates more often and uses more power. |
+| `overlay_open_ms`, `overlay_close_ms`, `overlay_words_ms`, `overlay_glide_ms`, `overlay_meter_ms` | `200`, `120`, `200`, `250`, `120` | The pill's animations. `0` turns one off. With macOS's Reduce motion on, the pill only fades. |
 
-- **The defaults live in the app; the file only overrides them.** Any key you leave out follows its default, so when a release improves a default, you get it. Set only what you want different, and don't paste the whole reference below into your file: every key you copy stays at that value from then on.
-- **The top of the file is what the Settings window shows:** `model`, `shortcut`, `hold_right_option` and `keep_model_loaded`. When you change one in the window, EasyVox writes that key and nothing else. Your comments, your order and your other keys stay as you wrote them.
-- **`[advanced]` holds everything else.** EasyVox never writes these: they're yours to set by hand.
-- **Edits apply within a second of saving,** with no restart. EasyVox watches the file (with FSEvents, so it costs nothing while the file doesn't change). A new shortcut or model takes effect at once. The numbers for the live preview, the chunks and the pauses apply from your next dictation, without reloading the model; a dictation already under way finishes with the values it started with. The overlay's animation timings apply from the next time it opens.
-- **The same keys apply to every model.** There's one pipeline, so there are no per-model sections.
-
-## When something's wrong
-
-EasyVox never stops over a bad setting, and never overwrites your file to fix it:
-
-- **A value out of range, or of the wrong type** (`preview_interval_ms = 60000`, `keep_model_loaded = "yes"`): that key falls back to its default, and the others still apply.
-- **A model the app doesn't offer**: an unknown id, or one that's for `easyvox-bench` only, like Parakeet Unified since 10 October 2026. EasyVox uses the default model (Parakeet TDT v2) and says why.
-- **A key EasyVox doesn't know**, maybe misspelt (`previw_interval_ms`), or in the wrong place (an `[advanced]` key at the top, or a top key after `[advanced]`): it's ignored, and the warning says so (suggesting the key you probably meant, when one is close).
-- **A file that isn't valid TOML:** EasyVox keeps the settings it had (the defaults, if it was just starting) and leaves the file alone until you fix it. Changes you make in the Settings window meanwhile apply, but aren't saved.
-
-Problems show under **Settings → General → Settings file**, and in the log (stderr: `open --stderr /tmp/easyvox.log dist/EasyVox.app`).
-
-## Loudness is in decibels
-
-Six keys say how loud is "quiet" or "speech": `gate_quiet_db` and `pause_quiet_db` compare with your own speech, `speech_above_noise_db` with the room, and `gate_silence_dbfs`, `pause_silence_dbfs` and `speech_loud_dbfs` with the loudest sound a microphone can record. Two more measure spans of loudness for the overlay's level meter: `meter_range_db`, how far over the line where speech starts a sound fills the meter, and `meter_step_db`, the smallest change it shows.
-
-- **dB** (`_db`) is relative to another level. -20 dB is a tenth of it, -6 dB about half, 0 dB the same, and 20 dB ten times it.
-- **dBFS** (`_dbfs`) is relative to full scale, the loudest a sample can be (0 dBFS). In the recordings EasyVox was tuned on (AirPods in an office), speech is about -17 dBFS and the room about -50 dBFS.
-
-The `_dbfs` keys are always 0 or below, and so are the two `_quiet_db` keys; `speech_above_noise_db` and the two `meter_*_db` keys are 0 or above, since speech is louder than the room. Closer to 0 dBFS means louder. Before October 2026 the `gate_*` and `pause_*` levels were linear (0.1 and 0.0018); the defaults moved to -20 dB and -55 dBFS, and behave the same on every test clip.
-
-## Examples
-
-Use another shortcut and keep the model in memory (the Settings window can do both too):
+## Example
 
 ```toml
 shortcut = "ctrl-shift-space"
 keep_model_loaded = true
-```
 
-A livelier preview, at some cost in battery: a pass every 0.8 s instead of 1.6 s, each re-decoding a bit more of the sentence.
-
-```toml
 [advanced]
-preview_interval_ms = 800
-preview_context_ms = 2000
-```
-
-Free the model after 2 minutes instead of 10, and leave the final text up longer:
-
-```toml
-[advanced]
-unload_after_secs = 120
 overlay_hide_after_final_ms = 1500
-```
-
-A loud room, where the preview keeps decoding through your pauses: count less as speech.
-
-```toml
-[advanced]
-gate_quiet_db = -14
-gate_silence_dbfs = -45
-```
-
-A recording with no speech in it gives no text: nothing is decoded, nothing is pasted, and the overlay says it didn't catch anything. The check errs towards decoding, but if it ever happens to you while you did speak (a whisper, or a microphone turned right down in a noisy room), count fainter sounds as speech. `speech_min_ms = 0` turns the check off, and decodes every recording.
-
-```toml
-[advanced]
-speech_above_noise_db = 3
-speech_loud_dbfs = -45
-```
-
-The level meter in the overlay moves about 15 times a second at most, and only when your voice changes its level visibly. A smoother meter, 30 times a second, for a little more CPU (0.43 % of a core instead of 0.3 %); and a microphone that takes longer than a second and a half to wake up, which would otherwise show "Can't hear you" for a moment at the start:
-
-```toml
-[advanced]
-meter_interval_ms = 33
-meter_no_input_ms = 3000
-```
-
-The overlay pops open and closed: it fades in as it grows from a little small to full size, just past it and back, and fades out as it shrinks a little. New words fade in, it grows and scrolls in a glide rather than a jump, and its level meter's bars ease from height to height. With macOS's Reduce motion on, it fades without popping, gliding or easing the bars. Slower, softer animations with a smaller pop; or none at all, for the lightest overlay (it then appears, changes and goes at once; the meter's easing is most of what the animations cost while you talk):
-
-```toml
-[advanced]
-overlay_open_ms = 300
-overlay_close_ms = 200
-overlay_shrink_pct = 8
-overlay_words_ms = 200
-```
-
-```toml
-[advanced]
 overlay_open_ms = 0
 overlay_close_ms = 0
-overlay_words_ms = 0
-overlay_glide_ms = 0
-overlay_meter_ms = 0
 ```
+
+## Errors
+
+EasyVox never rewrites your file to fix it.
+
+- An invalid value falls back to that key's default.
+- An unknown key is ignored, with a suggestion when it looks like a typo.
+- A file that isn't valid TOML is ignored until you fix it, and the previous settings stay.
+
+Problems show under **Settings → General → Settings file**.
 
 ## Every key
 
-Each key, at its default, with its unit, its range and what raising or lowering it trades off. The app prints the same text: `easyvox --print-default-config` (in a build, `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config`; from source, `cargo run -p easyvox-app -- --print-default-config`). A test keeps this page in step with the code.
+[Settings reference](settings-reference.md) lists all of them, with defaults, ranges and trade-offs. The app prints the same list:
 
-```toml
-# EasyVox settings: every key, at its default.
-#
-# This is a reference, not a file to copy whole. Your settings file only needs the keys you
-# change: anything you leave out follows the default, so a release that improves one reaches
-# you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
-# that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
-# save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
-# meter from your next dictation, the same for every model, and the overlay's animations from
-# the next time it opens.
-
-# The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them
-# default or alternative). Settings → Models downloads it, and the next dictation uses it.
-model = "parakeet-tdt-0.6b-v2-q5_k_m-gguf"
-
-# The push-to-talk shortcut: hold it and speak, let go to paste. Modifiers (ctrl, alt, shift,
-# cmd) and a key, joined by "-", e.g. "ctrl-shift-space" or "f5".
-shortcut = "alt-space"
-
-# Also dictate while the right Option (⌥) key is held on its own. Needs Input Monitoring.
-hold_right_option = false
-
-# Keep the speech model in memory while you're not dictating. Off, it's freed after
-# `unload_after_secs` (below) and loads again as your next dictation starts.
-keep_model_loaded = false
-
-[advanced]
-# Settings the window doesn't show: how long the model stays loaded, how long the
-# overlay stays up and how it moves, then the numbers behind the live preview, the
-# chunks, what counts as speech or a pause, and the overlay's level meter.
-
-# How long EasyVox keeps the speech model in memory after your last dictation, unless
-# "Keep model loaded" is on. Freeing it takes the app from about 670 MB to about
-# 90 MB, and the next dictation still records at once while the model loads again
-# (about 0.15 s). Lower frees the memory sooner but reloads more often; higher keeps
-# it ready longer.
-# In seconds, from 1 to 86400.
-unload_after_secs = 600
-
-# How long the overlay stays up after the final text is pasted. Higher leaves more time
-# to read it; lower gets it out of the way sooner. 0 hides it at once.
-# In milliseconds, from 0 to 10000.
-overlay_hide_after_final_ms = 600
-
-# How long a notice (no microphone access, nothing heard, the model still loading)
-# stays up. It's two lines, what happened and what to do, so it needs a moment to read.
-# Higher leaves more time; lower gets it out of the way sooner.
-# In milliseconds, from 500 to 30000.
-overlay_hide_after_notice_ms = 4000
-
-# The most of the transcript the overlay lays out. The pill shows the end of it, as
-# much as fits, and scrolls as words come so the newest stay in view; this caps the
-# text kept out of sight past its left edge, where it's cut. Lower draws a little less
-# each frame, but under about 120 the cut (an "…") can come into view; higher costs
-# more to lay out for nothing you'd see.
-# In characters, from 10 to 500.
-overlay_max_chars = 200
-
-# How far above the Dock the overlay sits, in points, from the top of the Dock to the
-# bottom of the pill; above the bottom of the screen when the Dock is hidden or on a
-# side. It goes on the screen with the window you're typing in, centred. Higher keeps it
-# further from the Dock; lower, closer to the bottom of the screen.
-# In points, from 0 to 400.
-overlay_dock_gap_pt = 24
-
-# How long the overlay takes to pop open when you press the shortcut: it fades in as
-# it grows from `overlay_shrink_pct` smaller to full size, just past it and back. It
-# shows at once and never waits for the model; this is only how it appears. Core
-# Animation runs it, so it costs no redraws. Higher is gentler; lower is snappier. 0
-# shows it at once.
-# In milliseconds, from 0 to 1000.
-overlay_open_ms = 200
-
-# How long the overlay takes to close once it hides: it fades out as it shrinks by
-# `overlay_shrink_pct`. The paste has happened by then, and a press during the close
-# brings the overlay straight back, so it never delays you. Higher is gentler; lower
-# gets it out of the way sooner. 0 hides it at once.
-# In milliseconds, from 0 to 1000.
-overlay_close_ms = 120
-
-# How much smaller than full size the overlay pops open from and closes to. With
-# macOS's Reduce motion on, it doesn't change size at all and only fades. Higher is
-# more noticeable; 0 only fades.
-# In percent, from 0 to 30.
-overlay_shrink_pct = 15
-
-# How long new words take to fade in, and provisional words (drawn fainter) to firm
-# up once they're confirmed. Each change draws the overlay every `overlay_frame_ms`
-# for this long. Higher is softer but redraws more; lower is cheaper and more abrupt.
-# 0 changes the text at once.
-# In milliseconds, from 0 to 1000.
-overlay_words_ms = 200
-
-# How long the overlay takes to grow to fit new words, and to scroll long text so the
-# newest words stay in view, instead of jumping. With Reduce motion on, both jump.
-# Higher is smoother but redraws for longer; lower is cheaper. 0 jumps.
-# In milliseconds, from 0 to 1000.
-overlay_glide_ms = 250
-
-# How long the level meter's bars take to ease to a new height while you talk,
-# instead of jumping there. While only the meter moves, the overlay draws every
-# `overlay_meter_frame_ms` for this long after each change, which is most of the time
-# you're talking. With Reduce motion on, the bars jump. Higher is smoother but draws
-# for longer; lower is cheaper and more abrupt. 0 jumps.
-# In milliseconds, from 0 to 1000.
-overlay_meter_ms = 120
-
-# Time between the frames of the overlay's words fading and gliding, while one runs;
-# nothing is drawn once it ends. The open and close don't use it. Lower is smoother
-# (16 is 60 frames a second; 8 suits a 120 Hz screen) but draws more often; higher is
-# lighter and choppier.
-# In milliseconds, from 8 to 100.
-overlay_frame_ms = 16
-
-# Time between the frames of the level meter's easing while nothing else in the
-# overlay moves (the words and the glide use `overlay_frame_ms`). Higher is lighter (33
-# is 30 frames a second, 50 is 20) and choppier; lower is smoother but draws more often.
-# In milliseconds, from 8 to 100.
-overlay_meter_frame_ms = 33
-
-# How long the menu bar item shows a check after EasyVox pastes your text, before it
-# goes back to how it was. Higher leaves more time to glance at it; 0 skips the check.
-# In milliseconds, from 0 to 10000.
-menubar_pasted_ms = 1000
-
-# How often the preview re-decodes the newest audio while the key is held. 0 turns the
-# preview off (long dictations are still polished in chunks). Lower shows words sooner
-# but wakes the GPU more often; higher is lighter, and the preview lags further behind
-# and updates in bigger steps. At 1600, 95 % of words showed up within about 2 s of
-# being said; past it the saving flattens while the lag keeps growing
-# (`docs/model-bench.md`, "Lightness").
-# In milliseconds, from 0 to 10000.
-preview_interval_ms = 1600
-
-# When the first preview pass runs: once this much audio has followed the start of
-# speech (see `speech_above_noise_db`). Until the preview shows words, the next passes
-# come as often (at least 100 ms apart), then every `preview_interval_ms`. Lower shows
-# the first words sooner, but a first pass with too little speech shows nothing and
-# costs another; higher keeps you waiting for the first words. It's a pass or two per
-# dictation, so it costs almost nothing.
-# In milliseconds, from 0 to 10000.
-preview_first_ms = 500
-
-# The most recent audio one preview pass decodes, at most. A pass normally starts just
-# before the confirmed words (`preview_context_ms`), so it's usually much shorter; this
-# only caps it while passes keep disagreeing and nothing gets confirmed. Lower makes
-# those passes cheaper, but words that fall out of the window before two passes
-# agreed on them leave the preview until their chunk is polished. At least 2000.
-# In milliseconds, from 2000 to 120000.
-preview_window_ms = 20000
-
-# Audio before the confirmed words (the ones two passes agreed on) that each preview
-# pass decodes again, as context for the words after them. A pass starts there, or at
-# the last chunk cut if that's later, so confirmed words aren't decoded over and over:
-# the preview's GPU energy follows the audio it decodes. Higher gives the newest words
-# more of their sentence but makes every pass longer (2000 took about 14 % more GPU
-# energy than 1000, for much the same preview); lower is lighter. The final text
-# doesn't depend on it. 120000 decodes everything since the last cut, much as the
-# preview did before this setting existed.
-# In milliseconds, from 0 to 120000.
-preview_context_ms = 1000
-
-# Audio needed before the first preview pass, counted from the start of the recording
-# (the pass also waits for `preview_first_ms` of speech). Lower can show the first word
-# a moment sooner, but spends a pass on too little audio to decode.
-# In milliseconds, from 0 to 5000.
-preview_min_audio_ms = 300
-
-# Rest between two preview passes when they can't keep up with `preview_interval_ms`
-# (a pass, or a chunk polished in the same tick, took longer than the interval). Higher
-# lets a busy GPU breathe; the preview then falls further behind.
-# In milliseconds, from 0 to 5000.
-preview_min_gap_ms = 50
-
-# Local agreement: a pass's first new word that starts within this much of the last
-# confirmed word's end is checked for being a re-decoded copy of the confirmed words
-# (word timings move by a frame or two between passes). Higher catches more doubled
-# words in the preview, but can drop a word that really was said twice ("very, very").
-# In milliseconds, from 0 to 2000.
-agreement_repeat_ms = 300
-
-# Local agreement: the longest run of words checked for such a copy.
-# In words, from 0 to 20.
-agreement_max_repeat_words = 5
-
-# Local agreement: how far from where the word timings put the end of the confirmed
-# words a pass's copy of them is looked for, in words per word of the copy (a longer
-# copy is less likely to match by chance). A pass starts before the confirmed words
-# (`preview_context_ms`), so it opens by decoding their end again, and its new words
-# start after that copy. Timings move between passes, by a word or more for a model
-# that only times segments (Whisper's words are spread evenly over the pass), and two
-# passes that start their new words at different words never agree. At 2, Whisper's
-# passes that confirmed nothing fell by a quarter on a real voice and by three-quarters
-# on clean speech, and Parakeet's preview didn't change (`docs/model-bench.md`,
-# "Whisper's preview"). Higher finds copies further off, but a common word may match
-# by chance; 0 looks only right where the timings put it, much as before this setting
-# existed.
-# In words, from 0 to 10.
-agreement_reach_words = 2
-
-# Speech gate: preview passes that still run after speech stops, so the last words are
-# decoded with the silence after them and confirmed by two passes that agree. Then the
-# preview rests until the next word. 0 rests at once, and the last words may stay
-# provisional until release; higher spends more passes on every pause.
-# In passes, from 0 to 1000.
-gate_settle_passes = 2
-
-# Speech gate: new audio counts as speech (worth a preview pass) when a 30 ms frame of
-# it is louder than this, relative to the loudest speech so far (-20 is 20 dB under:
-# a tenth of its level). Higher (nearer 0) lets the preview rest in more pauses over
-# room noise, but may skip soft words until a louder one comes; lower errs towards
-# decoding. The final text decodes everything either way.
-# In dB (relative to another level), from -60 to 0.
-gate_quiet_db = -20
-
-# Speech gate: ...and louder than this. Higher ignores more background noise; lower
-# counts fainter sounds as speech. Nothing at or under it counts as speech for
-# `speech_above_noise_db` either.
-# In dBFS (decibels relative to full scale), from -120 to 0.
-gate_silence_dbfs = -55
-
-# Speech detection: a 30 ms frame counts as speech when it's this much louder than the
-# room, which is the recording's quietest frames (their 10th percentile, once there's
-# 0.3 s of sound; digital silence doesn't count). Until a recording holds speech,
-# nothing is decoded: no preview, no final pass. So a recording of silence or room
-# noise gives empty text, where a model could make up words (Whisper wrote "you" for
-# 2 s of silence). Missing speech would lose the whole dictation, so this errs low: 6
-# still catches a soft voice whose loudest moments are only 10 dB over the room, and
-# a steady room stays under it. Higher ignores louder noises (a breath, a chair), but
-# may miss a soft voice; lower takes fainter sounds for speech.
-# In dB (relative to another level), from 0 to 60.
-speech_above_noise_db = 6
-
-# Speech detection: ...or louder than this, however loud the room. It catches speech
-# that starts at once, before any quiet frames show how loud the room is, and speech
-# in a loud room. Higher can hold the first words back until the room is measured;
-# lower can take a loud room's noise for speech.
-# In dBFS (decibels relative to full scale), from -120 to 0.
-speech_loud_dbfs = -35
-
-# Speech detection: frames like that must follow each other for this long (rounded up
-# to whole 30 ms frames), so a click or a bump isn't speech. Higher ignores longer
-# noises, but may miss a very short word. 0 treats every recording as speech from its
-# start, and decodes it all.
-# In milliseconds, from 0 to 10000.
-speech_min_ms = 120
-
-# Once this much audio waits unpolished, the oldest stretch is cut at a pause and
-# decoded in final mode while you keep talking; release then only waits for the rest.
-# Chunks come out 0.5 to 2 times this long: the cut goes in the longest pause in the
-# newer half, or at the quietest moment once twice this much waits without a pause.
-# The preview window also starts at the last cut. Lower makes release faster and
-# preview passes cheaper, but cuts more often (each cut is a join that can go wrong,
-# and its context is decoded twice). 0 never cuts: one pass over the whole recording
-# on release, which grows fast (21.6 s after 9 minutes).
-# In milliseconds, from 0 to 600000.
-chunk_ms = 30000
-
-# Audio decoded on each side of a chunk for context, when the model times each word
-# (Parakeet; Whisper gets none). The context's words belong to the neighbours. Without
-# it, punctuation across a cut suffers (a sentence lost its full stop at about one cut
-# in ten); 1 s and 2 s gave the same accuracy. Higher costs more decoding per chunk.
-# In milliseconds, from 0 to 5000.
-chunk_context_ms = 1000
-
-# The newest audio is never cut, since the speaker may be mid-word.
-# In milliseconds, from 0 to 5000.
-chunk_guard_ms = 500
-
-# Joining chunks: a word whose middle lies up to this much before a chunk is still kept
-# when the previous chunk's decode didn't hear it (two decodes' timings differ by a
-# frame or two). Higher loses fewer words at joins, but may keep a word made up in the
-# pause; lower the opposite.
-# In milliseconds, from 0 to 2000.
-join_slack_ms = 300
-
-# Joining chunks: two decodes' copies of the same word around a cut count as one word
-# when they lie at most this far apart. On real speech they differed by up to 0.46 s.
-# Higher catches more doubled words; lower keeps more words said twice in a row.
-# In milliseconds, from 0 to 5000.
-join_match_ms = 1000
-
-# Preview only: the longest run of words at the start of the preview that is checked
-# against the end of the polished text, so words aren't shown twice after a chunk.
-# In words, from 0 to 20.
-join_max_repeat_words = 4
-
-# Shortest quiet stretch a chunk can be cut at (rounded up to whole 30 ms frames). Gaps
-# between words are mostly shorter. Higher cuts only in clear pauses, but more chunks
-# end up cut at the quietest moment instead; lower may cut between words.
-# In milliseconds, from 30 to 10000.
-pause_min_ms = 150
-
-# Pause finder: a 30 ms frame is quiet when its level is at most this, relative to the
-# loud frames around it (their 90th percentile; -20 is a tenth of their level). Higher
-# (nearer 0) still finds pauses over loud room noise, but may cut in a soft syllable;
-# lower counts only clear silence.
-# In dB (relative to another level), from -60 to 0.
-pause_quiet_db = -20
-
-# Pause finder: ...or at most this, so a stretch of pure silence counts even with no
-# loud frames around it.
-# In dBFS (decibels relative to full scale), from -120 to 0.
-pause_silence_dbfs = -55
-
-# Level meter: how often the overlay's level indicator can move while you hold the
-# key, at most (66 is about 15 times a second). It only moves when the level changed
-# by `meter_step_db`, so in silence it doesn't redraw at all; on real speech it moved
-# about 7 times a second, for 0.3 % of a CPU core. Lower looks smoother but wakes the
-# app and redraws the overlay more often (33, 30 a second, moved it 11 times a second
-# for 0.43 %); higher is lighter and jerkier. 0 turns the meter off, and with it the
-# "can't hear you" state (for comparisons).
-# In milliseconds, from 0 to 1000.
-meter_interval_ms = 66
-
-# Level meter: how fast it falls back after a loud moment (the time it takes to fall
-# about two-thirds of the way). It rises at once. Lower follows each syllable more
-# closely and flickers more; higher looks calmer but lags behind your pauses.
-# In milliseconds, from 0 to 5000.
-meter_release_ms = 150
-
-# Level meter: how far above the speech detector's line (`speech_above_noise_db` over
-# the room, or `speech_loud_dbfs`) a sound fills the meter. The meter rests flat on
-# anything under that line, so room noise doesn't move it. Lower fills it sooner (a
-# normal voice pins it at the top); higher leaves soft voices barely moving it.
-# In dB (relative to another level), from 6 to 96.
-meter_range_db = 36
-
-# Level meter: the smallest change worth showing. Smaller changes aren't sent to the
-# overlay, so it doesn't redraw for them. 2 is a little under a point of the tallest
-# bar.
-# Lower moves more finely, for more redraws; higher moves in coarser steps.
-# In dB (relative to another level), from 0 to 20.
-meter_step_db = 2
-
-# "Can't hear you": the overlay says so once no audio has reached EasyVox for this
-# long, which is not the same as quiet audio. That's when the microphone delivers
-# nothing, or only digital silence (exact zeros, as a muted or blocked input gives)
-# before it has delivered any sound; once it has, zeros count as quiet (some
-# microphones send them in pauses). Lower warns sooner, but a Bluetooth headset, which
-# can start with about a second of zeros, may flash it; higher lets you talk longer
-# into a dead microphone.
-# In milliseconds, from 100 to 60000.
-meter_no_input_ms = 1500
+```sh
+/Applications/EasyVox.app/Contents/MacOS/easyvox --print-default-config
 ```

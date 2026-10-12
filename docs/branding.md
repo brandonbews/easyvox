@@ -135,7 +135,7 @@ All windows are standard titled macOS windows, centred on open, using the system
   - **Keep model loaded**: a switch. "Off: after 10 minutes without dictation, EasyVox frees the model's ~600 MB. Your next dictation records at once while it loads again (about 0.15 s), so nothing you say is lost. On: it stays in memory."
   - **Push-to-talk shortcut**: the recorder (a 140 × 30 pt min, rounded, bordered field). Idle shows a keycap `⌥Space`; recording shows "Press shortcut…" (muted) with a focus-ring border; error (small, red, below): "Add a modifier (⌃ ⌥ ⇧ ⌘)" or a registration error; or "Not set". Description: "Hold it and speak; let go to paste. Click, then press a new combination."
   - **Hold right ⌥ to talk**: a switch. "Works alongside the shortcut. Needs Input Monitoring." (or its error).
-  - **Settings file**: the path (shown with `~`) and [Show in Finder]. "Every setting is in this file, including advanced ones this window doesn't show (docs/settings.md lists them). Edits to it apply as soon as you save, and changes here are written to it." Warning variants start with "⚠".
+  - **Settings file**: the path (shown with `~`) and [Show in Finder]. "Every setting is in this file, including advanced ones this window doesn't show (docs/settings-reference.md lists them). Edits to it apply as soon as you save, and changes here are written to it." Warning variants start with "⚠".
 
 ### V5. Settings: Models page, with the model row (v1: exists)
 - **Code:** `settings.rs:177-208`; row `model_row.rs:114-257`. Spec: DESIGN.md lines 166, 211.

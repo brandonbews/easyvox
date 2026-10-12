@@ -18,7 +18,7 @@
  *          pill over the demo's desktop: text 15.3, provisional text 5.8, meter 5.4
  * Link and body text are only 2.8:1 apart in dark, so links in running text are underlined.
  *
- * Results charts (marks need 3:1 against the page): one accent and greys, by model, never by rank.
+ * Benchmark charts (marks need 3:1 against the page): one accent and greys, by model, never by rank.
  *   Light  default (the wave) 3.7 · other offered model #515154 7.9 · bench-only #8e8e93 3.3
  *   Dark   default 5.55 · other offered model #aeaeb2 7.7 · bench-only #6e6e73 3.4
  *   The two greys are ΔE 21 apart in OKLab (×100), and each is ≥ 10 from the accent under simulated
@@ -45,7 +45,7 @@
   --color-on-fill: #ffffff;
   --color-selection: #fbd3cb;
 
-  /* Results charts: the default model, the other offered model, bench-only models. */
+  /* Benchmark charts: the default model, the other offered model, bench-only models. */
   --chart-default: var(--color-wave);
   --chart-offered: #515154;
   --chart-bench: #8e8e93;
@@ -554,28 +554,9 @@ kbd {
   margin-bottom: 2rem;
 }
 
-.section-head p {
-  margin: 0;
-  color: var(--color-fg-muted);
-  letter-spacing: -0.01em;
-}
-
-.landing .section-title {
-  max-width: 45rem;
-  margin-bottom: 2rem;
-}
-
 @media (min-width: 48rem) {
   .section-head {
     margin-bottom: 3.5rem;
-  }
-
-  .section-head p {
-    font-size: 1.1875rem;
-  }
-
-  .landing .section-title {
-    margin-bottom: 4rem;
   }
 }
 
@@ -586,7 +567,18 @@ kbd {
   font-size: 0.9375rem;
 }
 
-/* The feature grid: hairline-topped columns, thin line icons. */
+/* The features have no heading, so their section is shorter. */
+.section-features {
+  padding-block: 3rem;
+}
+
+@media (min-width: 48rem) {
+  .section-features {
+    padding-block: 4.5rem;
+  }
+}
+
+/* The feature grid: thin line icons over short columns. */
 
 .features,
 .stats {
@@ -596,7 +588,6 @@ kbd {
   list-style: none;
 }
 
-.features li,
 .stats li {
   border-top: 1px solid var(--color-rule);
 }
@@ -637,7 +628,6 @@ kbd {
     gap: 3.5rem 3rem;
   }
 
-  .features li,
   .stats li {
     padding-top: 2rem;
   }
@@ -749,89 +739,6 @@ kbd {
   .model {
     padding: 2rem;
     border-radius: 24px;
-  }
-}
-
-/* Questions: a disclosure list (<details>), the first one open. */
-
-.faq-section {
-  display: grid;
-  gap: 1.5rem;
-}
-
-.faq-head p {
-  margin: 1rem 0 0;
-  color: var(--color-fg-muted);
-}
-
-@media (min-width: 56rem) {
-  .faq-section {
-    grid-template-columns: 22.5rem minmax(0, 1fr);
-    gap: 5rem;
-  }
-
-  .faq-head p {
-    margin-top: 1.25rem;
-    max-width: 17.5rem;
-  }
-}
-
-.faq details {
-  border-top: 1px solid var(--color-rule);
-}
-
-.faq details:last-child {
-  border-bottom: 1px solid var(--color-rule);
-}
-
-.faq summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.1rem 0;
-  font-size: 1.0625rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  list-style: none;
-  cursor: pointer;
-}
-
-.faq summary::-webkit-details-marker {
-  display: none;
-}
-
-/* A plus that loses its upright when open: drawn, so screen readers don't read it. */
-.faq summary::after {
-  content: "";
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--color-fg-muted);
-  background:
-    linear-gradient(currentColor, currentColor) center / 12px 1.5px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 1.5px 12px no-repeat;
-}
-
-.faq details[open] summary::after {
-  background: linear-gradient(currentColor, currentColor) center / 12px 1.5px no-repeat;
-}
-
-.faq details p {
-  max-width: 37.5rem;
-  margin: -0.4rem 0 1.25rem;
-  padding-right: 1.5rem;
-  color: var(--color-fg-muted);
-}
-
-@media (min-width: 48rem) {
-  .faq summary {
-    padding: 1.5rem 0;
-    font-size: 1.1875rem;
-  }
-
-  .faq details p {
-    margin: -0.75rem 0 1.5rem;
   }
 }
 
@@ -1530,6 +1437,11 @@ kbd {
   border: 1px solid var(--color-rule);
   text-align: left;
   vertical-align: top;
+}
+
+/* A table's first column holds names (settings keys): keep each on one line. */
+.doc td:first-child code {
+  white-space: nowrap;
 }
 
 .doc th,

@@ -1,4 +1,4 @@
-// The bench numbers behind /results, read at build time from the CSVs in ../docs/bench (written
+// The bench numbers behind /benchmarks, read at build time from the CSVs in ../docs/bench (written
 // by scripts/bench/extract.py; docs/bench/README.md says what each column holds). The browser
 // never fetches them. Which runs each part of the page uses is pinned in results.config.ts.
 //
@@ -120,7 +120,7 @@ function table(file: string): Row[] {
   for (const column of Object.keys(schema)) {
     if (!header.includes(column)) {
       throw new Error(
-        `${where}: no column "${column}" (renamed by the extractor?); /results reads it`,
+        `${where}: no column "${column}" (renamed by the extractor?); /benchmarks reads it`,
       );
     }
   }
@@ -157,7 +157,7 @@ function table(file: string): Row[] {
 function num(row: Row, column: string): number {
   const cell = row[column];
   if (cell === undefined || cell === "") {
-    throw new Error(`run ${row.run_id ?? "?"}: no ${column}, which /results needs`);
+    throw new Error(`run ${row.run_id ?? "?"}: no ${column}, which /benchmarks needs`);
   }
   return Number(cell);
 }
@@ -165,7 +165,7 @@ function num(row: Row, column: string): number {
 function expectCount<T>(items: T[], count: number, what: string): T[] {
   if (items.length !== count) {
     throw new Error(
-      `/results expects ${count} ${what}, and docs/bench has ${items.length}. ` +
+      `/benchmarks expects ${count} ${what}, and docs/bench has ${items.length}. ` +
         "Update src/lib/results.config.ts on purpose to show other runs.",
     );
   }

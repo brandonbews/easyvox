@@ -1,4 +1,4 @@
-// What /results shows, pinned. Each part of the page names the bench study and build its runs
+// What /benchmarks shows, pinned. Each part of the page names the bench study and build its runs
 // come from, the recording, the models and how many runs it expects (src/lib/bench.ts reads the
 // CSVs in ../docs/bench). A new bench run, a new study or a new build never changes the page by
 // itself: either it isn't selected, or the run counts stop matching and the build fails. Showing

@@ -10,3 +10,7 @@
 ## Private recordings
 
 - `recordings/` holds Brandon's own voice recordings for local benchmarks. It's gitignored: never commit, upload, publish or delete these files, and don't paste their transcripts into committed files or artifacts. Bench results (WER, latency, energy) are fine to record.
+
+## Writing
+
+- Prose, descriptions and comments: tight, clear technical language. No marketing tone, no filler, nothing that reads as generated.

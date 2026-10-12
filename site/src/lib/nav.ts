@@ -4,7 +4,7 @@
 // GitHub Markdown with no frontmatter.
 //
 // The bench write-ups (model-bench.md, bench/README.md) aren't published: they stay in the repo
-// as the full record, and /results is the site's bench page.
+// as the full record, and /benchmarks is the site's bench page.
 //
 // `file` is relative to the repo's docs/ folder. `slug` is the route below /docs. `group` is the
 // sidebar heading it sits under; entries of one group stay together, in this order.
@@ -23,8 +23,7 @@ export const docsNav: NavEntry[] = [
     group: "Guides",
     file: "building.md",
     title: "Build from source",
-    description:
-      "Build EasyVox on an Apple silicon Mac: the tools, the speech model, the tests and the app bundle.",
+    description: "The tools, the speech model, the tests and the app bundle.",
   },
   {
     slug: "settings",
@@ -32,7 +31,7 @@ export const docsNav: NavEntry[] = [
     file: "settings.md",
     title: "Settings",
     description:
-      "EasyVox's settings file: where it is, how edits apply, and every key with its default, its unit and what it trades off.",
+      "The settings file: where it is, the keys you're likely to change, and how errors are handled.",
   },
 ];
 

@@ -50,7 +50,7 @@ const NEW_FILE_HEADER: &str = "\
 # EasyVox settings. The Settings window writes the keys it shows here; add any other key to
 # override its default (advanced keys go under [advanced]). EasyVox applies changes as soon as
 # you save. Every key, its default and what it does: `easyvox --print-default-config`, or
-# docs/settings.md (https://github.com/brandonbews/easyvox/blob/main/docs/settings.md).
+# docs/settings-reference.md (https://github.com/brandonbews/easyvox/blob/main/docs/settings-reference.md).
 
 ";
 
@@ -371,7 +371,7 @@ pub fn watch(path: &Path, on_change: impl Fn() + Send + 'static) -> anyhow::Resu
 }
 
 /// Every key at its default, with what it does, its unit and its range, as TOML comments:
-/// what `easyvox --print-default-config` prints and `docs/settings.md` shows.
+/// what `easyvox --print-default-config` prints and `docs/settings-reference.md` shows.
 pub fn default_config_text() -> String {
     let defaults = AppSettings::default();
     let mut out = String::from(
@@ -579,14 +579,18 @@ mod tests {
         );
     }
 
-    /// docs/settings.md shows `easyvox --print-default-config` word for word, so it can't drift
+    /// docs/settings-reference.md shows `easyvox --print-default-config` word for word, so it can't drift
     /// from the defaults in code. After changing a key, its docs or a default, paste the new
     /// output in (`cargo run -p easyvox-app -- --print-default-config`).
     #[test]
     fn the_settings_doc_shows_the_current_reference() {
-        let doc = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/settings.md")).unwrap();
+        let doc =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/settings-reference.md")).unwrap();
         let block = format!("```toml\n{}```", default_config_text());
-        assert!(doc.contains(&block), "docs/settings.md is out of date: paste in `easyvox --print-default-config`");
+        assert!(
+            doc.contains(&block),
+            "docs/settings-reference.md is out of date: paste in `easyvox --print-default-config`"
+        );
     }
 
     #[test]

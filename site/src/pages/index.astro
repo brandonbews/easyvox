@@ -1,19 +1,15 @@
 ---
-// The homepage (docs/plans/website.md §5, laid out as design boards 21–23). Short on purpose
-// (Brandon, 11 October): the pitch, then fast, the preview, local, and free and open source, then
-// three numbers on lightness. Readers know what dictation is, so the page doesn't explain it, and
-// it never mentions AI. Every number here matches /results (the bench, from ../docs/bench) and
-// docs/model-bench.md. Every claim is true of the app today: no "model inside the app", no Esc to
-// cancel, no history retention, no other languages, nothing to download yet.
+// The homepage, short on purpose (Brandon, 11 October): the pitch and the demo, four features,
+// the two models, install. Readers know what dictation is, so the page doesn't explain it, and it
+// never mentions AI. Numbers match /benchmarks. Every claim is true of the app today.
 import Demo from "../components/Demo.astro";
-import { REPO_PUBLIC, REPO_URL } from "../config";
 import Base from "../layouts/Base.astro";
 ---
 
-<Base description="Simple, local, fast speech-to-text for the Mac. Free and open source.">
+<Base description="Simple, local, fast, free speech-to-text for the Mac. Open source, MIT license.">
   <main id="main" class="landing">
     <section class="hero container" aria-labelledby="top">
-      <h1 id="top">Simple, local, fast speech-to-text.</h1>
+      <h1 id="top">Simple, local, fast, free speech-to-text.</h1>
       <div class="actions">
         <a class="button button-primary" href="/docs/building">Build from source</a>
         <span class="button button-soon">Download: coming soon</span>
@@ -22,8 +18,7 @@ import Base from "../layouts/Base.astro";
       <Demo />
     </section>
 
-    <section class="section container" aria-labelledby="why">
-      <h2 id="why" class="section-title">Why EasyVox</h2>
+    <section class="section section-features container" aria-label="Features">
       <ul class="features">
         <li>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.6 13.2A7.5 7.5 0 1 0 6.4 6.9M6.6 3.6l-0.4 3.5 3.5 0.3M12 8.25V12l2.75 2"></path></svg>
@@ -48,29 +43,9 @@ import Base from "../layouts/Base.astro";
       </ul>
     </section>
 
-    <section class="section container" aria-labelledby="light">
-      <h2 id="light" class="section-title">Light on your Mac.</h2>
-      <ul class="stats">
-        <li>
-          <p class="stat">~0 %</p>
-          <p>CPU at idle</p>
-        </li>
-        <li>
-          <p class="stat">0.65 W</p>
-          <p>Extra power while dictating</p>
-        </li>
-        <li>
-          <p class="stat">90 MB</p>
-          <p>Memory at idle</p>
-        </li>
-      </ul>
-      <p class="caveat">Measured on an M4 Mac mini. <a href="/results">See how 14 models compared</a>.</p>
-    </section>
-
     <section class="section container" aria-labelledby="models">
       <div class="section-head">
         <h2 id="models">Two models</h2>
-        <p>Pick one in the app. It downloads once.</p>
       </div>
       <ul class="models">
         <li class="model">
@@ -90,67 +65,7 @@ import Base from "../layouts/Base.astro";
           </p>
         </li>
       </ul>
-      <p class="caveat">
-        Both run on <a href="https://github.com/handy-computer/transcribe.cpp">transcribe.cpp</a>, from the team behind
-        <a href="https://github.com/cjpais/Handy">Handy</a>.
-      </p>
-    </section>
-
-    <section class="section container faq-section" aria-labelledby="questions">
-      <div class="faq-head">
-        <h2 id="questions">Questions</h2>
-        <p>
-          More answers in the <a href="/docs">docs</a>{
-            REPO_PUBLIC ? (
-              <>
-                , or ask on <a href={REPO_URL}>GitHub</a>.
-              </>
-            ) : (
-              "."
-            )
-          }
-        </p>
-      </div>
-      <div class="faq">
-        <details open>
-          <summary>Is it really free?</summary>
-          <p>Yes. EasyVox is free and open source, under the MIT license. There's no paid tier, no trial and no account.</p>
-        </details>
-        <details>
-          <summary>When can I download it?</summary>
-          <p>
-            Not yet: a DMG and a Homebrew cask are coming soon. Until then, you can
-            <a href="/docs/building">build it from source</a>.
-          </p>
-        </details>
-        <details>
-          <summary>Does it need the internet?</summary>
-          <p>Once, to download the speech model (539 MB for the default). After that it works offline.</p>
-        </details>
-        <details>
-          <summary>Can I change the shortcut?</summary>
-          <p>
-            Yes, in Settings, where you can also have it listen while you hold the right Option key alone. Every setting is
-            in one TOML file too, applied as soon as you save it: <a href="/docs/settings">every key and its default</a>.
-          </p>
-        </details>
-        <details>
-          <summary>Which languages?</summary>
-          <p>English, for now. Both models are English-only.</p>
-        </details>
-        <details>
-          <summary>Which Macs?</summary>
-          <p>A Mac with Apple silicon, on macOS 26 or later. Intel Macs aren't supported.</p>
-        </details>
-        <details>
-          <summary>How do I uninstall it?</summary>
-          <p>
-            Quit EasyVox from the menu bar and drag it from Applications to the Trash. To remove everything, also delete
-            <code>~/Library/Application Support/EasyVox</code> (the models and History) and <code>~/.config/easyvox</code>
-            (the settings).
-          </p>
-        </details>
-      </div>
+      <p class="caveat">Why these two? I compared <a href="/benchmarks">a lot</a> of them.</p>
     </section>
 
     <section class="cta container" aria-labelledby="install">

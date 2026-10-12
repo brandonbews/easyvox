@@ -1,5 +1,5 @@
 ---
-// /results: the bench, condensed for someone deciding whether to use EasyVox. Every number comes
+// /benchmarks: the bench, condensed for someone deciding whether to use EasyVox. Every number comes
 // from the CSVs in ../docs/bench (src/lib/bench.ts), picked by src/lib/results.config.ts, and is
 // rounded as docs/model-bench.md rounds it. The page shows no dates, commits or build ids, and no
 // text from any recording: the two recordings of a real voice are private.
@@ -12,7 +12,7 @@ import { accuracyRows, costRows, idleRows, silenceRows, speedRows } from "../lib
 import { accuracy, speed } from "../lib/results.config";
 
 function claim(ok: boolean, what: string) {
-  if (!ok) throw new Error(`/results: the copy says ${what}, and the data no longer does`);
+  if (!ok) throw new Error(`/benchmarks: the copy says ${what}, and the data no longer does`);
 }
 
 const acc = accuracyRows();
@@ -23,7 +23,7 @@ const quiet = silenceRows();
 
 const find = <T extends { tone: string; name: string }>(rows: T[], name: string) => {
   const row = rows.find((r) => r.name === name);
-  if (!row) throw new Error(`/results: no row for ${name}`);
+  if (!row) throw new Error(`/benchmarks: no row for ${name}`);
   return row;
 };
 
@@ -81,12 +81,12 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
 ---
 
 <Base
-  title="Results"
+  title="Benchmarks"
   description="How EasyVox's speech models compare on one Mac and one voice: word errors, how fast the text comes, energy and memory, and what happens on silence."
 >
   <main id="main" class="results container">
     <header class="results-head">
-      <h1>Results</h1>
+      <h1>Benchmarks</h1>
       <p class="lede">
         Fourteen speech models, run through EasyVox on the same recordings: how many words each got wrong, how soon
         the text came, and what it cost the Mac. EasyVox offers two of them.

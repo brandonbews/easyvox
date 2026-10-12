@@ -31,7 +31,7 @@ Every step, the end-to-end tests, the self-test, CI and the developer CLI are in
 
 ## Settings
 
-EasyVox reads its settings from `~/.config/easyvox/config.toml` (or `$XDG_CONFIG_HOME/easyvox/config.toml`; `EASYVOX_CONFIG` points at another file) and applies edits as soon as you save. The Settings window writes the same file. The file only needs the keys you change; [`docs/settings.md`](docs/settings.md) lists every key with its default, its unit and what it trades off, including the advanced ones for the live preview, the chunks and the pauses. `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config` prints the same list.
+EasyVox reads its settings from `~/.config/easyvox/config.toml` (or `$XDG_CONFIG_HOME/easyvox/config.toml`; `EASYVOX_CONFIG` points at another file) and applies edits as soon as you save. The Settings window writes the same file. The file only needs the keys you change; [`docs/settings.md`](docs/settings.md) covers the common ones, and [`docs/settings-reference.md`](docs/settings-reference.md) lists every key with its default, its unit and what it trades off, including the advanced ones for the live preview, the chunks and the pauses. `dist/EasyVox.app/Contents/MacOS/easyvox --print-default-config` prints the same list.
 
 ## License
 
