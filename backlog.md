@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 2 ready · 2 blocked · 19 on hold · 40 inbox · 54 done · 1 cancelled
+0 in progress · 2 ready · 2 blocked · 19 on hold · 40 inbox · 55 done · 1 cancelled
 
 ## In progress
 
@@ -44,7 +44,7 @@ Triaged, deliberately paused — never served to agents until reopened.
 | [`tuh-4r77`](tasks/tuh-01M4MKSK7707E6K6SZ4AYX4R77.md) | Decide: branding questions (Dock, name and domain, menu bar states, icon format, accent, v1 site) | 3 | `decision` `human` `branding` |
 | [`tuh-4etd`](tasks/tuh-01M4MTMN0H5XNND5TMTCRT4ETD.md) | Create the Cloudflare Pages project for the website (root site/, no domain) | 3 | `human` `website` |
 | [`tuh-82ya`](tasks/tuh-01M4NQE2KBMZ8WST33GWHJ82YA.md) | Hands-on: the DMG window on macOS 26 in light and dark (do Finder labels stay black over the background?) | — | `design` `hands-on` `human` `release` |
-| [`tuh-3m33`](tasks/tuh-01M4PG20BW9EH44AS97E1J3M33.md) | Decide: move internal docs (DESIGN.md process notes, plans, branding, research notes, design hand-off, the tuhdoo ledger branch) to a private companion repo before EasyVox goes public | — | `human` `decision` `release` `repo` |
+| [`tuh-sd51`](tasks/tuh-01M4QBZRWS8NEP75JFA9TQSD51.md) | Before the repo goes public: audit every doc, the full git history and the tuhdoo branch for personal or odd content; make the docs logical and tight | — | `release` `repo` |
 
 ## Inbox
 
@@ -147,6 +147,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-p403`](tasks/tuh-01M4NXYZ58FXM7E0GC7W4VP403.md) Hands-on: the restyled app in light and dark (menu bar, pill, notices, Settings, setup, History, Reduce motion)
 - [`tuh-g2rd`](tasks/tuh-01M4PCSBAE8V7WCK4G2PTKG2RD.md) Permissions: Settings watches them live; ask for Input Monitoring so EasyVox appears in its list
 - [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once
+- [`tuh-3m33`](tasks/tuh-01M4PG20BW9EH44AS97E1J3M33.md) Decide: move internal docs (DESIGN.md process notes, plans, branding, research notes, design hand-off, the tuhdoo ledger branch) to a private companion repo before EasyVox goes public
 
 ## Cancelled
 
