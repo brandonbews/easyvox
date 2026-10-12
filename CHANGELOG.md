@@ -4,6 +4,8 @@ Notable changes in each release, newest first, in the [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.1.0 - 2026-10-12
+
 The first release, for Apple silicon Macs on macOS 26 or later.
 
 ### Added
