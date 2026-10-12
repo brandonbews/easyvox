@@ -28,6 +28,8 @@ const canonical = SITE_URL ? siteUrl(Astro.url.pathname) : null;
     {NOINDEX && <meta name="robots" content="noindex" />}
     {canonical && <link rel="canonical" href={canonical} />}
     <meta name="color-scheme" content="light dark" />
+    {/* Inter, used by every page. The mono loads only where there's code (global.css). */}
+    <link rel="preload" href="/fonts/inter/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin />
     {/* The page backgrounds in global.css: paper, light and dark. */}
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1c1e" />
@@ -52,7 +54,7 @@ const canonical = SITE_URL ? siteUrl(Astro.url.pathname) : null;
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="The EasyVox mark above the line “Simple, local, fast speech-to-text. That’s it.”" />
+    <meta property="og:image:alt" content="The EasyVox mark above the line “Simple, local, fast, free speech-to-text.”" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>

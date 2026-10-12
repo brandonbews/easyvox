@@ -1,6 +1,11 @@
 /* EasyVox site: plain CSS, design tokens (design/tokens.json) as custom properties, light and
- * dark following the system (no toggle). Paper and ink, one vermilion, the system font. No web
- * fonts: -apple-system is SF Pro on a Mac, and SF Pro's license doesn't allow embedding it.
+ * dark following the system (no toggle). Paper and ink, one vermilion, Inter.
+ *
+ * Fonts: Inter for text and JetBrains Mono for code, both OFL, served from /fonts and built by
+ * scripts/site-fonts.sh (Latin, weights 400 to 700). Inter keeps its optical-size axis, so the
+ * browser sets large type in Inter Display, as SF Pro switches to its Display cut. Only Inter is
+ * preloaded (layouts/Base.astro); a page without code never fetches the mono. The system stacks
+ * stay as fallbacks while a font loads or for a character outside the subset.
  *
  * Vermilion is only on the primary button, links and the wave. #F0462D (light) is for graphics
  * only (3.7:1); text uses #D93A22. On the raised surface #D93A22 is only 4.2:1, so a link on a
@@ -24,6 +29,22 @@
  *   protanopia and deuteranopia. Every bar is named, so color is never the only cue. Chart text
  *   is ink or muted text (above), never a mark color.
  */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/inter/InterVariable-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2");
+}
 
 :root {
   color-scheme: light dark;
@@ -64,9 +85,10 @@
   --keycap-edge: #d2d2d7;
 
   --font-sans:
-    -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    "Inter", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   --width-site: 70rem; /* the design's 1120 px column */
   --width-prose: 40rem; /* 640 px: about 70 characters a line at 17 px */
@@ -367,7 +389,7 @@ kbd {
 .site-nav {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 1rem; /* the header fits a 390 px phone */
 }
 
 .site-nav > a:not(.button) {

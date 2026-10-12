@@ -2,13 +2,16 @@
 # Each action is pinned to a commit SHA with its release in a comment (`@<sha> # v7.0.1`);
 # Dependabot updates the two together.
 #
-# Monthly, one grouped pull request per ecosystem, to keep the PR count low.
+# Monthly, one grouped pull request per ecosystem, to keep the PR count low. A version is
+# offered only once it's two weeks old, so a bad release has time to be caught and pulled.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     groups:
       github-actions:
         patterns: ["*"]
@@ -19,6 +22,15 @@ updates:
     directory: /site
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
+    ignore:
+      # @astrojs/check 0.9 needs TypeScript 5 or 6; TypeScript 7 has no compiler API for it.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # The types follow the Node the site builds with (24, site.yml), not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       site-npm:
         patterns: ["*"]
