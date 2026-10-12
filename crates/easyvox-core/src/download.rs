@@ -412,8 +412,8 @@ fn write_error(path: &Path, e: io::Error, done: u64, needed: u64) -> DownloadErr
 
 /// The hidden part file of a running download: created and locked by [`PartFile::create`],
 /// deleted on drop unless [`activate`](PartFile::activate) renamed it into place. The lock
-/// (`flock`, through [`File::try_lock`]) tells other downloads and [`remove_partials`] that it's in use, in this process or
-/// another; it's released when the file closes.
+/// (`flock`, through [`File::try_lock`]) tells other downloads and [`remove_partials`] that it's
+/// in use, in this process or another; it's released when the file closes.
 struct PartFile {
     path: PathBuf,
     file: File,

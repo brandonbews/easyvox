@@ -1,12 +1,12 @@
 """lag.py <session.err> <timeline>: how far the preview trails the voice (numbers only).
 
 session.err is a session's stderr without --quiet (the preview's partial lines). The timeline is
-a one-pass decode of the same recording with word timings: a session stderr with WORD lines (a
-scratch copy of the bench printed each word of the final text with its start and end), or the
-output of `transcribe --words`. For each word of the timeline, the first partial event whose
-last three words match it; lag = event time - word end. Per minute: median, 95th percentile
-and max. Also the longest gap between preview updates. scripts/bench/extract.py computes the
-same lags for docs/bench/lag_*.csv."""
+a one-pass decode of the same recording with word timings: a session stderr with WORD lines (each
+word of the final text with its start and end, printed by an instrumented bench build that isn't
+in the repo), or the output of `transcribe --words`. For each word of the timeline, the first
+partial event whose last three words match it; lag = event time - word end. Per minute: median,
+95th percentile and max. Also the longest gap between preview updates. scripts/bench/extract.py
+computes the same lags for docs/bench/lag_*.csv."""
 import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

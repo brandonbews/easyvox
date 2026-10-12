@@ -3,8 +3,8 @@
 //! the GGUF entries' URLs and checksums for developers.
 //!
 //! Every entry says whether the app offers it ([`Offering`]). The app lists only the default and
-//! the alternatives; the rest stay in the catalog for `easyvox-bench` and comparisons. Which
-//! model sits where, and why, is in `DESIGN.md` ("Models") and `docs/model-bench.md`.
+//! the alternatives; the rest stay in the catalog for `easyvox-bench` and comparisons. The
+//! measurements behind the list are in `docs/model-bench.md`.
 
 use std::path::{Path, PathBuf};
 
@@ -99,8 +99,8 @@ pub struct ModelInfo {
     pub disk_bytes: u64,
     /// Outputs punctuation and capitalization.
     pub punctuation: bool,
-    /// One line for Settings, after "Pick this if": who this model is for. From `DESIGN.md`
-    /// ("Models"). Empty for bench-only entries.
+    /// One line for Settings, after "Pick this if": who this model is for. Empty for bench-only
+    /// entries.
     pub pick_if: &'static str,
     pub license: License,
     /// Who made the model ("NVIDIA"), as the credit names them.
@@ -238,10 +238,9 @@ pub static CATALOG: &[ModelInfo] = &[
         modification: "Converted to GGUF and quantized to Q8_0 by handy-computer",
         card_url: "https://huggingface.co/openai/whisper-base.en",
     },
-    // Bench only since 10 October 2026: on the author's voice it was a word behind v2 (2.10 %
-    // against 1.68 % WER), as fast, used a little more CPU and often left out the last full
-    // stop. Its license would also need an "I agree" step in the app. See DESIGN.md ("Bench
-    // only").
+    // Bench only: on a real voice it was a word behind v2 and often left out the last full stop.
+    // Its license binds whoever runs the model, so offering it would need an "I agree" step the
+    // app doesn't have (`no_offered_model_needs_an_agreement`).
     ModelInfo {
         id: "parakeet-unified-en-0.6b-q5_k_m-gguf",
         name: "Parakeet Unified EN 0.6B",
@@ -261,8 +260,7 @@ pub static CATALOG: &[ModelInfo] = &[
         card_url: "https://huggingface.co/nvidia/parakeet-unified-en-0.6b",
     },
     // Bench only: on transcribe-cpp 0.3.1 it writes numbers as words ("three hundred and forty
-    // two dollars"), so its WER on our clips is 7 % against Whisper base.en's 1.4 %. See
-    // docs/model-bench.md.
+    // two dollars"), where dictation wants digits (docs/model-bench.md).
     ModelInfo {
         id: "canary-180m-flash-q5_k_m-gguf",
         name: "Canary 180M Flash",
@@ -282,8 +280,8 @@ pub static CATALOG: &[ModelInfo] = &[
         card_url: "https://huggingface.co/nvidia/canary-180m-flash",
     },
     // Bench only: v2's multilingual successor (25 European languages, picked per recording). On
-    // the author's voice it was no more accurate than v2, wrote hesitations as words, and used
-    // more CPU and memory. See docs/model-bench.md ("Parakeet TDT v3 against v2").
+    // a real voice it was no more accurate than v2, wrote hesitations as words, and used more
+    // CPU and memory (docs/model-bench.md, "Parakeet TDT v3 against v2").
     ModelInfo {
         id: "parakeet-tdt-0.6b-v3-q5_k_m-gguf",
         name: "Parakeet TDT 0.6B v3 (multilingual)",
@@ -302,9 +300,9 @@ pub static CATALOG: &[ModelInfo] = &[
         modification: "Converted to GGUF and quantized to Q5_K_M by handy-computer",
         card_url: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
     },
-    // Bench only, like the entries after it: the candidates of DESIGN.md's "Other models we
-    // looked at", run through the app's pipeline on 11 October 2026 (docs/model-bench.md,
-    // "Every candidate, one pipeline"). Q5_K_M where it's published, else the closest.
+    // Bench only, like the entries after it: candidates run through the app's pipeline for
+    // comparison (docs/model-bench.md, "Every candidate, one pipeline"). Q5_K_M where it's
+    // published, else the closest.
     ModelInfo {
         id: "whisper-large-v3-turbo-q5_k_m-gguf",
         name: "Whisper large-v3-turbo",
@@ -551,7 +549,7 @@ mod tests {
         let offered = offered();
         assert_eq!(offered[0].id, crate::RECOMMENDED_MODEL, "the default comes first");
         assert!(offered[1..].iter().all(|m| m.offering == Offering::Alternative));
-        // Parakeet TDT v2, and Whisper base.en as the small option (DESIGN.md, "Models").
+        // Parakeet TDT v2, and Whisper base.en as the small option.
         let ids: Vec<_> = offered.iter().map(|m| m.id).collect();
         assert_eq!(ids, [crate::RECOMMENDED_MODEL, "whisper-base.en-q8_0-gguf"]);
     }

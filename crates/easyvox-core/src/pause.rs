@@ -97,7 +97,7 @@ impl Quiet {
 ///
 /// "Something was said" means a frame louder than the quiet level of the loudest speech so far
 /// (the 90th percentile of a preview window), the same measure the pause finder uses, with its
-/// own `gate_*` levels. So it errs towards decoding: before any speech, or in a noisy room,
+/// own `gate_*` levels. So it errs toward decoding: before any speech, or in a noisy room,
 /// room noise counts. It only affects the preview; the final text decodes everything either way.
 pub(crate) struct SpeechGate {
     quiet: Quiet,
@@ -313,12 +313,12 @@ pub(crate) mod tests {
             .collect()
     }
 
-    /// The loudness settings moved from linear levels (0.1 and 0.0018) to decibels (-20 dB and
-    /// -55 dBFS, which is 0.00178). On every test clip, the speech gate and the pause finder
-    /// make exactly the decisions they made with the old levels: the same preview passes, and
-    /// the same longest pause in every stretch a chunk cut would search. Set `EASYVOX_CLIPS` to
-    /// a space-separated list of WAV files (relative to the workspace) to check others too, e.g.
-    /// the long-dictation clips: `EASYVOX_CLIPS="$(ls testdata/longform/clips/*.wav)"`.
+    /// The loudness defaults in decibels (-20 dB, and -55 dBFS, which is 0.00178) decide exactly
+    /// as the linear levels 0.1 and 0.0018, which the pipeline was tuned with, on every test
+    /// clip: the same preview passes, and the same longest pause in every stretch a chunk cut
+    /// would search. Set `EASYVOX_CLIPS` to a space-separated list of WAV files (relative to the
+    /// workspace) to check others too, e.g. the long-dictation clips:
+    /// `EASYVOX_CLIPS="$(ls testdata/longform/clips/*.wav)"`.
     #[test]
     fn db_defaults_decide_like_the_old_levels() {
         let t = Tuning::default();

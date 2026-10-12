@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [features]
 # `--self-test`: launch for real, check the native state and a full replay session, write
-# JSON, quit. For checking the app on a machine nobody is looking at.
+# JSON, quit. For unattended runs (screen locked, no key presses).
 self-test = ["dep:serde_json", "dep:sha2"]
 
 [dependencies]
@@ -37,7 +37,7 @@ toml_edit = "0.25.17"
 notify = "8.2.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# Default features, like the spike: GPUI already enables nearly all of objc2-app-kit anyway.
+# Default features: GPUI already enables nearly all of objc2-app-kit.
 objc2.workspace = true
 objc2-foundation = "0.3"
 objc2-app-kit = "0.3"

@@ -1,12 +1,11 @@
 //! Transcript history: the store (easyvox-core's SQLite `History`, text only) and its window.
 //!
-//! The window is the design's (`design/`, boards 16–17) without what the core doesn't keep yet:
-//! dictations newest first, grouped by day ("Today", "Yesterday", "Wednesday 7 October"), each
-//! with its time, its word count and a copy button; a footer with how many there are and where
-//! they're kept; and when there are none, the knot and how to make one. The day, the time and the
-//! word count come from what the core stores (`created_at_ms` and the text). The rows are a
-//! virtual list, so only the visible ones are drawn: each row is one or two lines of text, picked
-//! by measuring the text once.
+//! The window shows what the core keeps: dictations newest first, grouped by day ("Today",
+//! "Yesterday", "Wednesday 7 October"), each with its time, its word count and a copy button; a
+//! footer with how many there are and where they're kept; and when there are none, the knot and
+//! how to make one. The day, the time and the word count come from what the core stores
+//! (`created_at_ms` and the text). The rows are a virtual list, so only the visible ones are
+//! drawn: each row is one or two lines of text, picked by measuring the text once.
 
 use crate::brand::{self, Colors};
 use crate::state::AppSettings;
@@ -145,7 +144,7 @@ fn footer_words(count: usize, more_in_db: bool) -> String {
     }
 }
 
-// Heights in the list, in points (board 16): a day's title, and a row of one or two lines of
+// Heights in the list, in points: a day's title, and a row of one or two lines of
 // text above its word count. The first row of a day adds the group's top edge, the last its
 // bottom, and every other row the hairline above it.
 const DAY_TITLE: f32 = 40.;

@@ -1,5 +1,4 @@
-// The docs pipeline, ported from tuhdoo's (its site/src/lib/markdown.tsx), building an HTML string
-// instead of React elements:
+// The docs pipeline, which builds an HTML string:
 //
 //   remark-parse → remark-gfm → remark-rehype → rehype-slug
 //     → rewriteLinks (repo-relative links → site routes, GitHub URLs or plain text)

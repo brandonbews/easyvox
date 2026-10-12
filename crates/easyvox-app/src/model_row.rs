@@ -238,7 +238,7 @@ impl RenderOnce for ModelRow {
                     .gap_2()
                     .child(div().text_size(brand::TEXT).font_weight(FontWeight::MEDIUM).child(model.name))
                     .when(active && matches!(state, ModelState::Downloaded { .. }), |this| {
-                        // A quiet label, not a colour: vermilion is for actions.
+                        // A quiet label, not a color: vermilion is for actions.
                         this.child(
                             h_flex()
                                 .h(px(18.))

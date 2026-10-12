@@ -6,7 +6,7 @@
 //! There's no stored "onboarding done" flag. Onboarding opens at launch whenever a required step
 //! is missing ([`LaunchFacts::needed`]): the Microphone was never asked, Accessibility isn't
 //! allowed, or the chosen model isn't downloaded. So a fresh Mac, a reset grant or a deleted
-//! model all bring it back, and a relaunch with everything in place skips it. Settings →
+//! model all bring it back, and a relaunch with everything in place skips it. Settings ›
 //! Permissions opens it any time.
 
 use crate::model_row::ModelState;

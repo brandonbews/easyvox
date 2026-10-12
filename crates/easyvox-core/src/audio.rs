@@ -55,7 +55,7 @@ impl SharedAudio {
 }
 
 /// Streaming resampler: windowed-sinc low-pass (when downsampling) + linear interpolation.
-/// Good enough for speech; a production build might use `rubato`.
+/// Good enough for speech, without a resampling crate.
 pub struct Resampler {
     step: f64,
     pos: f64,
@@ -222,7 +222,7 @@ pub fn mic_permission_status() -> MicPermission {
     MicPermission::Unknown
 }
 
-/// What we learned opening the microphone (for diagnostics / the bench).
+/// What opening the microphone reported, for diagnostics and the bench.
 #[derive(Clone, Debug, Default)]
 pub struct MicInfo {
     pub device: String,

@@ -46,10 +46,10 @@ easyvox_core::tunables! {
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct AppTuning {
         /// How long EasyVox keeps the speech model in memory after your last dictation, unless
-        /// "Keep model loaded" is on. Freeing it takes the app from about 670 MB to about
-        /// 90 MB, and the next dictation still records at once while the model loads again
-        /// (about 0.15 s). Lower frees the memory sooner but reloads more often; higher keeps
-        /// it ready longer.
+        /// "Keep model loaded" is on. With the default model, freeing it takes the app from
+        /// about 670 MB to about 90 MB, and the next dictation still records at once while the
+        /// model loads again (about 0.15 s). Lower frees the memory sooner but reloads more
+        /// often; higher keeps it ready longer.
         unload_after_secs: u64 = 600, 1..=86_400;
         /// How long the overlay stays up after the final text is pasted. Higher leaves more time
         /// to read it; lower gets it out of the way sooner. 0 hides it at once.
@@ -58,22 +58,20 @@ easyvox_core::tunables! {
         /// stays up. It's two lines, what happened and what to do, so it needs a moment to read.
         /// Higher leaves more time; lower gets it out of the way sooner.
         overlay_hide_after_notice_ms: u32 = 4_000, 500..=30_000;
-        /// The most of the transcript the overlay lays out. The pill shows the end of it, as
-        /// much as fits, and scrolls as words come so the newest stay in view; this caps the
-        /// text kept out of sight past its left edge, where it's cut. Lower draws a little less
-        /// each frame, but under about 120 the cut (an "…") can come into view; higher costs
-        /// more to lay out for nothing you'd see.
+        /// How many characters of the transcript the overlay lays out. The pill shows the end,
+        /// scrolled so the newest words stay in view; text further left is cut. Lower draws a
+        /// little less each frame, but under about 120 the cut (an "…") can come into view;
+        /// higher costs more to lay out for nothing you'd see.
         overlay_max_chars: u32 = 200, 10..=500;
         /// How far above the Dock the overlay sits, in points, from the top of the Dock to the
         /// bottom of the pill; above the bottom of the screen when the Dock is hidden or on a
-        /// side. It goes on the screen with the window you're typing in, centred. Higher keeps it
+        /// side. It goes on the screen with the window you're typing in, centered. Higher keeps it
         /// further from the Dock; lower, closer to the bottom of the screen.
         overlay_dock_gap_pt: u32 = 24, 0..=400;
         /// How long the overlay takes to pop open when you press the shortcut: it fades in as
-        /// it grows from `overlay_shrink_pct` smaller to full size, just past it and back. It
-        /// shows at once and never waits for the model; this is only how it appears. Core
-        /// Animation runs it, so it costs no redraws. Higher is gentler; lower is snappier. 0
-        /// shows it at once.
+        /// it grows from `overlay_shrink_pct` smaller to full size, overshooting slightly. It
+        /// never waits for the model. Core Animation runs it, so it costs no redraws. Higher is
+        /// gentler; lower is snappier. 0 shows it at once.
         overlay_open_ms: u32 = 200, 0..=1_000;
         /// How long the overlay takes to close once it hides: it fades out as it shrinks by
         /// `overlay_shrink_pct`. The paste has happened by then, and a press during the close

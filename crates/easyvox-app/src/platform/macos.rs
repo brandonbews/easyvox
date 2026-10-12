@@ -16,7 +16,7 @@ use std::time::Duration;
 
 // ───────────────────────── System Settings ─────────────────────────
 
-/// Deep links to System Settings → Privacy & Security, at one list.
+/// Deep links to System Settings › Privacy & Security, at one list.
 pub const PRIVACY_MICROPHONE: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
 pub const PRIVACY_ACCESSIBILITY: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 pub const PRIVACY_INPUT_MONITORING: &str =
@@ -34,7 +34,7 @@ pub const PRIVACY_INPUT_MONITORING: &str =
 /// refuses key status (see [`key_guard`]).
 ///
 /// The open and close are Core Animation on the layer of GPUI's view: a fade and a pop (a scale
-/// about the layer's centre) that the window server runs, so the app neither redraws nor wakes
+/// about the layer's center) that the window server runs, so the app neither redraws nor wakes
 /// up for them. Resizing the window instead would make GPUI lay out and redraw the pill at every
 /// step. Each animation starts from the layer as it's drawn at that moment, so a show during a
 /// close turns it around without a jump.
@@ -56,11 +56,11 @@ const SCALE: &str = "easyvox-scale";
 const SHIFT: &str = "easyvox-shift";
 
 /// Each animation is its curve sampled into keyframes, this many a second: twice a 60 Hz
-/// screen's frames, so the straight lines between them can't be told from the curve. Why
-/// keyframes rather than the curve as a timing function: Core Animation's presentation layer,
-/// which the app reads to turn a close around and the self-test reads to check the pop, stops
-/// a timing function at the end value where it overshoots, although the window server draws
-/// the overshoot. Keyframes carry the overshoot in their values, so both see the same.
+/// screen's frames, so the straight lines between them can't be told from the curve.
+/// Keyframes, not a timing function: Core Animation's presentation layer (read to reverse a
+/// close, and by the self-test) stops a timing function at its end value where it overshoots,
+/// though the window server draws the overshoot. Keyframes carry the overshoot in their values,
+/// so both see the same.
 const KEYFRAMES_PER_SEC: f64 = 120.;
 
 impl OverlayPanel {
@@ -100,7 +100,7 @@ impl OverlayPanel {
         Ok(Self { win, view })
     }
 
-    /// Where the panel goes so it sits at the bottom centre of the screen with the keyboard
+    /// Where the panel goes so it sits at the bottom center of the screen with the keyboard
     /// focus, the pill's bottom edge `gap` points above the Dock (above the screen's bottom edge
     /// when the Dock is hidden or on a side), `pill_bottom` being how far that edge is above the
     /// window's: its origin, in AppKit's screen coordinates. `None` if it's there already (or
@@ -213,7 +213,7 @@ impl OverlayPanel {
         let Some(layer) = self.view.layer() else { return MotionState::default() };
         let shown = presentation(&layer);
         let t = shown.transform();
-        // Where the transform drawn now puts the layer's centre, against where it is.
+        // Where the transform drawn now puts the layer's center, against where it is.
         let (dx, dy) = to_centre(&layer);
         let centre_shift = (t.m11 * dx + t.m21 * dy + t.m41 - dx).hypot(t.m12 * dx + t.m22 * dy + t.m42 - dy);
         let animation = |key: &str| {
@@ -255,7 +255,7 @@ fn drawn(layer: &CALayer) -> (f64, f64) {
     (f64::from(shown.opacity()), shown.transform().m11)
 }
 
-/// From the layer's anchor point, about which its transform applies, to its centre, in its own
+/// From the layer's anchor point, about which its transform applies, to its center, in its own
 /// coordinates. AppKit puts the anchor of a view's layer at a corner.
 fn to_centre(layer: &CALayer) -> (f64, f64) {
     let (bounds, anchor) = (layer.bounds(), layer.anchorPoint());
@@ -287,8 +287,8 @@ enum Animated {
     Opacity,
     /// The scale of its transform, which applies about the anchor point.
     Scale,
-    /// The translation of its transform that keeps the centre in place at that scale: the
-    /// centre moves by `(1 - scale)` of the way from the anchor point to it, so this moves it
+    /// The translation of its transform that keeps the center in place at that scale: the
+    /// center moves by `(1 - scale)` of the way from the anchor point to it, so this moves it
     /// back. Core Animation applies a transform's scale before its translation.
     Shift,
 }
@@ -322,9 +322,9 @@ impl Animated {
     }
 }
 
-/// Animates the layer's size, about its centre, from `from` to `to` of full size: its scale and
-/// the shift that keeps its centre in place, from the same keyframes, so they move in step and
-/// the centre stays put all the way, overshoot included.
+/// Animates the layer's size, about its center, from `from` to `to` of full size: its scale and
+/// the shift that keeps its center in place, from the same keyframes, so they move in step and
+/// the center stays put all the way, overshoot included.
 fn resize(layer: &CALayer, (from, to): (f64, f64), secs: f64, curve: Curve, hold: bool) {
     animate(layer, Animated::Scale, (from, to), secs, curve, hold);
     animate(layer, Animated::Shift, (from, to), secs, curve, hold);
@@ -375,7 +375,7 @@ fn ns_view_of(window: &gpui_kit::Window) -> Option<Retained<NSView>> {
 /// sizes it by its pixels, capped at 22 pt (`MAX_ICON_HEIGHT`), so a 60 × 32 px image for a
 /// Retina menu bar would be drawn 41 × 22 pt, and a 30 × 16 px one would be blurry there. Here
 /// the image is `size` points with a bitmap for each scale, and AppKit picks the one that fits
-/// the screen, as an asset catalogue would. It goes on the status item's button, through
+/// the screen, as an asset catalog would. It goes on the status item's button, through
 /// tray-icon's public `ns_status_item`; tray-icon keeps owning the item, its menu and its clicks.
 pub fn set_menu_bar_image(
     icon: &tray_icon::TrayIcon,
@@ -462,7 +462,7 @@ pub fn menu_items(menu: &tray_icon::menu::Menu) -> Vec<(String, bool, String)> {
 
 // ───────────────────────── Reduce motion ─────────────────────────
 
-/// Whether macOS's Reduce motion is on (System Settings → Accessibility → Display). The overlay
+/// Whether macOS's Reduce motion is on (System Settings › Accessibility › Display). The overlay
 /// reads it at each open, so a change applies from the next one.
 pub fn reduce_motion() -> bool {
     #[cfg(feature = "self-test")]
@@ -709,7 +709,7 @@ pub struct MotionState {
     pub opacity: f64,
     /// The scale drawn, across and up (1 is full size).
     pub scale: (f64, f64),
-    /// How far the transform drawn moves the layer's centre, in points: 0 when it scales about
+    /// How far the transform drawn moves the layer's center, in points: 0 when it scales about
     /// it.
     pub centre_shift: f64,
     pub resting_opacity: f64,
@@ -747,7 +747,7 @@ pub struct PanelState {
 
 /// Gives EasyVox its own appearance (`Some(true)` dark, `Some(false)` light), as if the
 /// system's had changed, or `None` to follow the system again. AppKit tells every window, so the
-/// windows recolour through the same path as a real change. It never touches the system's
+/// windows recolor through the same path as a real change. It never touches the system's
 /// setting, and it lasts until the app quits. Main thread only.
 #[cfg(feature = "self-test")]
 pub fn set_app_appearance(dark: Option<bool>) -> Result<(), String> {

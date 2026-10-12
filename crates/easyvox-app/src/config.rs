@@ -1,6 +1,6 @@
 //! The settings file: `~/.config/easyvox/config.toml` (see `easyvox_core::paths::config_file`
-//! for `XDG_CONFIG_HOME` and `EASYVOX_CONFIG`). Agents and dotfiles can configure EasyVox through
-//! it, and the app applies outside edits as soon as they're saved.
+//! for `XDG_CONFIG_HOME` and `EASYVOX_CONFIG`). Scripts and dotfiles can configure EasyVox
+//! through it, and the app applies outside edits as soon as they're saved.
 //!
 //! The defaults live in code ([`AppSettings::default`], `AppTuning`, `easyvox_core::Tuning`);
 //! the file only overrides them, key by key:
@@ -29,8 +29,8 @@ pub const ADVANCED: &str = "advanced";
 const UI_KEYS: [(&str, &str); 4] = [
     (
         "model",
-        "The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them\n\
-         default or alternative). Settings → Models downloads it, and the next dictation uses it.",
+        "The speech model's id: \"parakeet-tdt-0.6b-v2-q5_k_m-gguf\" (the default) or\n\
+         \"whisper-base.en-q8_0-gguf\". Settings › Models downloads it, and the next dictation uses it.",
     ),
     (
         "shortcut",
@@ -469,9 +469,8 @@ mod tests {
         let t = loaded("[advanced]\ngate_silence_dbfs = -48.5\ngate_quiet_db = -6\n").settings.tuning;
         assert!((easyvox_core::tuning::db_to_linear(t.gate_silence_dbfs) - 0.003_758).abs() < 1e-6);
         assert!((easyvox_core::tuning::db_to_linear(t.gate_quiet_db) - 0.501_2).abs() < 1e-4);
-        // A linear level from before the switch is out of range: it falls back, with a warning.
-        // A linear level from before the switch (always above 0 dB) is out of range: it falls
-        // back to the default, with a warning.
+        // A linear level (a fraction, above 0 dB) is out of range: it falls back to the default,
+        // with a warning.
         let l = loaded("[advanced]\ngate_silence_dbfs = 0.0018\ngate_quiet_db = 0.1\n");
         assert_eq!(l.settings.tuning, Tuning::default());
         let joined = l.warnings.join("\n");
@@ -513,8 +512,8 @@ mod tests {
         assert!(joined.contains("chunk_ms should be a number, not string"), "{joined}");
     }
 
-    /// Parakeet Unified left the app on 10 October 2026 (bench only). A file that still names it
-    /// gets the default model, with a warning, and isn't rewritten for it.
+    /// Parakeet Unified is bench only. A file that still names it gets the default model, with a
+    /// warning, and isn't rewritten for it.
     #[test]
     fn a_bench_only_model_falls_back_to_the_default() {
         let l = loaded("model = \"parakeet-unified-en-0.6b-q5_k_m-gguf\"\nkeep_model_loaded = true\n");

@@ -1,7 +1,6 @@
-/* EasyVox site: plain CSS, design tokens as custom properties, light and dark following the
- * system (no toggle). The structure follows tuhdoo's site; the look is the design hand-off's
- * (design/tokens.json, boards 21–25): paper and ink, one vermilion, the system font. No web
- * fonts: -apple-system is SF Pro on a Mac, and SF Pro's licence doesn't allow embedding it.
+/* EasyVox site: plain CSS, design tokens (design/tokens.json) as custom properties, light and
+ * dark following the system (no toggle). Paper and ink, one vermilion, the system font. No web
+ * fonts: -apple-system is SF Pro on a Mac, and SF Pro's license doesn't allow embedding it.
  *
  * Vermilion is only on the primary button, links and the wave. #F0462D (light) is for graphics
  * only (3.7:1); text uses #D93A22. On the raised surface #D93A22 is only 4.2:1, so a link on a
@@ -18,12 +17,12 @@
  *          pill over the demo's desktop: text 15.3, provisional text 5.8, meter 5.4
  * Link and body text are only 2.8:1 apart in dark, so links in running text are underlined.
  *
- * Benchmark charts (marks need 3:1 against the page): one accent and greys, by model, never by rank.
+ * Benchmark charts (marks need 3:1 against the page): one accent and grays, by model, never by rank.
  *   Light  default (the wave) 3.7 · other offered model #515154 7.9 · bench-only #8e8e93 3.3
  *   Dark   default 5.55 · other offered model #aeaeb2 7.7 · bench-only #6e6e73 3.4
- *   The two greys are ΔE 21 apart in OKLab (×100), and each is ≥ 10 from the accent under simulated
- *   protanopia and deuteranopia. Every bar is named, so colour is never the only cue. Chart text
- *   is ink or muted text (above), never a mark colour.
+ *   The two grays are ΔE 21 apart in OKLab (×100), and each is ≥ 10 from the accent under simulated
+ *   protanopia and deuteranopia. Every bar is named, so color is never the only cue. Chart text
+ *   is ink or muted text (above), never a mark color.
  */
 
 :root {
@@ -50,7 +49,7 @@
   --chart-offered: #515154;
   --chart-bench: #8e8e93;
 
-  /* The pill and the demo's desktop (design boards 07 and 21). */
+  /* The pill and the demo's desktop. */
   --color-pill: rgb(255 255 255 / 0.92);
   --color-pill-text2: #636366;
   --shadow-pill:
@@ -154,7 +153,7 @@ h3 {
   text-wrap: balance;
 }
 
-/* Links in running text are underlined: in dark, the link colour is only 2.8:1 from the text. */
+/* Links in running text are underlined: in dark, the link color is only 2.8:1 from the text. */
 a {
   color: var(--color-link);
   text-decoration: underline;
@@ -185,7 +184,7 @@ code {
   padding: 0.1em 0.35em;
 }
 
-/* Keycap chips (board 24). */
+/* Keycap chips. */
 kbd {
   display: inline-flex;
   align-items: center;
@@ -999,7 +998,7 @@ kbd {
   }
 }
 
-/* ---------- the pill (design board 07, at 1:1) ---------- */
+/* ---------- the pill (the app's, at 1:1) ---------- */
 
 .pill {
   display: inline-flex;
@@ -1059,7 +1058,8 @@ kbd {
 }
 
 /* The app's pop: 200 ms on its POP curve, 85 % → 101.5 % → 100 %, then each word fades in over
-   200 ms (DESIGN.md "Overlay"). It plays once. Reduce motion shows the still. */
+   200 ms, as the app's defaults do (overlay_open_ms, overlay_words_ms). It plays once. Reduce
+   motion shows the still. */
 @media (prefers-reduced-motion: no-preference) {
   .pill-animate {
     animation:
@@ -1091,7 +1091,7 @@ kbd {
   }
 }
 
-/* ---------- docs shell (boards 24–25) ---------- */
+/* ---------- docs shell ---------- */
 
 /* On a phone: a bar under the header that says where you are, and opens the docs nav. */
 .docs-menu {
@@ -1556,7 +1556,7 @@ kbd {
   font-weight: 500;
 }
 
-/* The colour key: a swatch the shape of a bar end, then the words. */
+/* The color key: a swatch the shape of a bar end, then the words. */
 .results-key {
   display: flex;
   flex-wrap: wrap;
@@ -1695,7 +1695,7 @@ kbd {
   font-size: 13px;
 }
 
-/* Text on a chart gets a halo of the page colour, so a gridline never runs through a letter. */
+/* Text on a chart gets a halo of the page color, so a gridline never runs through a letter. */
 .chart text {
   fill: var(--color-fg);
   paint-order: stroke;

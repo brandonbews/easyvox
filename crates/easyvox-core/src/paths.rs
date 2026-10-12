@@ -1,7 +1,7 @@
 //! Where EasyVox keeps its data: `~/Library/Application Support/EasyVox` on macOS and
 //! `$XDG_DATA_HOME/easyvox` (default `~/.local/share/easyvox`) elsewhere. The settings file is
-//! `~/.config/easyvox/config.toml` everywhere, macOS included, so dotfiles and agents find it
-//! where they look on any Unix.
+//! `~/.config/easyvox/config.toml` everywhere, macOS included, so dotfile managers and scripts
+//! find it where they expect it on any Unix.
 
 use std::ffi::OsString;
 use std::path::PathBuf;

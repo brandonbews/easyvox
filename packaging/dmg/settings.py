@@ -34,7 +34,7 @@ arrange_by = None
 label_pos = "bottom"
 icon_size = 128
 text_size = 13
-# Icon centres, in points from the window content's top left.
+# Icon centers, in points from the window content's top left.
 icon_locations = {
     "EasyVox.app": (170, 164),
     "Applications": (490, 164),

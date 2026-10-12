@@ -31,7 +31,7 @@ easyvox-bench <command> [options]
                                                against the transcript in file T; --idle-before:
                                                sit idle with the model loaded first; --unload:
                                                free the model first, so the session reloads it)
-  sessions --model ID                          sessions on 3/10/30 s clips, partials on and off
+  sessions --model ID                          sessions on the 3, 11 and 30 s clips, partials on and off
   tuning                                       every tuning key: effective value, default, range, docs
   mic [--request] [--secs N] [--model ID]      open the microphone once (--request asks for permission first)
   paste [--text T]                             write the clipboard, then simulate Cmd+V

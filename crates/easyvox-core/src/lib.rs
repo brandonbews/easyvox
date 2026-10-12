@@ -34,7 +34,7 @@
 //!
 //! An idle app can free the model with [`Engine::unload`] (about 600 MB for the default model).
 //! The next `start` reloads it while it already records, so nothing said meanwhile is lost; the
-//! preview simply starts once the model is ready.
+//! preview starts once the model is ready.
 //!
 //! Binaries set [`process_env`] first thing in `main`, before any thread starts.
 //!
@@ -87,7 +87,7 @@ pub use tuning::Tuning;
 /// ```
 ///
 /// Today that's `GGML_METAL_NO_RESIDENCY=1`: without it, ggml-metal wakes the process about
-/// 150–200 times a second for as long as it runs, even with no model loaded (see `tcpp.rs`).
+/// 145 times a second for as long as it runs, even with no model loaded (see `tcpp.rs`).
 /// Set `EASYVOX_METAL_RESIDENCY=1` to keep ggml's default, for comparisons.
 pub fn process_env() -> Vec<(&'static str, &'static str)> {
     let mut env = Vec::new();
@@ -166,7 +166,8 @@ pub struct EngineConfig {
     pub tuning: Tuning,
 }
 
-/// The default model: Parakeet TDT 0.6B v2 on transcribe.cpp (see `DESIGN.md`, "Models").
+/// The default model: Parakeet TDT 0.6B v2 on transcribe.cpp. How it compares with the others:
+/// `docs/model-bench.md`.
 pub const RECOMMENDED_MODEL: &str = "parakeet-tdt-0.6b-v2-q5_k_m-gguf";
 
 impl EngineConfig {
@@ -228,8 +229,6 @@ pub(crate) fn spread_words(text: &str, start: f32, end: f32) -> Vec<Word> {
 /// same way for every model; a runtime's quirks stay inside its adapter.
 ///
 /// Natively streaming models (Parakeet Unified, Nemotron) are decoded offline like the rest.
-/// Their native streaming could come back later as an optimisation, if the re-decoded preview
-/// ever costs too much CPU or battery.
 pub trait SpeechModel: Send + Sync + 'static {
     fn info(&self) -> &ModelInfo;
     /// Offline decode of a whole buffer, any length.

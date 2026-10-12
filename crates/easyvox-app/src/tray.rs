@@ -2,11 +2,11 @@
 //! Tauri). Menu callbacks run on the main thread from AppKit; `main.rs` forwards them into GPUI
 //! through the app's event channel.
 //!
-//! The item says what EasyVox is doing (`DESIGN.md`, "Menu bar"): one 30 × 16 pt image per state
-//! ([`Glyph`]), so it never changes width, and a status at the top of the menu that names a
-//! problem and its fix. The controller works out the [`Status`] on events (a press, a release,
-//! the final text, a click on the item, a change in the app's state) and hands it to
-//! [`Tray::show`], which changes only what differs. Nothing here runs on a timer.
+//! The item says what EasyVox is doing: one 30 × 16 pt image per state ([`Glyph`]), so it never
+//! changes width, and a status at the top of the menu that names a problem and its fix. The
+//! controller works out the [`Status`] on events (a press, a release, the final text, a click on
+//! the item, a change in the app's state) and hands it to [`Tray::show`], which changes only what
+//! differs. Nothing here runs on a timer.
 
 use crate::platform;
 use crate::settings::Page;
@@ -322,9 +322,8 @@ impl Tray {
         &self.shown
     }
 
-    /// Sets the glyph's image on the status item, through `platform::set_menu_bar_image`
-    /// rather than tray-icon: tray-icon sizes an image by its pixels, capped at 22 pt, so the
-    /// 2× image (60 × 32 px) would come out 41 × 22 pt.
+    /// Sets the glyph's image on the status item, through `platform::set_menu_bar_image` (see
+    /// there for why not tray-icon).
     fn set_image(&mut self, glyph: Glyph, dark_menu_bar: bool) {
         let image = glyph.image(dark_menu_bar);
         if let Err(e) =
@@ -360,7 +359,7 @@ impl Tray {
                 items.push(Box::new(PredefinedMenuItem::separator()));
             }
             let id = format!("{MENU_FIX}{i}");
-            // Words and a thin glyph, never colour alone; the title does what the fix does.
+            // Words and a thin glyph, never color alone; the title does what the fix does.
             items.push(Box::new(MenuItem::with_id(id.clone(), format!("⚠\u{fe0e} {}", problem.title), true, None)));
             items.push(note(&problem.detail));
             items.push(Box::new(MenuItem::with_id(id, problem.action, true, None)));

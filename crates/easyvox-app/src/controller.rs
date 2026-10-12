@@ -25,9 +25,9 @@
 //! Hold right ⌥ to talk needs Input Monitoring. Turning it on asks for the permission (macOS's
 //! prompt, which also puts EasyVox in System Settings' list), and the event tap is installed
 //! once the permission is allowed: at once if it is, otherwise when a read of the permissions
-//! finds it (`recheck_permissions`: the setup and Settings windows read them every second while
-//! one is missing, and a click on the menu bar item or a press of the shortcut reads them too).
-//! The tap is only ever made after the grant, so no relaunch is needed.
+//! finds it (`recheck_permissions`: a window's `permissions::Watch`, a click on the menu bar item
+//! or a press of the shortcut). The tap is only ever made after the grant, so no relaunch is
+//! needed.
 
 use crate::config::{ConfigFile, Reload};
 use crate::history::{HistoryStore, HistoryView};
@@ -265,7 +265,7 @@ impl Controller {
     }
 
     /// What the menu bar item shows, from the dictation, the app's state and the permissions as
-    /// last read (`DESIGN.md`, "Menu bar").
+    /// last read.
     fn tray_status(&self, cx: &App) -> tray::Status {
         let (settings, status) = (cx.global::<AppSettings>(), cx.global::<AppStatus>());
         tray::Status::of(&tray::Facts {
@@ -612,7 +612,8 @@ impl Controller {
         }));
     }
 
-    /// Frees the model, on the background executor: freeing ~600 MB blocks for a moment (25–35 ms).
+    /// Frees the model, on the background executor: freeing a model blocks for a moment (25–35 ms
+    /// for the default).
     fn unload_engine(&mut self, unused_for: Duration, cx: &mut Context<Self>) {
         let Some(engine) = self.engine.clone() else { return };
         if !self.is_idle() || !engine.is_loaded() {
@@ -907,8 +908,7 @@ impl Controller {
     }
 
     /// Turns "hold right ⌥ to talk" on or off (from Settings). On, without Input Monitoring:
-    /// asks for it if it was never asked (macOS's prompt, which puts EasyVox in the list), and
-    /// the key works once it's allowed; meanwhile Settings says it's waiting. If the event tap
+    /// asks for it if it was never asked, and the key works once it's allowed. If the event tap
     /// can't be installed for another reason, it stays off and Settings shows why.
     pub fn set_hold_right_option(&mut self, on: bool, cx: &mut Context<Self>) {
         cx.global_mut::<AppSettings>().hold_right_option = on;
@@ -923,10 +923,9 @@ impl Controller {
         self.save_settings(cx);
     }
 
-    /// Puts "hold right ⌥ to talk" in force as the settings say: installs the event tap the
-    /// first time it's on with Input Monitoring allowed, and otherwise records why it can't work
-    /// yet in `AppStatus` (nothing, while it's off). Reads Input Monitoring only while the tap
-    /// waits for it. False if the tap couldn't be installed for another reason.
+    /// Puts "hold right ⌥ to talk" in force: installs the event tap once it's on and Input
+    /// Monitoring is allowed, otherwise records why not in `AppStatus`. False if the tap couldn't
+    /// be installed for another reason.
     pub fn apply_right_option(&mut self, cx: &mut Context<Self>) -> bool {
         let had_tap = self.right_option_tap;
         let problem = if !cx.global::<AppSettings>().hold_right_option || self.right_option_tap {
@@ -1076,11 +1075,9 @@ impl Controller {
         self.recheck_permissions(cx);
     }
 
-    /// Asks for Input Monitoring (from Settings, or turning right ⌥ on): the first time, macOS
-    /// shows its prompt, whose button opens System Settings at the list, and EasyVox appears in
-    /// that list, switched off. The request blocks until TCC answers, so it runs on the background
-    /// executor. The grant comes when the user turns the switch on; a window's watch, or the next
-    /// click on the menu bar item, notices it.
+    /// Asks for Input Monitoring on the background executor (it blocks until TCC answers; see
+    /// `platform::request_input_monitoring`). A window's watch or the next click on the menu bar
+    /// item notices the grant.
     pub fn request_input_monitoring(&mut self, cx: &mut Context<Self>) {
         if self.asking_input_monitoring {
             return;
@@ -1227,8 +1224,8 @@ impl Controller {
     }
 }
 
-/// A standard window, centred. The sizes callers pass are the design hand-off's: setup 560 × 540,
-/// Settings 760 × 540 and History 760 × 520 (`design/`, boards 10, 12 and 16).
+/// A standard window, centered. The sizes callers pass: setup 560 × 540, Settings 760 × 540 and
+/// History 760 × 520.
 fn window_options(title: &str, window_size: Size<Pixels>, cx: &mut App) -> WindowOptions {
     // The appearance may have changed while no window was open to notice.
     Theme::sync_system_appearance(None, cx);

@@ -1,7 +1,7 @@
-# Every build targets the macOS EasyVox requires (packaging/Info.plist, LSMinimumSystemVersion;
-# DESIGN.md, "Platform and distribution"). rustc reads this, and so do the cc and cmake crates
-# that build ggml and transcribe.cpp. Without it, rustc targets macOS 11.0 and cc targets the
-# installed SDK (27.0 with Xcode 27), so ggml could assume a newer macOS than the app runs on.
+# Every build targets the oldest macOS EasyVox runs on (packaging/Info.plist,
+# LSMinimumSystemVersion). rustc reads this, and so do the cc and cmake crates that build ggml
+# and transcribe.cpp. Without it, rustc targets macOS 11.0 and cc targets the installed SDK
+# (27.0 with Xcode 27), so ggml could assume a newer macOS than the app runs on.
 #
 # After changing it, run `cargo clean -p transcribe-cpp-sys` for each profile you build
 # (`--release`, `--profile dist`): its build script doesn't watch this variable, so cargo would

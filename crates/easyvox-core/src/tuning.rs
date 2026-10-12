@@ -2,10 +2,10 @@
 //! preview re-decodes and how much, how long dictations are cut into chunks and joined again,
 //! what counts as speech or a pause, and how the input level meter moves.
 //!
-//! The defaults here are the single source of truth: the settings file (`[advanced]`) or a
-//! benchmark overrides single fields and leaves the rest alone, so a default can change in a
-//! release. Every model gets the same values (one pipeline, no per-model cases), and a session
-//! takes the values in force when it starts ([`Engine::start_with`](crate::Engine::start_with)),
+//! The defaults live here and nowhere else: the settings file (`[advanced]`) or a benchmark
+//! overrides single fields and leaves the rest alone, so a default can change in a release.
+//! Every model gets the same values (one pipeline, no per-model cases), and a session takes the
+//! values in force when it starts ([`Engine::start_with`](crate::Engine::start_with)),
 //! so a change applies from the next recording without reloading the model.
 //!
 //! Units, the same for every field, and named by the key's ending:
@@ -121,8 +121,7 @@ tunables! {
         /// preview off (long dictations are still polished in chunks). Lower shows words sooner
         /// but wakes the GPU more often; higher is lighter, and the preview lags further behind
         /// and updates in bigger steps. At 1600, 95 % of words showed up within about 2 s of
-        /// being said; past it the saving flattens while the lag keeps growing
-        /// (`docs/model-bench.md`, "Lightness").
+        /// being said; past it the saving flattens while the lag keeps growing.
         preview_interval_ms: u32 = 1_600, 0..=10_000;
         /// When the first preview pass runs: once this much audio has followed the start of
         /// speech (see `speech_above_noise_db`). Until the preview shows words, the next passes
@@ -141,10 +140,9 @@ tunables! {
         /// pass decodes again, as context for the words after them. A pass starts there, or at
         /// the last chunk cut if that's later, so confirmed words aren't decoded over and over:
         /// the preview's GPU energy follows the audio it decodes. Higher gives the newest words
-        /// more of their sentence but makes every pass longer (2000 took about 14 % more GPU
-        /// energy than 1000, for much the same preview); lower is lighter. The final text
-        /// doesn't depend on it. 120000 decodes everything since the last cut, much as the
-        /// preview did before this setting existed.
+        /// more of their sentence but makes every pass longer (2000 costs about 14 % more GPU
+        /// energy than 1000); lower is lighter. The final text doesn't depend on it. 120000
+        /// decodes everything since the last cut.
         preview_context_ms: u32 = 1_000, 0..=120_000;
         /// Audio needed before the first preview pass, counted from the start of the recording
         /// (the pass also waits for `preview_first_ms` of speech). Lower can show the first word
@@ -162,17 +160,10 @@ tunables! {
         /// Local agreement: the longest run of words checked for such a copy.
         agreement_max_repeat_words: u32 = 5, 0..=20;
         /// Local agreement: how far from where the word timings put the end of the confirmed
-        /// words a pass's copy of them is looked for, in words per word of the copy (a longer
-        /// copy is less likely to match by chance). A pass starts before the confirmed words
-        /// (`preview_context_ms`), so it opens by decoding their end again, and its new words
-        /// start after that copy. Timings move between passes, by a word or more for a model
-        /// that only times segments (Whisper's words are spread evenly over the pass), and two
-        /// passes that start their new words at different words never agree. At 2, Whisper's
-        /// passes that confirmed nothing fell by a quarter on a real voice and by three-quarters
-        /// on clean speech, and Parakeet's preview didn't change (`docs/model-bench.md`,
-        /// "Whisper's preview"). Higher finds copies further off, but a common word may match
-        /// by chance; 0 looks only right where the timings put it, much as before this setting
-        /// existed.
+        /// words a pass's copy of them is looked for, in words per word of the copy. Timings
+        /// move between passes, by a word or more for Whisper, whose words are spread over the
+        /// pass. Higher finds copies further off, but a common word may match by chance; 0 looks
+        /// only where the timings put it.
         agreement_reach_words: u32 = 2, 0..=10;
         /// Speech gate: preview passes that still run after speech stops, so the last words are
         /// decoded with the silence after them and confirmed by two passes that agree. Then the
@@ -182,7 +173,7 @@ tunables! {
         /// Speech gate: new audio counts as speech (worth a preview pass) when a 30 ms frame of
         /// it is louder than this, relative to the loudest speech so far (-20 is 20 dB under:
         /// a tenth of its level). Higher (nearer 0) lets the preview rest in more pauses over
-        /// room noise, but may skip soft words until a louder one comes; lower errs towards
+        /// room noise, but may skip soft words until a louder one comes; lower errs toward
         /// decoding. The final text decodes everything either way.
         gate_quiet_db: f32 = -20.0, -60.0..=0.0;
         /// Speech gate: ...and louder than this. Higher ignores more background noise; lower
@@ -219,7 +210,7 @@ tunables! {
         /// on release, which grows fast (21.6 s after 9 minutes).
         chunk_ms: u32 = 30_000, 0..=600_000;
         /// Audio decoded on each side of a chunk for context, when the model times each word
-        /// (Parakeet; Whisper gets none). The context's words belong to the neighbours. Without
+        /// (Parakeet; Whisper gets none). The context's words belong to the neighbors. Without
         /// it, punctuation across a cut suffers (a sentence lost its full stop at about one cut
         /// in ten); 1 s and 2 s gave the same accuracy. Higher costs more decoding per chunk.
         chunk_context_ms: u32 = 1_000, 0..=5_000;
@@ -251,11 +242,11 @@ tunables! {
         pause_silence_dbfs: f32 = -55.0, -120.0..=0.0;
         /// Level meter: how often the overlay's level indicator can move while you hold the
         /// key, at most (66 is about 15 times a second). It only moves when the level changed
-        /// by `meter_step_db`, so in silence it doesn't redraw at all; on real speech it moved
-        /// about 7 times a second, for 0.3 % of a CPU core. Lower looks smoother but wakes the
-        /// app and redraws the overlay more often (33, 30 a second, moved it 11 times a second
-        /// for 0.43 %); higher is lighter and jerkier. 0 turns the meter off, and with it the
-        /// "can't hear you" state (for comparisons).
+        /// by `meter_step_db`, so in silence it doesn't redraw at all. On real speech it moved
+        /// about 7 times a second, for 0.3 % of a CPU core; at 33 (30 a second) it moved 11
+        /// times, for 0.43 %. Lower looks smoother but wakes the app and redraws the overlay more
+        /// often; higher is lighter and jerkier. 0 turns the meter off, and with it the "can't
+        /// hear you" state (for comparisons).
         meter_interval_ms: u32 = 66, 0..=1_000;
         /// Level meter: how fast it falls back after a loud moment (the time it takes to fall
         /// about two-thirds of the way). It rises at once. Lower follows each syllable more
@@ -267,9 +258,8 @@ tunables! {
         /// normal voice pins it at the top); higher leaves soft voices barely moving it.
         meter_range_db: f32 = 36.0, 6.0..=96.0;
         /// Level meter: the smallest change worth showing. Smaller changes aren't sent to the
-        /// overlay, so it doesn't redraw for them. 2 is a little under a point of the tallest
-        /// bar.
-        /// Lower moves more finely, for more redraws; higher moves in coarser steps.
+        /// overlay, so it doesn't redraw for them. 2 moves the tallest bar by just under one
+        /// point. Lower moves more finely, for more redraws; higher moves in coarser steps.
         meter_step_db: f32 = 2.0, 0.0..=20.0;
         /// "Can't hear you": the overlay says so once no audio has reached EasyVox for this
         /// long, which is not the same as quiet audio. That's when the microphone delivers
@@ -368,13 +358,12 @@ pub(crate) fn ms_secs(ms: u32) -> f32 {
 mod tests {
     use super::*;
 
-    /// The values the pipeline used before they moved here, in the units it used them in,
-    /// except the preview's interval and context, which the lightness sweep set
-    /// (`docs/model-bench.md`, "Lightness"; the interval was 400 ms).
+    /// The defaults, pinned in the units the code works in, so changing one takes a deliberate
+    /// edit here too.
     #[test]
     fn defaults_equal_the_old_constants() {
         let t = Tuning::default();
-        // session.rs and EngineConfig
+        // session.rs
         assert_eq!((t.preview_interval_ms, t.preview_context_ms), (1_600, 1_000));
         assert_eq!(ms_samples(t.preview_window_ms), (20.0 * SR as f32) as usize);
         assert_eq!(ms_samples(t.preview_min_audio_ms), SR * 3 / 10);
@@ -383,17 +372,17 @@ mod tests {
         // partials.rs
         assert_eq!(ms_secs(t.agreement_repeat_ms), 0.3);
         assert_eq!(t.agreement_max_repeat_words, 5);
-        // pause.rs (SETTLE_PASSES, QUIET_RATIO, SILENCE_RMS, MIN_PAUSE_FRAMES of 30 ms)
+        // pause.rs (pauses in whole 30 ms frames)
         assert_eq!(t.gate_settle_passes, 2);
-        // The levels moved to dB: -20 dB is exactly the old 0.1, and -55 dBFS (0.00178) is
-        // within 1.2 % of the old 0.0018. `pause::tests::db_defaults_decide_like_the_old_levels`
-        // checks that the gate and the pause finder decide the same on the test clips.
+        // -20 dB is exactly 0.1, and -55 dBFS (0.00178) is within 1.2 % of 0.0018, the linear
+        // levels the pipeline was tuned with. On the test clips, the gate and the pause finder
+        // decide the same with either (`pause::tests::db_defaults_decide_like_the_old_levels`).
         assert_eq!((db_to_linear(t.gate_quiet_db), db_to_linear(t.pause_quiet_db)), (0.1, 0.1));
         for level in [t.gate_silence_dbfs, t.pause_silence_dbfs] {
             assert!((db_to_linear(level) / 0.0018 - 1.0).abs() < 0.013, "{level} dBFS");
         }
         assert_eq!((t.pause_min_ms as usize).div_ceil(30), 5);
-        // chunks.rs (CONTEXT_SECS, GUARD, SLACK_SECS, MATCH_SECS, MAX_REPEAT)
+        // chunks.rs
         assert_eq!(ms_samples(t.chunk_context_ms), (1.0 * SR as f32) as usize);
         assert_eq!(ms_samples(t.chunk_guard_ms), SR / 2);
         assert_eq!(ms_secs(t.join_slack_ms), 0.3);

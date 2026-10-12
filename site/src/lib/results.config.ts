@@ -12,7 +12,7 @@ export type Tone = "default" | "offered" | "bench";
 export type ModelPin = {
   id: string; // the `model` column
   name: string; // as the page names it
-  tone: Tone; // vermilion for the default, a dark grey for the other offered model, light grey
+  tone: Tone; // vermilion: the default; dark gray: the other offered model; light gray: bench only
   tag?: string; // shown after the name
   rambleRuns: number; // energy runs on the 5-minute recording
 };

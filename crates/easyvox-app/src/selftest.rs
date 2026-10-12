@@ -1,5 +1,5 @@
 //! `--self-test` (feature `self-test`): runs the real app through scripted dictations and
-//! checks it from the inside, for a Mac nobody is looking at (screen locked, no key presses):
+//! checks it from the inside, for unattended runs (screen locked, no key presses):
 //! one with the model loaded, one right after the idle timeout freed it, and one of silence.
 //! It writes a JSON report and exits 0 through the tray's Quit item when every check passes,
 //! or 1 otherwise.
@@ -28,12 +28,8 @@
 //! the self-test draws the overlay at each redraw and animation frame it asks for, as the screen
 //! would, and its animations run as they would on screen.
 //!
-//! `--self-test --replay <wav> [--draw] [--repeat <n>] [--reduce-motion]` runs no checks: one
-//! real-time dictation of the file with the overlay up (or `n` in a row, each after the last
-//! one's close; with Reduce motion as if on), then a JSON report of what it cost the app
-//! (CPU, redraws), for measuring the overlay (`docs/model-bench.md`, "Level meter" and "Overlay
-//! animation"). `--draw` draws the overlay at each redraw it asks for, as GPUI does on screen but
-//! not while the screen is locked.
+//! `--self-test --replay <wav> [--draw] [--repeat <n>] [--reduce-motion]` runs no checks: it
+//! reports what dictating the file costs the app (see `replay`).
 
 use crate::controller::Controller;
 use crate::onboarding::{Busy, LaunchFacts, Onboarding, Problem, State, StepId};
@@ -70,10 +66,8 @@ pub struct Options {
     out: PathBuf,
     /// Temporary folder for the history database; removed at the end.
     dir: PathBuf,
-    /// `--replay <wav>`: only replay this file, and report its cost; `--draw`: and draw the
-    /// overlay at each redraw it asks for, as the screen would; `--repeat <n>`: dictate it `n`
-    /// times in a row, each after the last one's close; `--reduce-motion`: as if macOS's Reduce
-    /// motion were on.
+    /// `--replay <wav>` and its options `--draw`, `--repeat <n>` and `--reduce-motion` (see
+    /// `replay`).
     replay: Option<PathBuf>,
     draw: bool,
     repeat: u32,
@@ -330,7 +324,7 @@ async fn dictation(
             && shown.nonactivating,
         panel_json(&shown),
     );
-    // Where it opened: centred on the screen with the keyboard focus, its pill's bottom edge
+    // Where it opened: centered on the screen with the keyboard focus, its pill's bottom edge
     // `overlay_dock_gap_pt` above the Dock (or the screen's bottom edge).
     let (window, screen, gap) = cx.update(|cx| {
         let (window, screen) = controller.read(cx).overlay.panel.placement();
@@ -338,7 +332,7 @@ async fn dictation(
     });
     let pill_bottom = window.1 + f64::from(crate::overlay::PILL_BOTTOM);
     report.check(
-        "the overlay opens above the Dock, centred on the screen with the keyboard focus",
+        "the overlay opens above the Dock, centered on the screen with the keyboard focus",
         screen.is_some_and(|(x, y, w, _)| {
             (pill_bottom - (y + gap)).abs() <= 1. && ((window.0 + window.2 / 2.) - (x + w / 2.)).abs() <= 1.
         }),
@@ -528,7 +522,7 @@ fn rest_glyph(status: &tray::Status) -> tray::Glyph {
 }
 
 /// The menu bar item between dictations: one 30 × 16 pt image with a 1× and a 2× bitmap, a
-/// template, labelled for VoiceOver; and a menu that starts with the status (how to dictate, or
+/// template, labeled for VoiceOver; and a menu that starts with the status (how to dictate, or
 /// each problem with its fix), above History…, Settings… ⌘,, About EasyVox and Quit EasyVox ⌘Q.
 /// The self-test reads the permissions as they are, so either status can show; nothing is
 /// chosen in the menu.
@@ -573,7 +567,7 @@ fn menu_bar_at_rest(controller: &Entity<Controller>, report: &mut Report, cx: &m
 ///
 /// The open is watched as Core Animation draws it, every 10 ms. Popping, the pill starts small,
 /// overshoots full size by no more than the timing curve's peak, is at full size (and opaque)
-/// once the open's time is up, and keeps its centre where it is all the way.
+/// once the open's time is up, and keeps its center where it is all the way.
 async fn reduce_motion(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
     draw_each_redraw(controller, true, cx);
     let moved = |secs: Option<f64>| secs.is_some_and(|s| s > 0.);
@@ -673,7 +667,7 @@ async fn reduce_motion(controller: &Entity<Controller>, report: &mut Report, cx:
     );
 }
 
-/// The layer drawn at the same scale across and up, about its centre (to within a twentieth of
+/// The layer drawn at the same scale across and up, about its center (to within a twentieth of
 /// a point), and changing size, or not, as an animation of its scale says.
 fn scaled_in_place(m: &platform::MotionState) -> bool {
     let (x, y) = m.scale;
@@ -828,7 +822,7 @@ async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut R
     let before = cx.update(|cx| overlay_counts(controller, cx));
     let cant_hear =
         wait_for(cx, Duration::from_millis(1400), |cx| controller.read(cx).overlay.view.read(cx).cant_hear).await;
-    // Drawn as a person would see it (GPUI doesn't draw while the screen is locked).
+    // Drawn as a person would see it.
     let drawn = cx.update(|cx| draw_overlay(controller, cx));
     let (max_level, during) = cx.update(|cx| {
         let view = controller.read(cx).overlay.view.read(cx);
@@ -919,9 +913,8 @@ async fn config_live_reload(controller: &Entity<Controller>, report: &mut Report
     };
 }
 
-/// Opens Settings and History through their menu items and draws each once. GPUI doesn't
-/// draw on its own while the screen is locked, so this forced draw is what runs their render
-/// code (and would hit any render-time panic).
+/// Opens Settings and History through their menu items and draws each once: the forced draw
+/// runs their render code (and would hit any render-time panic).
 async fn windows(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
     let clicked = cx.update(|cx| {
         let tray = controller.read(cx).tray.as_ref()?;
@@ -1755,7 +1748,7 @@ async fn light_and_dark(controller: &Entity<Controller>, cx: &mut AsyncApp) -> (
         let noticed =
             wait_for(cx, Duration::from_secs(2), |cx| controller.read(cx).overlay.view.read(cx).redraws_asked > asked)
                 .await;
-        // GPUI doesn't draw while the screen is locked, so draw it here, as the next frame would.
+        // Draw it here, as the next frame would.
         let drawn = cx.update(|cx| draw_overlay(controller, cx));
         let drawn_dark = cx.update(|cx| controller.read(cx).overlay.view.read(cx).drawn_dark);
         let ok = set.is_ok() && noticed.is_some() && drawn && drawn_dark == Some(dark);
@@ -1767,7 +1760,7 @@ async fn light_and_dark(controller: &Entity<Controller>, cx: &mut AsyncApp) -> (
     (ok, json!({"system_dark": system_dark, "steps": steps}))
 }
 
-/// Draws the overlay now (GPUI doesn't draw while the screen is locked). False if it failed.
+/// Draws the overlay now, as the screen would. False if it failed.
 fn draw_overlay(controller: &Entity<Controller>, cx: &mut App) -> bool {
     let window = controller.read(cx).overlay.window;
     window.update(cx, |_, window, cx| window.draw(cx).clear(cx)).is_ok()
@@ -1779,8 +1772,8 @@ fn overlay_counts(controller: &Entity<Controller>, cx: &App) -> (u32, u32, u32, 
     (view.levels, view.redraws_asked, view.renders, view.frames_asked)
 }
 
-/// Draws the overlay at each redraw and animation frame it asks for, as the screen would (GPUI
-/// doesn't draw while the screen is locked), or stops.
+/// Draws the overlay at each redraw and animation frame it asks for, as the screen would, or
+/// stops.
 fn draw_each_redraw(controller: &Entity<Controller>, on: bool, cx: &mut AsyncApp) {
     cx.update(|cx| {
         let overlay = &controller.read(cx).overlay;
@@ -1803,9 +1796,10 @@ fn motion_json(m: &platform::MotionState) -> Value {
 /// it (`docs/model-bench.md`, "Level meter" and "Overlay animation"). Whether the meter and the
 /// animations are on comes from the settings file (`meter_interval_ms = 0` turns the meter off,
 /// `overlay_words_ms = 0` and `overlay_glide_ms = 0` the pill's animations). Reduce motion is
-/// taken as off, or as on with `--reduce-motion`. With `--repeat <n>`, it dictates the file `n`
-/// times, each after the last one's close, and reports them together, closes included: for
-/// measuring the open and close.
+/// taken as off, or as on with `--reduce-motion`. With `--draw`, it draws the overlay at each
+/// redraw it asks for, as the screen would. With `--repeat <n>`, it dictates the file `n` times,
+/// each after the last one's close, and reports them together, closes included: for measuring
+/// the open and close.
 async fn replay(controller: &Entity<Controller>, options: &Options, wav: &Path, cx: &mut AsyncApp) {
     let unix_ms = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
     let waited = wait_for(cx, Duration::from_secs(120), |cx| {

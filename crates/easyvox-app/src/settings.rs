@@ -1,5 +1,5 @@
-//! The Settings window, in the design's look (`design/`, boards 12–15) with EasyVox's own four
-//! pages: an inset sidebar with each page's icon, and on the right the page as grouped forms.
+//! The Settings window, with four pages: an inset sidebar with each page's icon, and on the
+//! right the page as grouped forms.
 //! Every change applies at once.
 //!
 //! - **General**: the shortcut (a keycap and Change…, see [`ShortcutRecorder`]), Hold right ⌥ to
@@ -10,11 +10,8 @@
 //! - **About** (`about.rs`).
 //!
 //! The pages and their groups are plain elements, drawn from the app's state at each render, so
-//! the window needs no state of its own beyond the page shown, the shortcut recorder, and its
-//! watch on the permissions (`permissions::Watch`, as in setup): it reads them when it opens,
-//! whenever it comes forward, and every second while one is missing, so a switch turned on in
-//! System Settings shows here without a relaunch. The timer stops once all three are allowed,
-//! and goes with the window.
+//! the window needs no state of its own beyond the page shown, the shortcut recorder, and the
+//! `permissions::Watch` it keeps on the permissions it shows.
 
 use crate::brand::{self, Colors};
 use crate::controller;
@@ -208,7 +205,7 @@ impl SettingsView {
             Err(problem) => brand::problem(c, problem, brand::TEXT_SMALL).into_any_element(),
         };
         let keep_loaded = format!(
-            "Off: after {unload_after} without dictation, EasyVox frees the model's ~600 MB. Your next \
+            "Off: after {unload_after} without dictation, EasyVox frees the model's memory. Your next \
              dictation still starts at once and loses nothing while it loads again (about 0.15 s). On: it \
              stays in memory."
         );
@@ -260,8 +257,8 @@ impl SettingsView {
             .mx(px(12.)),
             (None, []) => brand::footnote(
                 c,
-                "Every setting is in this file, including advanced ones this window doesn't show (docs/settings-reference.md \
-                 lists them). Edits to it apply as soon as you save, and changes here are written to it.",
+                "Every setting is in this file, including advanced ones this window doesn't show (see \
+                 easyvox.dev/docs/settings). Edits to it apply as soon as you save, and changes here are written to it.",
             ),
             (None, warnings) => {
                 brand::problem(c, format!("Some of this file was ignored: {}", warnings.join(" · ")), brand::TEXT_SMALL)

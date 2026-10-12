@@ -4,10 +4,10 @@
     python3 -I scripts/bench/extract.py --s1 DIR --s2 DIR [--s3 DIR] [--out docs/bench]
                                         [--testdata testdata] [--recordings recordings]
 
---s1 and --s2 are the two scratch folders the runs of 9-10 October were made in, and --s3 the
-folder of the 11 October candidate runs (docs/bench/README.md lists what each one holds). Leave
---s3 out and the 11 October rows are left out. --recordings is only read for the loudness of the private read-aloud clip, to
-place the start of its speech; leave it out and those few onsets stay empty.
+--s1 and --s2 are the folders of the runs of 9-10 October, and --s3 the folder of the 11 October
+candidate runs; the raw runs aren't in the repo. Leave --s3 out and the 11 October rows are left
+out. --recordings is only read for the loudness of the private read-aloud clip, to place the
+start of its speech; leave it out and those few onsets stay empty.
 
 The raw files hold text decoded from private recordings: final_text in the session JSON, and
 preview, word and pass lines on stderr. This script reads numbers out of them and writes only
@@ -155,7 +155,7 @@ def clip_of(d):
 
 
 def pct_rank(v, q):
-    """The quantile the scratch analysis used: sorted(v)[round(q * (n - 1))]."""
+    """The quantile docs/model-bench.md's tables use: sorted(v)[round(q * (n - 1))]."""
     v = sorted(v)
     return v[min(len(v) - 1, int(q * (len(v) - 1) + 0.5))] if v else float("nan")
 
@@ -256,7 +256,7 @@ def timeline_transcribe(path):
 
 
 def preview_lags(err_path, S):
-    """The scratch lag.py method. For each timeline word, the first preview update whose last three
+    """lag.py's method. For each timeline word, the first preview update whose last three
     words match the timeline at that word (2 of 3 at least, near the expected place), minus the
     word's end. Returns ([(word end s, lag s)], unmatched updates, timeline words)."""
     toks = [t for t, _, _ in S]
@@ -310,7 +310,8 @@ def cut_lines(path):
 
 
 def pass_lines(path):
-    """The scratch bench's PASS and CHUNK lines (numbers only), and the cpu-time stamps."""
+    """PASS and CHUNK lines (numbers only), printed by an instrumented bench build that isn't in
+    the repo, and the cpu-time stamps."""
     passes, stamps = [], []
     for line in open(path, errors="replace"):
         f = line.split()
@@ -337,7 +338,7 @@ def pass_lines(path):
 
 
 def cpu_per_minute_stamps(stamps, end_t):
-    """whisper/analyse.py: % of one core in each minute, interpolating the cpu-time stamps."""
+    """% of one core in each minute, interpolating the cpu-time stamps."""
     def at(t):
         for (ta, ca), (tb, cb) in zip(stamps, stamps[1:]):
             if ta <= t <= tb:
@@ -480,7 +481,7 @@ def med(v):
 
 
 def energy_meta(samples, meta, bench, ps_path):
-    """docs/model-bench.md "Lightness", "How it was measured" (the scratch energy.py and hybrid.py).
+    """docs/model-bench.md "Lightness", "How it was measured" (as energy.py and hybrid.py do it).
     Session = the replay's start to its final text; idle = the minute before and after the bench.
     j_per_min, w_added and w_cpu take the CPU rail robustly (medians of 5 s blocks); GPU, Neural
     Engine and DRAM subtract the idle mean. j_per_min_plain subtracts the idle mean from every rail."""
@@ -519,7 +520,7 @@ def energy_meta(samples, meta, bench, ps_path):
 
 
 def energy_app(samples, run):
-    """The level meter's runs (the scratch abtools/analyse.py): the session is the self-test's
+    """The level meter's runs: the session is the self-test's
     start_unix_ms..end_unix_ms; idle is the rest of the trace, 8 s clear of the session."""
     start, end = run["start_unix_ms"] / 1000, run["end_unix_ms"] / 1000
     dur = end - start
@@ -978,8 +979,8 @@ def trace_rows(trace_id, gpu=None, other=None, samples=None):
 
 
 def cpu_minutes_ps(samples):
-    """onepipe/tools/long_summary.py: per-2 s deltas of the process's CPU time, averaged per minute
-    of the sampler (which starts with the model load)."""
+    """Per-2 s deltas of the process's CPU time, averaged per minute of the sampler (which starts
+    with the model load)."""
     s = ps_samples(samples)
     by = {}
     for i in range(1, len(s)):
@@ -1079,9 +1080,9 @@ def write_csv(out_dir, name, cols, rows):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--s1", required=True, help="scratch folder of the 9 Oct evening to 10 Oct runs")
-    ap.add_argument("--s2", required=True, help="scratch folder of the 9 Oct daytime runs")
-    ap.add_argument("--s3", help="scratch folder of the 11 Oct candidate runs (optional)")
+    ap.add_argument("--s1", required=True, help="folder of the 9 Oct evening to 10 Oct runs")
+    ap.add_argument("--s2", required=True, help="folder of the 9 Oct daytime runs")
+    ap.add_argument("--s3", help="folder of the 11 Oct candidate runs (optional)")
     here = os.path.dirname(os.path.abspath(__file__))
     repo = os.path.dirname(os.path.dirname(here))
     ap.add_argument("--out", default=os.path.join(repo, "docs/bench"))
@@ -1162,7 +1163,7 @@ def main():
         err = run.get("err")
         if not err or not os.path.exists(err):
             err = None
-        # Per-pass decode times (the scratch bench's PASS and CHUNK lines).
+        # Per-pass decode times (the instrumented build's PASS and CHUNK lines).
         if err:
             ps_, stamps = pass_lines(err)
             for x in ps_:

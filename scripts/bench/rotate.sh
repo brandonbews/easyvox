@@ -4,8 +4,8 @@
 #
 # CONFIGS: one config per line, fields separated by "|":
 #   NAME|BIN|WAV|VAR=value VAR=value|bench args
-# Blank lines and lines starting with # are skipped. Paths must not contain "|" or spaces
-# in the env/args fields (the WAV and BIN fields may contain spaces).
+# Blank lines and lines starting with # are skipped. No field may contain "|". The env and args
+# fields can't contain spaces; BIN and WAV can.
 # Labels are NAME-rN; an existing label is skipped, so a stopped schedule can be resumed.
 set -u
 KIT=$(cd "$(dirname "$0")" && pwd)

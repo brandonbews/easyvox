@@ -3,7 +3,7 @@
 
 # The licenses we accept, in order of preference: for a crate under "MIT OR Apache-2.0", the
 # notices quote the first that applies. A crate under none of these fails the run (--fail).
-# There's no GPL, LGPL or AGPL in the app (DESIGN.md, "Licenses").
+# GPL, LGPL and AGPL are left out on purpose, so a crate under one of them fails the run.
 accepted = [
   "MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC",
   "Zlib", "0BSD", "Unicode-3.0", "Unlicense", "CC0-1.0", "BSL-1.0", "MPL-2.0", "bzip2-1.0.6",

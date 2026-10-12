@@ -123,8 +123,8 @@ Each key, at its default, with its unit, its range and what raising or lowering 
 # meter from your next dictation, the same for every model, and the overlay's animations from
 # the next time it opens.
 
-# The speech model: the id of one the app offers (`scripts/fetch-model.sh --list` marks them
-# default or alternative). Settings → Models downloads it, and the next dictation uses it.
+# The speech model's id: "parakeet-tdt-0.6b-v2-q5_k_m-gguf" (the default) or
+# "whisper-base.en-q8_0-gguf". Settings › Models downloads it, and the next dictation uses it.
 model = "parakeet-tdt-0.6b-v2-q5_k_m-gguf"
 
 # The push-to-talk shortcut: hold it and speak, let go to paste. Modifiers (ctrl, alt, shift,
@@ -144,10 +144,10 @@ keep_model_loaded = false
 # chunks, what counts as speech or a pause, and the overlay's level meter.
 
 # How long EasyVox keeps the speech model in memory after your last dictation, unless
-# "Keep model loaded" is on. Freeing it takes the app from about 670 MB to about
-# 90 MB, and the next dictation still records at once while the model loads again
-# (about 0.15 s). Lower frees the memory sooner but reloads more often; higher keeps
-# it ready longer.
+# "Keep model loaded" is on. With the default model, freeing it takes the app from
+# about 670 MB to about 90 MB, and the next dictation still records at once while the
+# model loads again (about 0.15 s). Lower frees the memory sooner but reloads more
+# often; higher keeps it ready longer.
 # In seconds, from 1 to 86400.
 unload_after_secs = 600
 
@@ -162,26 +162,24 @@ overlay_hide_after_final_ms = 600
 # In milliseconds, from 500 to 30000.
 overlay_hide_after_notice_ms = 4000
 
-# The most of the transcript the overlay lays out. The pill shows the end of it, as
-# much as fits, and scrolls as words come so the newest stay in view; this caps the
-# text kept out of sight past its left edge, where it's cut. Lower draws a little less
-# each frame, but under about 120 the cut (an "…") can come into view; higher costs
-# more to lay out for nothing you'd see.
+# How many characters of the transcript the overlay lays out. The pill shows the end,
+# scrolled so the newest words stay in view; text further left is cut. Lower draws a
+# little less each frame, but under about 120 the cut (an "…") can come into view;
+# higher costs more to lay out for nothing you'd see.
 # In characters, from 10 to 500.
 overlay_max_chars = 200
 
 # How far above the Dock the overlay sits, in points, from the top of the Dock to the
 # bottom of the pill; above the bottom of the screen when the Dock is hidden or on a
-# side. It goes on the screen with the window you're typing in, centred. Higher keeps it
+# side. It goes on the screen with the window you're typing in, centered. Higher keeps it
 # further from the Dock; lower, closer to the bottom of the screen.
 # In points, from 0 to 400.
 overlay_dock_gap_pt = 24
 
 # How long the overlay takes to pop open when you press the shortcut: it fades in as
-# it grows from `overlay_shrink_pct` smaller to full size, just past it and back. It
-# shows at once and never waits for the model; this is only how it appears. Core
-# Animation runs it, so it costs no redraws. Higher is gentler; lower is snappier. 0
-# shows it at once.
+# it grows from `overlay_shrink_pct` smaller to full size, overshooting slightly. It
+# never waits for the model. Core Animation runs it, so it costs no redraws. Higher is
+# gentler; lower is snappier. 0 shows it at once.
 # In milliseconds, from 0 to 1000.
 overlay_open_ms = 200
 
@@ -241,8 +239,7 @@ menubar_pasted_ms = 1000
 # preview off (long dictations are still polished in chunks). Lower shows words sooner
 # but wakes the GPU more often; higher is lighter, and the preview lags further behind
 # and updates in bigger steps. At 1600, 95 % of words showed up within about 2 s of
-# being said; past it the saving flattens while the lag keeps growing
-# (`docs/model-bench.md`, "Lightness").
+# being said; past it the saving flattens while the lag keeps growing.
 # In milliseconds, from 0 to 10000.
 preview_interval_ms = 1600
 
@@ -267,10 +264,9 @@ preview_window_ms = 20000
 # pass decodes again, as context for the words after them. A pass starts there, or at
 # the last chunk cut if that's later, so confirmed words aren't decoded over and over:
 # the preview's GPU energy follows the audio it decodes. Higher gives the newest words
-# more of their sentence but makes every pass longer (2000 took about 14 % more GPU
-# energy than 1000, for much the same preview); lower is lighter. The final text
-# doesn't depend on it. 120000 decodes everything since the last cut, much as the
-# preview did before this setting existed.
+# more of their sentence but makes every pass longer (2000 costs about 14 % more GPU
+# energy than 1000); lower is lighter. The final text doesn't depend on it. 120000
+# decodes everything since the last cut.
 # In milliseconds, from 0 to 120000.
 preview_context_ms = 1000
 
@@ -298,17 +294,10 @@ agreement_repeat_ms = 300
 agreement_max_repeat_words = 5
 
 # Local agreement: how far from where the word timings put the end of the confirmed
-# words a pass's copy of them is looked for, in words per word of the copy (a longer
-# copy is less likely to match by chance). A pass starts before the confirmed words
-# (`preview_context_ms`), so it opens by decoding their end again, and its new words
-# start after that copy. Timings move between passes, by a word or more for a model
-# that only times segments (Whisper's words are spread evenly over the pass), and two
-# passes that start their new words at different words never agree. At 2, Whisper's
-# passes that confirmed nothing fell by a quarter on a real voice and by three-quarters
-# on clean speech, and Parakeet's preview didn't change (`docs/model-bench.md`,
-# "Whisper's preview"). Higher finds copies further off, but a common word may match
-# by chance; 0 looks only right where the timings put it, much as before this setting
-# existed.
+# words a pass's copy of them is looked for, in words per word of the copy. Timings
+# move between passes, by a word or more for Whisper, whose words are spread over the
+# pass. Higher finds copies further off, but a common word may match by chance; 0 looks
+# only where the timings put it.
 # In words, from 0 to 10.
 agreement_reach_words = 2
 
@@ -322,7 +311,7 @@ gate_settle_passes = 2
 # Speech gate: new audio counts as speech (worth a preview pass) when a 30 ms frame of
 # it is louder than this, relative to the loudest speech so far (-20 is 20 dB under:
 # a tenth of its level). Higher (nearer 0) lets the preview rest in more pauses over
-# room noise, but may skip soft words until a louder one comes; lower errs towards
+# room noise, but may skip soft words until a louder one comes; lower errs toward
 # decoding. The final text decodes everything either way.
 # In dB (relative to another level), from -60 to 0.
 gate_quiet_db = -20
@@ -371,7 +360,7 @@ speech_min_ms = 120
 chunk_ms = 30000
 
 # Audio decoded on each side of a chunk for context, when the model times each word
-# (Parakeet; Whisper gets none). The context's words belong to the neighbours. Without
+# (Parakeet; Whisper gets none). The context's words belong to the neighbors. Without
 # it, punctuation across a cut suffers (a sentence lost its full stop at about one cut
 # in ten); 1 s and 2 s gave the same accuracy. Higher costs more decoding per chunk.
 # In milliseconds, from 0 to 5000.
@@ -419,11 +408,11 @@ pause_silence_dbfs = -55
 
 # Level meter: how often the overlay's level indicator can move while you hold the
 # key, at most (66 is about 15 times a second). It only moves when the level changed
-# by `meter_step_db`, so in silence it doesn't redraw at all; on real speech it moved
-# about 7 times a second, for 0.3 % of a CPU core. Lower looks smoother but wakes the
-# app and redraws the overlay more often (33, 30 a second, moved it 11 times a second
-# for 0.43 %); higher is lighter and jerkier. 0 turns the meter off, and with it the
-# "can't hear you" state (for comparisons).
+# by `meter_step_db`, so in silence it doesn't redraw at all. On real speech it moved
+# about 7 times a second, for 0.3 % of a CPU core; at 33 (30 a second) it moved 11
+# times, for 0.43 %. Lower looks smoother but wakes the app and redraws the overlay more
+# often; higher is lighter and jerkier. 0 turns the meter off, and with it the "can't
+# hear you" state (for comparisons).
 # In milliseconds, from 0 to 1000.
 meter_interval_ms = 66
 
@@ -441,9 +430,8 @@ meter_release_ms = 150
 meter_range_db = 36
 
 # Level meter: the smallest change worth showing. Smaller changes aren't sent to the
-# overlay, so it doesn't redraw for them. 2 is a little under a point of the tallest
-# bar.
-# Lower moves more finely, for more redraws; higher moves in coarser steps.
+# overlay, so it doesn't redraw for them. 2 moves the tallest bar by just under one
+# point. Lower moves more finely, for more redraws; higher moves in coarser steps.
 # In dB (relative to another level), from 0 to 20.
 meter_step_db = 2
 

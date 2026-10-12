@@ -1,22 +1,18 @@
 //! The onboarding window ("Set Up EasyVox"): the four steps of `onboarding.rs`, each with where
-//! it stands and its buttons, and under the model step the same row Settings → Models shows
+//! it stands and its buttons, and under the model step the same row Settings › Models shows
 //! (`model_row.rs`), with its download, progress, Cancel and Try again. It opens at launch when a
-//! required step is missing, and from Settings → Permissions.
+//! required step is missing, and from Settings › Permissions.
 //!
-//! It's the design's setup (`design/`, boards 10–11) as a checklist: the steps can be done in any
-//! order and the download runs while you answer the prompts, so it stays one page. The header has
-//! the app icon and the design's voice; the steps are rows of one group, the step to do next with
-//! a vermilion number and the only vermilion button, a done step with a tick, a problem in words
-//! with a thin warning glyph; the footer recaps where things stand.
+//! It's a checklist on one page: the download runs while you answer the prompts. The header has
+//! the app icon and the design's wording. Each step is a row: the next one has a vermilion number
+//! and the only vermilion button, a done one a tick, a problem a warning glyph and words. The
+//! footer shows progress.
 //!
 //! It only ever asks: the Microphone and Accessibility prompts come up when their button is
 //! clicked, and nothing here opens the microphone.
 //!
-//! The window keeps a watch on the two permissions (`permissions::Watch`, shared with Settings):
-//! it reads them when it opens, whenever it's brought forward, and every second while one is
-//! missing, so a switch turned on in System Settings shows here without a relaunch; the timer
-//! stops once both are allowed, and goes with the window. The download and the engine come from
-//! `AppStatus`, and the controller redraws the window when they change.
+//! The window keeps a `permissions::Watch` on the permissions it shows. The download and the
+//! engine come from `AppStatus`, and the controller redraws the window when they change.
 
 use crate::brand::{self, Colors};
 use crate::controller;
@@ -130,8 +126,8 @@ impl Render for OnboardingView {
             )
             .child(div().mt(px(4.)).max_w(px(456.)).text_center().line_height(px(18.)).text_color(rgb(c.ink2)).child(
                 format!(
-                    "Hold {} in any app, talk, and let go to paste. Four things first, in any order; then \
-                     everything runs on this Mac.",
+                    "Hold {} in any app, talk, and let go to paste. Four steps first; then everything runs \
+                     on this Mac.",
                     shortcut_name(cx)
                 ),
             ));
@@ -191,7 +187,7 @@ fn step_row(
             .text_size(brand::TEXT_KEY)
             .child(number.to_string()),
     });
-    // A problem's words are in the text colour, next to the warning glyph. The model row says
+    // A problem's words are in the text color, next to the warning glyph. The model row says
     // what went wrong with a download itself; this step's words say what to do.
     let words = match step.state {
         State::Problem(_) => c.ink,

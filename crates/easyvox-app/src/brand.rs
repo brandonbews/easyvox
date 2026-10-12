@@ -1,19 +1,18 @@
-//! The EasyVox brand in the app: the colour tokens from the design hand-off
-//! (`design/tokens.json`), the GPUI Kit theme built on them, and the brand's images (`assets/brand/`).
-//! `DESIGN.md`, "Brand", says where each one shows.
+//! The EasyVox brand in the app: the color tokens from `design/tokens.json`, the GPUI Kit theme
+//! built on them, and the brand's images (`assets/brand/`).
 //!
-//! - **Colours** ([`Colors`], one per appearance). Vermilion is the only brand colour: the wave,
+//! - **Colors** ([`Colors`], one per appearance). Vermilion is the only brand color: the wave,
 //!   switches, focus rings, the listening state and the primary button. On light, `accent` is for
 //!   graphics only (3.7:1 on white); text in vermilion uses `accent_text` (4.6:1).
 //! - **The theme.** GPUI Kit's own light and dark themes with the brand's keys on top
 //!   ([`install_theme`]): the accent, and the design's paper and ink for the windows. Most of its
-//!   neutral greys stay. Every `Theme::sync_system_appearance` call then picks the branded pair,
+//!   neutral grays stay. Every `Theme::sync_system_appearance` call then picks the branded pair,
 //!   so no window has to know.
-//! - **Window parts** the three windows share (`design/`, boards 10–17): grouped forms ([`group`],
-//!   [`row`]), section titles and footnotes, keycaps, pill buttons and thin glyphs.
+//! - **Window parts** the three windows share: grouped forms ([`group`], [`row`]), section titles
+//!   and footnotes, keycaps, pill buttons and thin glyphs.
 //! - **Images**, served by [`Assets`] next to GPUI Kit's icons: the app icon at 128 and 256 px,
-//!   the mark and the knot as SVG. GPUI's `svg()` paints an SVG as a one-colour mask (in the text
-//!   colour), so `KNOT` and `MARK` are drawn that way; the two-tone mark is an `img()`, one file per
+//!   the mark and the knot as SVG. GPUI's `svg()` paints an SVG as a one-color mask (in the text
+//!   color), so `KNOT` and `MARK` are drawn that way; the two-tone mark is an `img()`, one file per
 //!   appearance. The menu bar's glyphs live in `assets/brand/menubar/` and go to the status item
 //!   through `tray.rs`, not through GPUI.
 
@@ -27,7 +26,7 @@ use gpui_kit::{
 use std::borrow::Cow;
 use std::rc::Rc;
 
-/// The brand's colours in one appearance, as `0xRRGGBB`, or `0xRRGGBBAA` where what's behind
+/// The brand's colors in one appearance, as `0xRRGGBB`, or `0xRRGGBBAA` where what's behind
 /// shows through. Names follow `design/tokens.json`. A whole palette: not every window reads every
 /// token.
 #[allow(dead_code)]
@@ -58,10 +57,10 @@ pub struct Colors {
     pub pill_fill: u32,
     pub pill_text: u32,
     pub pill_text2: u32,
-    /// The windows' grouped forms (boards 10–17): a group's fill and outline, and the hairline
-    /// between its rows. On light the window is paper too, so a group is paper with an outline,
-    /// which keeps secondary text and links on paper (vermilion text is 4.2:1 on `surface`). On
-    /// dark a group is `surface`, and needs no outline.
+    /// The windows' grouped forms: a group's fill and outline, and the hairline between its rows.
+    /// On light the window is paper too, so a group is paper with an outline, which keeps
+    /// secondary text and links on paper (vermilion text is 4.2:1 on `surface`). On dark a group
+    /// is `surface`, and needs no outline.
     pub group: u32,
     pub group_border: u32,
     pub hairline: u32,
@@ -139,13 +138,13 @@ const DARK_SWITCH_OFF: u32 = 0x5a5a5e;
 const BUTTON_HOVER: u32 = 0xc6341e;
 const BUTTON_PRESSED: u32 = 0xb02e1a;
 
-/// The brand's colours for `appearance`.
+/// The brand's colors for `appearance`.
 #[allow(dead_code)]
 pub fn colors(appearance: WindowAppearance) -> &'static Colors {
     if is_dark(appearance) { &DARK } else { &LIGHT }
 }
 
-/// The brand's colours for the theme in use: what a window draws with, in step with GPUI Kit's
+/// The brand's colors for the theme in use: what a window draws with, in step with GPUI Kit's
 /// controls.
 pub fn current(cx: &App) -> &'static Colors {
     if cx.theme().is_dark() { &DARK } else { &LIGHT }
@@ -180,12 +179,12 @@ pub fn install_theme(cx: &mut App) {
 /// - **focus rings**: the accent; **links**: `accent_text`;
 /// - **danger** (error text, a destructive button): `destructive_text`;
 /// - **the windows**: the background is `paper` (`#FFFFFF`, `#1C1C1E`) in place of GPUI Kit's
-///   `#0a0a0a` in dark; text and secondary text are `ink` and `ink2`, the greys the design pairs
+///   `#0a0a0a` in dark; text and secondary text are `ink` and `ink2`, the grays the design pairs
 ///   with paper (4.5:1 or better on paper and on a group, see the tests); borders are the
 ///   hairline; a switch's thumb is white, as on macOS;
 /// - **dark only**, the few keys that vanish on the lighter background ([`DARK_INPUT`] and on).
 ///
-/// Nothing else changes: GPUI Kit's other greys, its text selection and the menus' highlight
+/// Nothing else changes: GPUI Kit's other grays, its text selection and the menus' highlight
 /// (the system's) stay.
 fn branded(stock: &ThemeConfig, name: &str, c: &Colors) -> ThemeConfig {
     let hex = |rgb: u32| Some(SharedString::from(format!("#{rgb:06x}")));
@@ -225,7 +224,7 @@ fn branded(stock: &ThemeConfig, name: &str, c: &Colors) -> ThemeConfig {
 
 // ───────────────────────── Window parts ─────────────────────────
 //
-// Sizes are the boards' (`design/mockups/html/1*.html`) and `tokens.json → type.app`, in points.
+// Sizes in points, from `design/tokens.json` (`type.app`) where it has them.
 
 /// Body text in the windows.
 pub const TEXT: Pixels = px(13.);
@@ -278,8 +277,8 @@ pub fn line(c: &Colors, text: impl Into<SharedString>) -> AnyElement {
     div().text_size(TEXT_SMALL).line_height(px(15.)).text_color(rgb(c.ink2)).child(text.into()).into_any_element()
 }
 
-/// A line that reports a problem: a thin warning glyph and the words, in the text colour, never
-/// in colour alone (the brand's rule for errors).
+/// A line that reports a problem: a thin warning glyph and the words, in the text color, never
+/// in color alone (the brand's rule for errors).
 pub fn problem(c: &Colors, text: impl Into<SharedString>, size: Pixels) -> Div {
     h_flex().items_start().gap_1p5().child(glyph(GLYPH_WARNING, size + px(2.), c.ink).mt(px(1.))).child(
         div().flex_1().min_w_0().text_size(size).line_height(size + px(4.)).text_color(rgb(c.ink)).child(text.into()),
@@ -322,7 +321,7 @@ pub fn primary(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Butt
     Button::new(id).small().primary().rounded(px(12.)).px_3().label(label)
 }
 
-/// A thin one-colour glyph (an SVG in `assets/brand/`), `size` square.
+/// A thin one-color glyph (an SVG in `assets/brand/`), `size` square.
 pub fn glyph(path: &'static str, size: Pixels, color: u32) -> Svg {
     svg().path(path).flex_none().size(size).text_color(rgb(color))
 }
@@ -332,28 +331,28 @@ pub fn glyph(path: &'static str, size: Pixels, color: u32) -> Svg {
 /// The app icon (`design/assets/app-icon`, Default appearance), for a header or About.
 pub const ICON_128: &str = "brand/icon-128.png";
 pub const ICON_256: &str = "brand/icon-256.png";
-/// The full mark in two colours, for a light and a dark background (`img()`).
+/// The full mark in two colors, for a light and a dark background (`img()`).
 #[allow(dead_code)]
 pub const MARK_ON_LIGHT: &str = "brand/mark-on-light.svg";
 #[allow(dead_code)]
 pub const MARK_ON_DARK: &str = "brand/mark-on-dark.svg";
-/// The full mark and the knot alone (the compact mark, for 14–24 pt) in one colour: `svg()`
-/// paints them in the text colour.
+/// The full mark and the knot alone (the compact mark, for 14–24 pt) in one color: `svg()`
+/// paints them in the text color.
 #[allow(dead_code)]
 pub const MARK: &str = "brand/mark.svg";
 pub const KNOT: &str = "brand/knot.svg";
 
-/// The overlay pill's glyphs (`design/`, board 08): 20 pt, a 1.5 pt stroke with round caps, in
-/// one colour (`svg()` paints them in the text colour).
+/// The overlay pill's glyphs: 20 pt, a 1.5 pt stroke with round caps, in one color (`svg()`
+/// paints them in the text color).
 pub const GLYPH_WARNING: &str = "brand/pill/warning.svg";
 pub const GLYPH_NO_MICROPHONE: &str = "brand/pill/no-microphone.svg";
 pub const GLYPH_INFO: &str = "brand/pill/info.svg";
 pub const GLYPH_PASTED: &str = "brand/pill/pasted.svg";
 pub const GLYPH_COPIED: &str = "brand/pill/copied.svg";
 
-/// The Settings sidebar's page icons, and the thin "allowed" glyph: 16 pt, a 1.4 pt stroke
-/// (boards 12–15). General and About are the design's; Models (a wave) and Permissions (a shield)
-/// are drawn the same way, for pages the design doesn't have.
+/// The Settings sidebar's page icons, and the thin "allowed" glyph: 16 pt, a 1.4 pt stroke.
+/// General and About are the design's; Models (a wave) and Permissions (a shield) are drawn the
+/// same way, for pages the design doesn't have.
 pub const ICON_GENERAL: &str = "brand/settings/general.svg";
 pub const ICON_MODELS: &str = "brand/settings/models.svg";
 pub const ICON_PERMISSIONS: &str = "brand/settings/permissions.svg";
@@ -403,7 +402,7 @@ mod tests {
     use super::{Assets, BUTTON_HOVER, BUTTON_PRESSED, DARK, FILES, LIGHT};
     use gpui_kit::AssetSource as _;
 
-    /// WCAG 2 contrast ratio of two opaque `0xRRGGBB` colours.
+    /// WCAG 2 contrast ratio of two opaque `0xRRGGBB` colors.
     fn contrast(a: u32, b: u32) -> f64 {
         let luminance = |rgb: u32| {
             let channel = |shift: u32| {
@@ -454,7 +453,7 @@ mod tests {
     #[test]
     fn primary_buttons_are_the_same_vermilion_in_both_appearances() {
         assert_eq!((LIGHT.button_fill, LIGHT.button_text), (DARK.button_fill, DARK.button_text));
-        // In dark, the accent is light enough for text, so it's the text colour too.
+        // In dark, the accent is light enough for text, so it's the text color too.
         assert_eq!(DARK.accent, DARK.accent_text);
     }
 }

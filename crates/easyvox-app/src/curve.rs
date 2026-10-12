@@ -1,8 +1,7 @@
-//! The overlay's timing curves (`DESIGN.md`, "Overlay animation"): how far along an animation
-//! is (y) at each share of its time (x), as the control points `[x1, y1, x2, y2]` of a cubic
-//! Bézier from (0, 0) to (1, 1), like CSS's `cubic-bezier()`. GPUI's frames read them for the
-//! words and the glide, and the panel samples them into Core Animation keyframes for the open
-//! and close.
+//! The overlay's timing curves: how far along an animation is (y) at each share of its time
+//! (x), as the control points `[x1, y1, x2, y2]` of a cubic Bézier from (0, 0) to (1, 1), like
+//! CSS's `cubic-bezier()`. GPUI's frames read them for the words and the glide, and the panel
+//! samples them into Core Animation keyframes for the open and close.
 
 /// A cubic Bézier timing curve's two middle control points, `[x1, y1, x2, y2]`.
 pub type Curve = [f32; 4];
@@ -19,9 +18,8 @@ pub const FADE_IN: Curve = [0.25, 1., 0.5, 1.];
 pub const EASE_IN: Curve = [0.42, 0., 1., 1.];
 /// New words fading in, the pill gliding and the meter's bars easing: CSS's `ease-out`. It
 /// moves at once and slows steadily, a ninth of the way at most in a frame of a 250 ms glide at
-/// 60 frames a second. (A cubic ease-out took half of a 150 ms glide in its first frame at 30 a
-/// second, which read as a jump; CSS's `ease`, softer still, starts so slowly that new words
-/// stayed cut off at the pill's edge while it caught up.)
+/// 60 frames a second. (A cubic ease-out jumps in its first frame; CSS's `ease` starts so slowly
+/// that new words sit cut off at the pill's edge.)
 pub const EASE_OUT: Curve = [0., 0., 0.58, 1.];
 
 /// How far along `curve` an animation is at `t`, its share of the time (0 to 1): the curve's y

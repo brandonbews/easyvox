@@ -349,7 +349,7 @@ fn assert_installed(m: &ModelInfo, dir: &Path, bytes: &[u8]) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The tests (★ = the ledger's acceptance cases)
+// The tests (★ = acceptance cases for model downloads)
 
 /// ★ The file lands at its path with the right bytes and mode, after one request.
 #[test]

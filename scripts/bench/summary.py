@@ -1,6 +1,7 @@
 """summary.py ENERGY_CSV BASELINE_CONFIG [OTHER_BASELINE ...]: per-config mean, sd, CV and
 the ratio of each config's J/min to each baseline, with a 90 % confidence interval (Welch t on
-log J/min). Runs with flags other than "gap-loaded" are left out and listed. Numbers only."""
+log J/min) and whether that interval is below 0.5 (halves energy). Runs with flags other than
+"gap-loaded" are left out and listed. Numbers only."""
 import csv, math, sys
 from collections import defaultdict
 

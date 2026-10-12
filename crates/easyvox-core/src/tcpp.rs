@@ -1,15 +1,16 @@
-//! transcribe.cpp adapter (ggml, Metal by default): Parakeet TDT/Unified and Whisper GGUF models,
-//! all decoded offline with `Session::run`.
+//! transcribe.cpp adapter (ggml, Metal by default): every GGUF model in the catalog, plus
+//! whisper.cpp `.bin` files, all decoded offline with `Session::run`.
 //!
-//! ggml-metal behaviours to know about (transcribe-cpp-sys 0.3.1, ggml 0.25.3):
+//! ggml-metal behaviors to know about (transcribe-cpp-sys 0.3.1, ggml 0.25.3):
 //! - **Exit abort.** Quitting with a model loaded aborts in a C++ static destructor; the
 //!   `atexit` hook below fixes it.
 //! - **First load per app identity** compiles the Metal shaders into a per-bundle cache
-//!   (~14 s once, ~0.2 s afterwards). The app should warm this up during onboarding.
-//! - **Idle wake-ups.** ggml-metal's residency-set loop (`ggml-metal-device.m` ~lines 954–1003)
-//!   sleeps 5 ms at a time for as long as its Metal device exists, even after every model is
-//!   unloaded: about 145 wake-ups a second in the idle app. `GGML_METAL_NO_RESIDENCY=1` means
-//!   the loop is never started (0.3 a second), and costs nothing measurable on the first decode
+//!   (~14 s once, ~0.2 s afterwards). Onboarding does this first load, so the first dictation
+//!   doesn't wait.
+//! - **Idle wake-ups.** ggml-metal's residency-set thread (in `ggml-metal-device.m`) sleeps
+//!   5 ms at a time for as long as its Metal device exists, even after every model is unloaded:
+//!   about 145 wake-ups a second in the idle app. `GGML_METAL_NO_RESIDENCY=1` means the thread
+//!   is never started (0.3 a second), and costs nothing measurable on the first decode
 //!   after a long idle (`docs/model-bench.md`, "Idle and energy"). The variable has to be set
 //!   before the Metal device is created, which happens on the first model load, and only a
 //!   binary's `main` can set it safely, so the binaries apply [`crate::process_env`].
@@ -99,7 +100,7 @@ impl SpeechModel for TcppModel {
             // Whisper has segment timings only, and needs them past 30 s: with no timestamps,
             // its seek loop moves on a full 30 s window even when the decoder stopped early,
             // silently dropping the rest of that window. Within one window it does better
-            // without (they changed its output on our clips), and the session doesn't need
+            // without (they changed its output on the test clips), and the session doesn't need
             // them: it spreads the words, and joins Whisper's chunks without context.
             TimestampKind::Segment if pcm.len() > 30 * 16_000 => TimestampKind::Segment,
             _ => TimestampKind::None,

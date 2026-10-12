@@ -1,4 +1,4 @@
-//! Simple normalized word error rate.
+//! Word error rate over normalized text.
 //!
 //! Normalization: lowercase; "$N" -> "N dollars"; "N%" -> "N percent"; digit-group commas
 //! removed ("1,250" -> "1250"); hyphens/slashes/colons split words; other punctuation and

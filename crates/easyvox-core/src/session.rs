@@ -126,9 +126,9 @@ impl Session {
 
 impl Drop for Session {
     /// Stops capture and waits for the worker to finish (it still sends `Final`, which takes
-    /// at most a model reload, a chunk decode and the final decode). Waiting matters: if the process exits
-    /// while a decode thread is still running, ggml-metal's static destructors can crash at
-    /// exit (seen once).
+    /// at most a model reload, a chunk decode and the final decode). Waiting matters: if the
+    /// process exits while a decode thread is still running, ggml-metal's static destructors
+    /// can crash at exit (seen once).
     fn drop(&mut self) {
         self.stop();
         self.join();

@@ -1,5 +1,4 @@
-// The switches that change at launch (docs/plans/website.md, §9 step 10). Launch is the day the
-// repo goes public, at or before the first DMG.
+// The switches that change when the repo goes public, at or before the first DMG.
 
 export const SITE_NAME = "EasyVox";
 

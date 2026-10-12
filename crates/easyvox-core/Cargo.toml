@@ -9,7 +9,7 @@ publish.workspace = true
 
 [features]
 default = ["transcribe-cpp", "mic"]
-# Parakeet and Whisper GGUF models on transcribe.cpp (ggml, Metal on macOS). The recommended
+# GGUF models on transcribe.cpp (ggml, Metal on macOS). The recommended
 # runtime. Compiled from source by its -sys crate, so the build needs cmake.
 transcribe-cpp = ["dep:transcribe-cpp"]
 # Fallback runtime: sherpa-onnx with a statically linked ONNX Runtime (CPU). Adds Parakeet TDT

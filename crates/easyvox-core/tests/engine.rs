@@ -172,7 +172,7 @@ fn each_session_takes_its_own_tuning_without_a_reload() {
 }
 
 /// 3 s of room noise: 0.3 s of digital silence (a Bluetooth mic starting), then white noise at
-/// about -50 dBFS, the level of the room in the author's own recordings.
+/// about -50 dBFS, a quiet room.
 fn room_noise_wav() -> PathBuf {
     let path = std::env::temp_dir().join(format!("easyvox-room-noise-{}.wav", std::process::id()));
     let spec = hound::WavSpec {

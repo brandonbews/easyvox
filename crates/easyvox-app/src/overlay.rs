@@ -3,25 +3,24 @@
 //! makes a non-activating panel; `platform::OverlayPanel` adds click-through and the key guard
 //! so it can never take focus from the app you're dictating into.
 //!
-//! **The look** (`DESIGN.md`, "The pill"; the design hand-off's boards 07 and 08): a capsule 44 pt
-//! tall and 240–560 pt wide, in a flat 92 % fill with a hairline and a soft shadow. On its left,
-//! a level meter of three vermilion strokes moves with your voice and rests as dots in silence;
-//! once you let go, the dots turn grey; the final text gets a check, and a notice its glyph
-//! ([`Glyph`]). Then one line of text, with a hint after it in the secondary colour while it
+//! **The look:** a capsule 44 pt tall and 240–560 pt wide, in a flat 92 % fill with a hairline
+//! and a soft shadow. On its left, one slot: a level meter of three vermilion strokes while you
+//! talk (dots in silence, gray dots after release), a check on the final text, or a notice's
+//! glyph ([`Glyph`]). Then one line of text, with a hint after it in the secondary color while it
 //! helps ("Release to paste"). A notice is two lines: what happened, then what to do ([`Notice`]).
 //! When no audio reaches EasyVox the pill says it can't hear you. The meter moves only when the
 //! core says the level moved visibly (`TranscriptEvent::Level`), which happens only during a
 //! dictation, while the pill is up, and its bars then ease to the new level.
 //!
-//! The colours follow the macOS light or dark appearance ([`Palette`], from `brand.rs`): read at
+//! The colors follow the macOS light or dark appearance ([`Palette`], from `brand.rs`): read at
 //! every draw, and redrawn when the appearance changes, mid-dictation too. Both palettes keep
 //! confirmed and provisional text at WCAG AA contrast whatever is behind the pill (see the tests).
 //!
-//! **Where:** bottom centre, `overlay_dock_gap_pt` above the Dock, on the screen with the
+//! **Where:** bottom center, `overlay_dock_gap_pt` above the Dock, on the screen with the
 //! keyboard focus, worked out each time the pill opens ([`Overlay::show`]).
 //!
-//! **Animation** (`DESIGN.md`, "Overlay animation"). Each part is done the cheapest way that
-//! does its job, with its timings in the settings file's `[advanced]` table ([`Motion`]):
+//! **Animation.** Each part is done the cheapest way that does its job, with its timings in the
+//! settings file's `[advanced]` table ([`Motion`]):
 //! - **Open and close:** a fade and a pop that Core Animation runs on the panel's layer
 //!   (`OverlayPanel::show` and `fade_out`), outside the app: no redraws and no wake-ups. The pill
 //!   grows from a little small to full size with a slight overshoot as it fades in, and shrinks a
@@ -60,7 +59,7 @@ const FONT_SIZE: f32 = 15.;
 const LINE_HEIGHT: f32 = 20.;
 const SMALL_SIZE: f32 = 13.;
 const SMALL_LINE_HEIGHT: f32 = 18.;
-/// The slot left of the text, for the meter, its dots or a glyph. A glyph is 20 pt, centred on
+/// The slot left of the text, for the meter, its dots or a glyph. A glyph is 20 pt, centered on
 /// it, reaching 2 pt into the padding: the text never moves when one replaces another.
 const SLOT: f32 = 16.;
 const GLYPH: f32 = 20.;
@@ -73,7 +72,7 @@ const CONTACT_SHADOW: (f32, f32) = (1., 1.5);
 /// Room around the pill inside its window, for the shadow and the open's overshoot. At the most
 /// `overlay_shrink_pct` allows, the widest pill grows 8 pt a side past full size at the pop's
 /// peak, shadow and all, so the window's edge never cuts either off (a unit test checks). The
-/// pill sits at the window's centre, so the pop, which scales about the window's centre, is
+/// pill sits at the window's center, so the pop, which scales about the window's center, is
 /// about the pill's, and a notice's taller pill grows 8 pt up and 8 pt down.
 const ROOM_X: f32 = 22.;
 const ROOM_Y: f32 = 18.;
@@ -86,7 +85,7 @@ const EDGE_FADE: f32 = 16.;
 const TEXT_SLACK: f32 = 2.;
 
 /// The level meter (`design/tokens.json`, `pill.meter`): three strokes `BAR_WIDTH` wide, their
-/// centres `BAR_PITCH` apart, from `BAR_MIN` (a dot: flat) to `BAR_MAX` tall, in the shape the
+/// centers `BAR_PITCH` apart, from `BAR_MIN` (a dot: flat) to `BAR_MAX` tall, in the shape the
 /// design gives the menu bar's bars (the middle one tallest).
 const BARS: usize = 3;
 const BAR_WIDTH: f32 = 3.;
@@ -104,8 +103,8 @@ pub static DRAWING_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::Atom
 pub const CANT_HEAR: &str = "Can't hear you";
 const CANT_HEAR_HINT: &str = "Check your microphone.";
 
-/// The overlay's colours in one appearance (`design/tokens.json` and boards 07–08, through
-/// `brand.rs`). Colours are `0xRRGGBB`, or `0xRRGGBBAA` where they let what's behind show through.
+/// The overlay's colors in one appearance (`design/tokens.json`, through `brand.rs`). Colors
+/// are `0xRRGGBB`, or `0xRRGGBBAA` where they let what's behind show through.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
     /// The pill (`0xRRGGBBAA`): a flat 92 % fill, no blur.
@@ -272,10 +271,9 @@ fn word_start(text: &str, at: usize) -> usize {
     before.char_indices().rev().find(|(_, c)| c.is_whitespace()).map_or(0, |(i, c)| i + c.len_utf8())
 }
 
-/// How the new transcript eases in, as the stretches that change: what's new fades in from
-/// nothing, provisional words that are confirmed now firm up, and words part-way through an
-/// earlier fade carry on from where they are (`old_fade`, with how far it got). The first
-/// `kept` bytes are unchanged; the provisional parts start at `old_provisional` and
+/// The stretches of the new transcript that fade: new text from nothing, newly confirmed words
+/// up to full, and words mid-fade from where they were (`old_fade`, with how far it got). The
+/// first `kept` bytes are unchanged; the provisional parts start at `old_provisional` and
 /// `provisional`.
 fn eases(
     kept: usize,
@@ -398,7 +396,7 @@ pub enum Mode {
     Listening,
     /// Live preview text.
     Live,
-    /// Released: the last preview, the meter settled to grey dots, until the final text.
+    /// Released: the last preview, the meter settled to gray dots, until the final text.
     Finishing,
     /// The final text, with a check, just before the pill hides.
     Final,
@@ -407,7 +405,7 @@ pub enum Mode {
 }
 
 /// The glyph in the pill's slot: the final text's check, and each notice's. Thin strokes in the
-/// text colour (`brand::GLYPH_*`); the knot for "Getting ready".
+/// text color (`brand::GLYPH_*`); the knot for "Getting ready".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Glyph {
     Warning,
@@ -432,7 +430,7 @@ impl Glyph {
 }
 
 /// A notice: what happened, then what to do, after a glyph. Words carry the meaning, never
-/// colour alone. Text only: the pill can't take a click (it's click-through and never takes
+/// color alone. Text only: the pill can't take a click (it's click-through and never takes
 /// focus), so a notice names where the fix is.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Notice {
@@ -560,7 +558,7 @@ pub struct OverlayView {
     pub renders: u32,
     pub drawn_dark: Option<bool>,
     /// Self-test `--replay --draw`: draw this window at each redraw and frame asked for, as GPUI
-    /// would on screen (it doesn't while the screen is locked), to measure what drawing costs.
+    /// would on screen, to measure what drawing costs.
     #[cfg(feature = "self-test")]
     pub draw_each_redraw: Option<AnyWindowHandle>,
     _appearance: Option<Subscription>,
@@ -665,7 +663,7 @@ impl OverlayView {
         self.set_text(confirmed, provisional, mode, cx);
     }
 
-    /// The shortcut is released: the meter settles to grey dots, the text stays until the final
+    /// The shortcut is released: the meter settles to gray dots, the text stays until the final
     /// text replaces it. One redraw, nothing moves.
     pub fn set_finishing(&mut self, cx: &mut Context<Self>) {
         if self.recording() {
@@ -834,13 +832,11 @@ impl OverlayView {
         glide.at(along(EASE_OUT, k))
     }
 
-    /// Where the pill and its text go for `shown` (laid out as `line`, `text_width` wide with a
-    /// notice's second line), with a `hint` after it (its width, and whether the pill may grow
-    /// for it), `height` tall, gliding there when the text moved them. The pill only grows during
-    /// a showing (a word rewritten shorter doesn't shrink it), and a transcript too long for it
-    /// sits flush right, so the newest words show. When the text changes, the words it kept stay
-    /// where they were on screen and glide from there, wherever the cut at `overlay_max_chars`
-    /// falls.
+    /// Lays out the pill for `shown` (shaped as `line`, `text_width` wide) and returns its size
+    /// and where its text starts, gliding there if the text moved. `hint` is the hint's width and
+    /// whether the pill may grow for it. The pill only grows within a showing, and text too long
+    /// for it sits flush right so the newest words show. Words kept from the last text stay where
+    /// they were on screen.
     fn place(
         &mut self,
         shown: &Shown,
@@ -929,7 +925,7 @@ impl OverlayView {
     }
 
     /// The slot left of the text: the meter while it listens (flat while it can't hear you),
-    /// grey dots once you let go, the final text's check (at `check` opacity, fading in), or the
+    /// gray dots once you let go, the final text's check (at `check` opacity, fading in), or the
     /// notice's glyph. One width for all, so the text doesn't move when one replaces another.
     fn indicator(&self, palette: &Palette, check: f32, now: Instant) -> Div {
         let slot = div().w(px(SLOT)).h_full().flex_none().flex().items_center().justify_center();
@@ -983,7 +979,7 @@ impl Render for OverlayView {
         let hint_width = hint
             .map(|(text, may_grow)| (f32::from(shape(text, SMALL_SIZE, false, window).width()) + TEXT_SLACK, may_grow));
         let geometry = self.place(&shown, &line, text_width, hint_width, height, now);
-        // `HighlightStyle::color` blends over the base colour (white over white stays white),
+        // `HighlightStyle::color` blends over the base color (white over white stays white),
         // so fading needs `fade_out`.
         let highlights = self.highlights(&shown, palette, now);
         // The meter's easing ends when it gets there, or when there's no meter to ease.
@@ -1070,7 +1066,7 @@ impl Render for OverlayView {
                 .text_color(rgb(palette.secondary))
                 .child(hint)
         });
-        // The pill at the window's centre, with room around it for its shadow and the open's
+        // The pill at the window's center, with room around it for its shadow and the open's
         // overshoot.
         div().size_full().flex().items_center().justify_center().child(
             div()
@@ -1178,12 +1174,12 @@ impl Overlay {
 /// adds.
 pub const PILL_BOTTOM: f32 = ROOM_Y + (NOTICE_HEIGHT - PILL_HEIGHT) / 2.;
 
-/// Creates the overlay window, hidden, at the bottom centre of the primary display; each show
+/// Creates the overlay window, hidden, at the bottom center of the primary display; each show
 /// moves it to the screen with the keyboard focus.
 pub fn create(cx: &mut App) -> anyhow::Result<Overlay> {
     let display = cx.primary_display().ok_or_else(|| anyhow::anyhow!("no display"))?;
     let bounds = display.bounds();
-    // The window is the biggest pill and the room around it; the pill pops about its centre,
+    // The window is the biggest pill and the room around it; the pill pops about its center,
     // which is the window's. It starts at the bottom of the primary display, hidden, and each
     // show moves it above the Dock of the screen with the keyboard focus.
     let (width, height) = (px(WINDOW_WIDTH), px(WINDOW_HEIGHT));
@@ -1396,7 +1392,7 @@ mod tests {
         let shrink = AppTuning::default().fields().into_iter().find(|f| f.key == "overlay_shrink_pct").unwrap();
         let biggest = (1. + (peak - 1.) * shrink.max.parse::<f64>().unwrap() / 100.) as f32;
         // The widest pill and a notice's height, with the shadow's reach (three sigmas, and down
-        // by its offset), at the peak: the pop scales about the window's centre, which is the
+        // by its offset), at the peak: the pop scales about the window's center, which is the
         // pill's.
         let (down, blur) = SHADOW;
         let half_width = (PILL_MAX / 2. + 3. * blur) * biggest;
@@ -1507,7 +1503,7 @@ mod tests {
             assert!(secondary >= 4.5, "{name}: secondary text {secondary:.2}:1");
             // Provisional text still reads as fainter than confirmed text.
             assert!(provisional < text / 2., "{name}: {provisional:.2} vs {text:.2}");
-            // The meter, as a UI graphic (WCAG 1.4.11): 3:1. The glyphs are in the text colour.
+            // The meter, as a UI graphic (WCAG 1.4.11): 3:1. The glyphs are in the text color.
             assert!(meter >= 3.0, "{name}: meter {meter:.2}:1");
         }
     }
@@ -1539,7 +1535,7 @@ mod tests {
 
     #[test]
     fn the_ratios_are_computed_right() {
-        // Black on white is 21:1, and a colour against itself 1:1.
+        // Black on white is 21:1, and a color against itself 1:1.
         assert!((contrast([0.; 3], [1.; 3]) - 21.).abs() < 1e-9);
         assert!((contrast(channels(0x777777), channels(0x777777)) - 1.).abs() < 1e-9);
         // #767676 on white is the classic 4.54:1.

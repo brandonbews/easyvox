@@ -3,7 +3,7 @@
 //! EasyVox at all, for its "can't hear you" state
 //! ([`TranscriptEvent::NoInput`](crate::TranscriptEvent::NoInput)).
 //!
-//! Light by design (`DESIGN.md`, "Overlay animation"):
+//! Cheap to run:
 //! - It doesn't measure the audio itself. It reads the 30 ms frame levels the capture thread
 //!   measures once as audio arrives, the ones speech detection reads (`pause::FrameLevels`).
 //! - It shows them against the speech detector's own line (`pause::SpeechDetector::speech_level`):

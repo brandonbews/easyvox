@@ -1,6 +1,6 @@
 //! The macOS transport for [`super::download`]: one NSURLSession data task per attempt.
 //!
-//! NSURLSession is Apple's own networking stack, so downloads honour the proxies, PAC files and
+//! NSURLSession is Apple's own networking stack, so downloads honor the proxies, PAC files and
 //! certificates set in System Settings, survive network changes, and show up as EasyVox in
 //! firewall apps. The session is ephemeral: no cookies, cache or credentials on disk.
 //!

@@ -33,16 +33,15 @@ const canonical = SITE_URL ? siteUrl(Astro.url.pathname) : null;
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1c1e" />
     {
       /* Icons (design/assets/web). The .ico (16, 32, 48) is the fallback; sizes="32x32" stops
-         Chrome preferring it over the SVG, whose ink follows the colour scheme. */
+         Chrome preferring it over the SVG, whose ink follows the color scheme. */
     }
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     {
-      /* Link previews. og-image.png is the dark card (re-rendered from design board 20 with the
-         real requirements). Its URL is relative until the domain is attached at launch, when
-         siteUrl() makes it absolute, as og:image needs. */
+      /* Link previews. og-image.png is the dark card. Its URL is relative until the domain is
+         attached at launch, when siteUrl() makes it absolute, as og:image needs. */
     }
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE_NAME} />

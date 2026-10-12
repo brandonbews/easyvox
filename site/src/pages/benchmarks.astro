@@ -94,7 +94,7 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
       <p class="results-sample">
         One M4 Mac mini and one speaker's voice: a small sample. Read a gap of a word or two as a tie.
       </p>
-      <ul class="results-key" aria-label="Colours in the charts">
+      <ul class="results-key" aria-label="Colors in the charts">
         <li class="tone-default">Parakeet TDT v2, the default</li>
         <li class="tone-offered">Whisper base.en, the small option</li>
         <li class="tone-bench">Tested, not offered</li>
@@ -125,7 +125,7 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
         One speaker reading an 81-second passage with names, times and sums of money, 3 times per model; each model
         wrote the same text every time. Two words is a hint, not a ranking. Punctuation and capitals aren't scored,
         so Granite Speech 5.0, which writes neither, isn't marked down for it. Canary 180M Flash, Nemotron and
-        Qwen3-ASR write most numbers as words, and that's most of their errors. One M4 Mac mini.
+        Qwen3-ASR write most numbers as words, and that's most of their errors.
       </p>
       <details class="chart-data">
         <summary>The numbers</summary>
@@ -184,7 +184,7 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
         The read-aloud passage, 3 runs per model; the bar is the middle run, the label the range. After 5 minutes of
         talking, the default's text was ready <span class="nowrap">{spdV2.rambleReady}</span> after release: it doesn't
         grow with length. The large Whisper models pad every pass to 30 s of audio, so each pass takes about a second,
-        and their first words wait for the first one. One M4 Mac mini, one speaker.
+        and their first words wait for the first one.
       </p>
       <details class="chart-data">
         <summary>The numbers</summary>
@@ -253,7 +253,7 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
         Energy is the chip's draw on top of the idle Mac over 5 minutes of talking, 2 runs or 1 per model; the CPU's
         share moves with whatever else the Mac is doing, so totals within about 5 J are a tie. Cohere Transcribe, the
         one model with fewer errors, took {cohere.energy.display} a minute and
-        <span class="nowrap">{cohere.memory.display}</span> of memory. One M4 Mac mini, one speaker.
+        <span class="nowrap">{cohere.memory.display}</span> of memory.
       </p>
       <details class="chart-data">
         <summary>The numbers</summary>
@@ -304,7 +304,7 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
       </ul>
       <p class="result-caveat">
         The app on its own, nobody dictating, 30 seconds each, with Parakeet Unified loaded: the same size as the
-        default. One M4 Mac mini.
+        default.
       </p>
       <details class="chart-data">
         <summary>The numbers</summary>
@@ -357,8 +357,7 @@ const secondTicks = [0, 1, 2, 3].map((v) => ({ value: v, label: v === 0 ? "0" : 
         Copies of the read-aloud passage, the starts of real dictations and short synthetic clips, turned down or
         mixed with noise, on Parakeet TDT v2 and Whisper base.en (and Parakeet Unified on the silent ones). Heard
         isn't the same as transcribed well: on the faintest copies the default got about a quarter of the words
-        wrong. In a room louder than about −35 dBFS, the noise counts as speech from the start. One M4 Mac mini, one
-        speaker.
+        wrong. In a room louder than about −35 dBFS, the noise counts as speech from the start.
       </p>
     </section>
 

@@ -131,7 +131,7 @@ impl Polished {
 
     /// Adds the words (absolute timings) of a decode of `span` for the chunk ending at `end`
     /// (`None`: the last chunk, up to the end of the recording); the next chunk starts there.
-    /// Where `span` reaches into the neighbours' audio, their words are dropped: the earlier
+    /// Where `span` reaches into the neighbors' audio, their words are dropped: the earlier
     /// side by [`continuation`](Self::continuation), the later side by middle (before `end`;
     /// those are kept aside as the tail). A decode without context keeps every word, whatever
     /// its timing.
