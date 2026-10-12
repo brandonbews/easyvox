@@ -34,8 +34,9 @@ use controller::{Controller, ControllerGlobal, UiEvent};
 use gpui_kit::*;
 use state::{AppSettings, AppStatus};
 
-/// The workspace's test clips, for the debug "Test dictation" item and the self-test. The path
-/// is baked in at build time; `EASYVOX_TESTDATA` overrides it.
+/// The workspace's test clips, for the debug "Test dictation" item and the self-test
+/// (`testdata/generate.sh` makes them). The path is baked in at build time; `EASYVOX_TESTDATA`
+/// overrides it.
 #[cfg(any(debug_assertions, feature = "self-test"))]
 pub fn testdata_dir() -> std::path::PathBuf {
     std::env::var_os("EASYVOX_TESTDATA")

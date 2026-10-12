@@ -291,7 +291,10 @@ async fn dictation(
     let clip = crate::testdata_dir().join(format!("{CLIP}.wav"));
     let clip_secs = match easyvox_core::audio::load_wav_16k_mono(&clip) {
         Ok(pcm) => pcm.len() as f64 / easyvox_core::SAMPLE_RATE as f64,
-        Err(e) => return report.check("dictation", false, json!(format!("can't read {}: {e:#}", clip.display()))),
+        Err(e) => {
+            let detail = format!("can't read {}: {e:#}; run testdata/generate.sh", clip.display());
+            return report.check("dictation", false, json!(detail));
+        }
     };
     let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
     let clipboard_before = platform::clipboard_change_count();

@@ -629,7 +629,8 @@ mod tests {
     fn a_spoken_clip_lifts_the_meter_and_it_rests_after() {
         // A text-to-speech voice from its first frame: steadier than a person, so the meter
         // mostly holds near the top while it speaks.
-        let events = replay_clip("cmd_samantha.wav", Tuning::default());
+        let Some(wav) = crate::testdata::clip("cmd_samantha.wav") else { return };
+        let (events, _) = replay_events(&wav, Tuning::default());
         let sent = levels(&events);
         assert!(sent.iter().any(|(at, l)| *at < 0.4 && *l > 0.5), "{sent:?}");
         assert_eq!(sent.last().map(|(_, l)| *l), Some(0.0), "{sent:?}");

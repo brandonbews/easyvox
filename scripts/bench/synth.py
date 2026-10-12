@@ -17,6 +17,8 @@ from levels import load, levels
 if len(sys.argv) < 6:
     sys.exit(__doc__)
 T, R, STARTS, WORDS, OUT = sys.argv[1:6]
+if not os.path.exists(os.path.join(T, "cmd_samantha.wav")):
+    sys.exit("synth.py: no spoken clips in %s: run testdata/generate.sh" % T)
 os.makedirs(OUT, exist_ok=True)
 
 

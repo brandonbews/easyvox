@@ -2,10 +2,10 @@
 This is the "energy per minute" docs/model-bench.md quotes from "Lightness" on. Numbers only.
 
 GPU, ANE and DRAM: plain integration over the session minus the mean of the idle windows
-(they're quiet at idle, so that's exact). CPU: other processes on a shared Mac burst now and then,
-in the idle windows and in the session alike, so the CPU rail's net is the median of 5 s block
-means over the session minus the median over the idle windows (before and after), times the
-session length. Reads the same files as energy.py (run1.sh's output); LABEL defaults to every
+(they're quiet at idle, so that's exact). CPU: other processes burst now and then, in the idle
+windows and in the session alike, so the CPU rail's net is the median of 5 s block means over
+the session minus the median over the idle windows (before and after), times the session
+length. Reads the same files as energy.py (run1.sh's output); LABEL defaults to every
 *.meta.json in RUN_DIR."""
 import glob, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

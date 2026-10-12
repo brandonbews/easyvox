@@ -9,6 +9,11 @@
 *.gguf
 *.onnx
 
+# Test clips spoken by macOS voices, which Apple's license doesn't allow publishing:
+# testdata/generate.sh makes them. silence_2s.wav is generated, not spoken, so it's committed.
+/testdata/*.wav
+!/testdata/silence_2s.wav
+
 .DS_Store
 
 # Agent worktrees (Claude Code)

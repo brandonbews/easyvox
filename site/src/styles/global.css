@@ -4,7 +4,7 @@
  *
  * Vermilion is only on the primary button, links and the wave. #F0462D (light) is for graphics
  * only (3.7:1); text uses #D93A22. On the raised surface #D93A22 is only 4.2:1, so a link on a
- * raised surface (a card, the privacy band) is ink, underlined.
+ * raised surface (a card) is ink, underlined.
  *
  * Contrast (WCAG 2.x, computed for every text pair used; AA needs 4.5:1, graphics 3:1):
  *   Light  fg on bg 16.8, on raised 15.5 · muted on bg 5.1, on raised 4.7, on the demo window 4.7
@@ -34,7 +34,6 @@
   --color-fg-muted: #6e6e73; /* ink2 */
   --color-border: #d2d2d7; /* sep: keycaps and control edges */
   --color-rule: #e8e8ed; /* hairlines between sections and rows */
-  --color-rule-raised: #dcdce0; /* hairlines on the raised band */
   --color-outline: rgb(0 0 0 / 0.16); /* the secondary button's edge */
   --color-link: #d93a22; /* accent_text */
   --color-link-hover: #b92f1a;
@@ -83,7 +82,6 @@
     --color-fg-muted: #98989d;
     --color-border: #48484a;
     --color-rule: #323235;
-    --color-rule-raised: #3a3a3d;
     --color-outline: rgb(255 255 255 / 0.22);
     --color-link: #ff5c3f;
     --color-link-hover: #ff8470;
@@ -250,7 +248,6 @@ kbd {
   background: var(--color-fill-hover);
 }
 
-.button-outline,
 .button-soon {
   background: transparent;
   color: var(--color-fg);
@@ -526,21 +523,9 @@ kbd {
   border-top: 1px solid var(--color-rule);
 }
 
-.section-flush {
-  padding-top: 0;
-}
-
-.section-flush::before {
-  content: none;
-}
-
 @media (min-width: 48rem) {
   .section {
     padding-block: 7.5rem;
-  }
-
-  .section-flush {
-    padding-top: 0;
   }
 }
 
@@ -664,7 +649,7 @@ kbd {
   }
 }
 
-/* Light: three numbers, with the caveat under them. */
+/* Stat tiles (/benchmarks: the idle app). */
 
 .stats li {
   padding: 1.5rem 0 0.5rem;

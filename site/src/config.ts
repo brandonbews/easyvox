@@ -6,9 +6,8 @@ export const SITE_NAME = "EasyVox";
 // disallows everything. Set to false at launch.
 export const NOINDEX = true;
 
-// While false, nothing links to GitHub: the repo is private, so every such link would 404.
-// Links in the docs to repo files outside the published set render as plain text instead
-// (src/lib/markdown.ts). Set to true when the repo goes public.
+// While false, nothing links to GitHub. Links in the docs to repo files outside the published
+// set render as plain text instead (src/lib/markdown.ts). Set to true when the repo goes public.
 export const REPO_PUBLIC = false;
 
 export const REPO_URL = "https://github.com/brandonbews/easyvox";

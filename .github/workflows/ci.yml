@@ -1,13 +1,31 @@
 name: CI
 
-# The website (site/) and the design files (design/) can't affect the app, so they never start a
-# macOS run; site.yml checks the website on Linux instead.
+# Markdown, the docs (docs/), the website (site/) and the design files (design/) can't affect the
+# app, so they never start a macOS run; site.yml checks the website on Linux instead. The
+# exception is docs/settings-reference.md, which a test compares with the app's settings: the last
+# pattern, which overrides the ones before it, puts it back.
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "design/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "!design/**"
+      - "!site/**"
+      - "!.github/workflows/site.yml"
+      - "!LICENSE"
+      - "docs/settings-reference.md"
   pull_request:
-    paths-ignore: ["**.md", "docs/**", "design/**", "site/**", ".github/workflows/site.yml", "LICENSE"]
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "!design/**"
+      - "!site/**"
+      - "!.github/workflows/site.yml"
+      - "!LICENSE"
+      - "docs/settings-reference.md"
   workflow_dispatch:
 
 permissions:
@@ -26,8 +44,8 @@ env:
 jobs:
   fmt:
     name: rustfmt
-    # Formatting needs no macOS. Linux minutes are also ~10x cheaper than macOS ones on a
-    # private repository, so this runs first and the macOS job only starts if it passes.
+    # Formatting needs no macOS, so it runs first, on Linux, and the macOS job starts only if it
+    # passes.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -74,6 +92,8 @@ jobs:
       - name: Build
         run: cargo build --workspace --locked
       # Engine tests that need a real model are #[ignore]d, so no models are downloaded here.
+      # The spoken test clips aren't in the repo (testdata/README.md): the two tests that read
+      # them skip.
       # The optional `sherpa` feature (downloads ONNX Runtime) isn't built in CI.
       - name: Test
         run: cargo test --workspace --locked

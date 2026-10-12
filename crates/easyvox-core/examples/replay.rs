@@ -2,6 +2,8 @@
 //! the app makes.
 //!
 //!   cargo run --release -p easyvox-core --example replay -- [model-id] [clip.wav]
+//!
+//! The default clip, `testdata/punct_samantha.wav`, comes from `testdata/generate.sh`.
 
 use easyvox_core::{AudioSource, Engine, EngineConfig, TranscriptEvent, paths};
 use std::path::PathBuf;

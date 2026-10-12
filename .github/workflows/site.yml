@@ -1,8 +1,8 @@
 name: Site
 
-# The website's gate: lint, type-check and build site/ on Linux. Vercel builds and deploys on its
-# own, so this job only checks. It runs when the site or the docs it renders change, and never
-# starts the macOS app CI (ci.yml ignores these paths).
+# The website's gate: lint, type-check and build site/ on Linux. Cloudflare Pages builds and
+# deploys on its own, so this job only checks. It runs when the site or the docs it renders
+# change. Of those paths, only docs/settings-reference.md also starts the macOS app CI (ci.yml).
 on:
   push:
     branches: [main]

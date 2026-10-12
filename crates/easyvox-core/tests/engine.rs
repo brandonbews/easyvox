@@ -1,5 +1,6 @@
 //! End-to-end checks against the real recommended model. They need the model on disk
-//! (`scripts/fetch-model.sh`), so they're ignored by default:
+//! (`scripts/fetch-model.sh`) and the test clips (`testdata/generate.sh`), so they're ignored by
+//! default:
 //!
 //!   cargo test -p easyvox-core --release -- --ignored
 
@@ -10,7 +11,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 fn clip(name: &str) -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata")).join(name)
+    let path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata")).join(name);
+    assert!(path.exists(), "testdata/{name} is missing; run testdata/generate.sh");
+    path
 }
 
 fn engine() -> Engine {

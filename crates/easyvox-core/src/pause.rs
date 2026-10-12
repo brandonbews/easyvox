@@ -324,18 +324,11 @@ pub(crate) mod tests {
         let t = Tuning::default();
         let old_gate = Quiet { ratio: 0.1, silence: 0.0018 };
         let old_pause = PauseFinder { quiet: old_gate, min_frames: PauseFinder::new(&t).min_frames };
-        let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-        let testdata = root.join("testdata");
-        let mut clips: Vec<std::path::PathBuf> = std::fs::read_dir(&testdata)
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().is_some_and(|e| e == "wav"))
-            .collect();
+        let Some(mut clips) = crate::testdata::listed() else { return };
         if let Some(extra) = std::env::var_os("EASYVOX_CLIPS") {
+            let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
             clips.extend(extra.to_string_lossy().split_whitespace().map(|p| root.join(p)));
         }
-        clips.sort();
-        assert!(clips.len() >= 10, "expected the test clips in {}", testdata.display());
         let mut stretches = 0;
         for clip in &clips {
             let pcm = crate::audio::load_wav_16k_mono(clip).unwrap();

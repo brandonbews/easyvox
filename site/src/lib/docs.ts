@@ -1,8 +1,8 @@
 // Reads the published docs from the repo's docs/ folder at build time. They're never copied
 // into site/: there's one copy of each doc, and GitHub and the site both show it.
 //
-// The site always builds from site/ (the npm scripts, CI, and Vercel with root directory site/,
-// which still checks out the whole repo), so the repo root is one folder up.
+// The site always builds from site/ (the npm scripts, CI and Cloudflare Pages, which builds in
+// site/ from a full checkout), so the repo root is one folder up.
 
 import fs from "node:fs";
 import path from "node:path";

@@ -3,7 +3,7 @@
 //!
 //! Run `easyvox-bench help` for the commands. Models come from `easyvox_core::paths::models_dir()`
 //! (override with `--models DIR` or `EASYVOX_MODELS_DIR`); clips come from the workspace's
-//! `testdata/` (see `testdata/generate.sh`). Only release builds give meaningful numbers:
+//! `testdata/`, which `testdata/generate.sh` fills. Only release builds give meaningful numbers:
 //!
 //!   cargo run --release -p easyvox-bench -- bench --model parakeet-tdt-0.6b-v2-q5_k_m-gguf
 //!
@@ -81,6 +81,14 @@ fn clips() -> anyhow::Result<Vec<Clip>> {
             })
         })
         .collect()
+}
+
+/// Fails unless every clip in the manifest is on disk. The spoken ones aren't in the repo.
+fn check_clips() -> anyhow::Result<()> {
+    match clips()?.into_iter().find(|c| !c.path.exists()) {
+        Some(c) => bail!("{} is missing: run testdata/generate.sh", c.path.display()),
+        None => Ok(()),
+    }
 }
 
 fn mb(b: u64) -> f64 {
@@ -293,6 +301,7 @@ fn cold_clone(models_dir: &Path, model: &str) -> anyhow::Result<PathBuf> {
 
 fn bench(args: &Args) -> anyhow::Result<()> {
     let model = args.model()?;
+    check_clips()?;
     let loadavg_start = loadavg();
     let mem_start = mem_json();
     let mut cfg = config(args, &model)?;
@@ -558,6 +567,7 @@ fn session_cmd(args: &Args) -> anyhow::Result<()> {
 
 fn sessions(args: &Args) -> anyhow::Result<()> {
     let model = args.model()?;
+    check_clips()?;
     let base = config(args, &model)?;
     let engine = Engine::load(base.clone())?;
     engine.transcribe_pcm(&audio::load_wav_16k_mono(&testdata().join("cmd_samantha.wav"))?)?; // warm-up
@@ -703,12 +713,16 @@ fn history_demo(args: &Args) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
+    /// The spoken clips aren't in the repo, so this checks the manifest against the script that
+    /// makes them.
     #[test]
-    fn manifest_lists_clips_that_exist() {
+    fn manifest_lists_clips_that_exist_or_generate_sh_makes() {
+        let script = include_str!("../../../testdata/generate.sh");
         let clips = clips().unwrap();
         assert!(clips.len() >= SESSION_CLIPS.len());
         for c in &clips {
-            assert!(c.path.exists(), "{} is missing", c.path.display());
+            let made = script.lines().any(|l| l.split_whitespace().next() == Some(c.id.as_str()));
+            assert!(made || c.path.exists(), "{}: not in the repo, and testdata/generate.sh doesn't make it", c.id);
             assert!(c.category == "silence" || !c.text.is_empty(), "{} has no reference text", c.id);
         }
         for id in SESSION_CLIPS {

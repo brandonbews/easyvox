@@ -53,6 +53,8 @@ pub mod paste;
 pub mod paths;
 mod pause;
 mod session;
+#[cfg(test)]
+mod testdata;
 pub mod tuning;
 
 #[cfg(feature = "sherpa")]

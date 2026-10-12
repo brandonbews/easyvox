@@ -18,8 +18,8 @@ How the numbers are made:
   soc = cpu + gpu + ane + dram is the headline rail.
 - Baseline = mean of pre and post power. net = session energy - baseline x session time.
 - J/min = net soc energy / (audio_secs / 60).
-- Flags: drift (|post - pre| soc > 0.15 W), foreign CPU (other processes > 10 % of a core on
-  average during the session), rc != 0, bench errors, Core ML over-capacity decodes.
+- Flags: drift (|post - pre| soc > 0.6 W), foreign CPU (other processes > 40 % of a core on
+  average during the session), rc != 0, bench errors.
 """
 import csv, glob, json, os, re, sys
 from datetime import datetime
@@ -108,8 +108,6 @@ def analyse(run_dir, label):
         flags.append("bench-failed")
     if bench.get("errors"):
         flags.append("bench-errors=%d" % len(bench["errors"]))
-    if bench.get("tcpp_overcap_decodes"):
-        flags.append("overcap=%d" % bench["tcpp_overcap_decodes"])
 
     wall = bench.get("cpu", {}).get("wall_secs", float("nan"))
     s1 = meta["t_exit"] - EXIT_PAD
@@ -128,7 +126,7 @@ def analyse(run_dir, label):
             flags.append("gap-%s" % name)
     base = {k: (p["pre"][k] + p["post"][k]) / 2 for k in p["pre"]}
     drift = p["post"]["soc"] - p["pre"]["soc"]
-    if abs(drift) > 0.6:   # this Mac's background (simulator, agents) bursts; 0.15 W was too strict
+    if abs(drift) > 0.6:   # background load on the bench Mac moves the SoC by up to about 0.5 W
         flags.append("drift=%.2fW" % drift)
     T = s1 - s0
     net = {k: e["session"][k] - base[k] * T for k in base}
@@ -146,7 +144,7 @@ def analyse(run_dir, label):
     net_robust = e["session"]["soc"] - base_robust * T
     audio_min = bench.get("audio_secs", float("nan")) / 60.0
     fmean, fmax, ftop = foreign_cpu(os.path.join(run_dir, label + ".ps"), s0, s1, meta["bench_pid"])
-    if fmean == fmean and fmean > 40:   # ~20 % of a core is this Mac's usual background
+    if fmean == fmean and fmean > 40:   # the bench Mac's usual background is about 20 % of a core
         flags.append("foreign-cpu=%.0f%%" % fmean)
     temps = stats_in(samples, s0, s1, lambda r: r["temp"]["cpu_temp_avg"])
     gpu_act = stats_in(samples, s0, s1, lambda r: r["gpu_active_ratio"])
