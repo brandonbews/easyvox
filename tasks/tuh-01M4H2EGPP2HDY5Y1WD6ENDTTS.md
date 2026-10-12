@@ -20,8 +20,14 @@ Pointers: the release workflow from the shipping-build task; DESIGN.md "Signing 
 
 Note: the repo is private for now (decision tuh-01M4H2EG5RQG3TVM45KP1CVCQS). The cask needs a publicly downloadable DMG, so make the repo public (or host releases publicly) before this ships.
 
+12 Oct: the DMG is hosted on GitHub Releases: https://github.com/brandonbews/easyvox/releases/download/v#{version}/EasyVox-#{version}.dmg. Brandon creates the public tap repo brandonbews/homebrew-tap. Cask: depends_on arch: :arm64, depends_on macos: :tahoe, uninstall quit:, zap, livecheck against GitHub releases; no auto_updates (brew upgrade). Check with brew audit --new --cask --strict --online and brew style. Install: brew install --cask brandonbews/tap/easyvox. Bumping the cask from the release workflow would need a token for the tap repo; decide then (an agent bump by hand is the default).
+
 ## History
 
 ### 2026-10-09 19:41 UTC — edit by `brandon`
+
+description edited
+
+### 2026-10-12 06:44 UTC — edit by `brandon`
 
 description edited

@@ -11,6 +11,10 @@
 
 Brandon, 12 Oct: no private repo; docs stay if nothing personal or odd was ever committed. Scope: every file in docs/, DESIGN.md, design/, README, code comments (tight, clear technical language: the Writing rule in CLAUDE.md), every commit message and blob in history (git log -p --all), and origin/tuhdoo (the ledger branch; going public publishes it: decide keep, prune or delete). Report findings to Brandon before changing history. Start when Brandon schedules opening the repo.
 
+12 Oct: started. Brandon confirmed the path (public repo, signing on GitHub Actions, DMG on GitHub Releases). Two read-only agents: history, secrets, images, recordings, ledger branch and GitHub (audit-history); current docs and comments against the writing rule (audit-content). Findings go to Brandon before anything changes.
+
 ## History
 
-_No activity yet._
+### 2026-10-12 06:44 UTC — edit by `brandon`
+
+description edited
