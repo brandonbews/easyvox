@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-Push-to-talk dictation for macOS: hold a shortcut and speak, and when you let go, EasyVox pastes the text at your cursor. The speech model runs on your Mac, so nothing you say leaves it.
+Push-to-talk dictation for macOS: hold a shortcut and speak, and when you let go, EasyVox pastes the text at your cursor. The speech model runs on your Mac, so nothing you say leaves it. EasyVox goes online only when you ask: to download a speech model, and to check easyvox.dev for a newer version.
 
 [easyvox.dev](https://easyvox.dev) · macOS 26 or later, Apple silicon · English
 

@@ -18,6 +18,9 @@
 //! waits for a dictation to end, then frees the old model before loading the new one, so only
 //! one is ever in memory (see `MODEL_SWAP`).
 //!
+//! Check for Updates runs here too (`check_for_updates`), only when the menu item or About's
+//! button is clicked. Its answer is in `AppStatus::update`.
+//!
 //! The permission prompts start here too (`request_mic`, `prompt_accessibility`,
 //! `request_input_monitoring`), so onboarding and Settings show the same state. Onboarding opens
 //! at launch when a required step is missing (`onboard_if_needed`; see `onboarding.rs`).
@@ -38,7 +41,7 @@ use crate::overlay::{Notice, Overlay};
 use crate::permissions::Permissions;
 use crate::platform::InputMonitoring;
 use crate::settings::{Page, SettingsView};
-use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, RightOptionProblem};
+use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, RightOptionProblem, UpdateStatus};
 use crate::{platform, tray};
 use easyvox_core::download::{CancelToken, DownloadError, Progress};
 use easyvox_core::models::ModelInfo;
@@ -317,6 +320,10 @@ impl Controller {
             tray::MENU_SETTINGS => self.open_settings(cx),
             tray::MENU_HISTORY => self.open_history(cx),
             tray::MENU_ABOUT => self.open_settings_at(Page::About, cx),
+            tray::MENU_CHECK_FOR_UPDATES => {
+                self.open_settings_at(Page::About, cx);
+                self.check_for_updates(cx);
+            }
             tray::MENU_QUIT => {
                 log::info!("quitting");
                 // Best effort: a part file the exit leaves behind goes at the next launch.
@@ -1175,6 +1182,37 @@ impl Controller {
             }
             Err(e) => log::error!("couldn't open Settings: {e:#}"),
         }
+    }
+
+    /// Asks easyvox.dev for the latest version (Check for Updates, from the menu or Settings ›
+    /// About), on the background executor; the answer goes to `AppStatus::update`, which About
+    /// shows. Never runs on its own: a click starts it, and a click while it runs does nothing.
+    pub fn check_for_updates(&mut self, cx: &mut Context<Self>) {
+        if !cx.global_mut::<AppStatus>().update.start() {
+            return;
+        }
+        log::info!("update: checking {}", easyvox_core::update::LATEST_URL);
+        cx.refresh_windows();
+        cx.spawn(async move |this, cx| {
+            let current = env!("CARGO_PKG_VERSION");
+            let result = cx.background_spawn(async move { easyvox_core::update::check(current) }).await;
+            match &result {
+                Ok(None) => log::info!("update: {current} is the latest"),
+                Ok(Some(release)) => log::info!("update: {} is available at {}", release.version, release.url),
+                Err(e) => log::warn!("update: {e} ({e:?})"),
+            }
+            let _ = this.update(cx, |_, cx| {
+                cx.global_mut::<AppStatus>().update = UpdateStatus::Done(result);
+                cx.refresh_windows();
+            });
+        })
+        .detach();
+    }
+
+    /// Clears the answer of the last check (About's Later).
+    pub fn dismiss_update(&mut self, cx: &mut Context<Self>) {
+        cx.global_mut::<AppStatus>().update = UpdateStatus::Idle;
+        cx.refresh_windows();
     }
 
     /// Opens Settings (or brings it forward) on `page`: the tray's "About EasyVox" opens the

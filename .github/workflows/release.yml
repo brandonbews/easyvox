@@ -4,7 +4,9 @@ name: Release
 # Releases page, as a pre-release, and publishing creates the tag. The `release` job builds
 # EasyVox, signs it with the Developer ID, and notarizes and staples the app and the DMG
 # (scripts/release.sh). The `publish` job then attaches the DMG to that release, sets its notes
-# and makes it the latest release. docs/releasing.md describes how a release is built.
+# and makes it the latest release. The `latest-json` job then commits site/public/latest.json to
+# main, naming the release, and Cloudflare Pages deploys it to easyvox.dev/latest.json, where the
+# app's Check for Updates reads it. docs/releasing.md describes how a release is built.
 #
 # A draft starts nothing: its tag doesn't exist until it's published.
 #
@@ -206,3 +208,51 @@ jobs:
           gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --title "EasyVox $VERSION" --notes-file release/release-notes.md \
             --prerelease=false --latest
+
+  # site/public/latest.json names the latest release, for the app's Check for Updates (the format
+  # is in crates/easyvox-core/src/update.rs). The commit goes through GitHub's contents API: no
+  # checkout and no credentials on disk, and it lands on main's head however far main has moved.
+  # Cloudflare Pages deploys it like any push. A push made with GITHUB_TOKEN starts no workflow,
+  # which a JSON file doesn't need. A job of its own, so it can be re-run alone.
+  latest-json:
+    name: Point easyvox.dev/latest.json at the release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # commit to main
+    steps:
+      - name: Commit site/public/latest.json to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! $GITHUB_REF_NAME =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::$GITHUB_REF_NAME isn't vX.Y.Z, so latest.json wasn't changed"
+            exit 1
+          fi
+          version=${GITHUB_REF_NAME#v}
+          printf '{"version":"%s","url":"https://github.com/%s/releases/tag/%s"}\n' \
+            "$version" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" >latest.json
+          path=repos/$GITHUB_REPOSITORY/contents/site/public/latest.json
+          # A few tries: replacing the file needs its current blob, and a commit to it in between
+          # makes the API refuse.
+          for try in 1 2 3; do
+            if ! sha=$(gh api "$path?ref=main" --jq .sha 2>/dev/null); then
+              sha="" # not there yet: the first release
+            fi
+            if [[ $sha == "$(git hash-object latest.json)" ]]; then
+              echo "latest.json on main already names $version"
+              exit 0
+            fi
+            args=(-X PUT "$path" -f branch=main -f "message=Point latest.json at EasyVox $version"
+              -f "content=$(base64 -w0 latest.json)")
+            if [[ -n $sha ]]; then
+              args+=(-f "sha=$sha")
+            fi
+            if gh api "${args[@]}" --jq .commit.html_url; then
+              exit 0
+            fi
+            sleep $((try * 5))
+          done
+          echo "::error::couldn't commit latest.json to main; easyvox.dev/latest.json still names the previous release"
+          exit 1

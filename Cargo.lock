@@ -1715,6 +1715,7 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "rusqlite",
+ "serde_json",
  "sha2 0.11.0",
  "sherpa-onnx",
  "transcribe-cpp",

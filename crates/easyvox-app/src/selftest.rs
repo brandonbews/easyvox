@@ -10,6 +10,9 @@
 //! it back as it was. The model download checks never touch the internet: they download from a
 //! server of their own on 127.0.0.1 into the temporary folder, and delete only from there.
 //!
+//! Check for Updates is never clicked: the About page is drawn in each of its states, set for
+//! the draw, so the self-test never asks easyvox.dev.
+//!
 //! Onboarding and Settings › Permissions are checked without touching a permission: the
 //! self-test reads the real ones (onboarding must have opened at launch exactly when one is
 //! missing), and otherwise shows the windows injected answers. It never clicks a button that
@@ -38,7 +41,7 @@ use crate::overlay::{CANT_HEAR, Glyph, Mode, Notice};
 use crate::permissions::{AllPermissions, Permissions};
 use crate::platform::{self, PanelState};
 use crate::settings::Page;
-use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus};
+use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, UpdateStatus};
 use crate::tray;
 use easyvox_core::MicPermission;
 use easyvox_core::download::{DownloadError, Progress};
@@ -231,6 +234,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
     windows(&controller, &mut report, cx).await;
     models_page(&controller, &mut report, cx).await;
     about_page(&controller, &mut report, cx).await;
+    about_updates(&controller, &mut report, cx).await;
     settings_permissions(&controller, &mut report, cx).await;
     model_download(&controller, &options, &mut report, cx).await;
     match (engine_ready, hotkey_id) {
@@ -526,7 +530,8 @@ fn rest_glyph(status: &tray::Status) -> tray::Glyph {
 
 /// The menu bar item between dictations: one 30 × 16 pt image with a 1× and a 2× bitmap, a
 /// template, labeled for VoiceOver; and a menu that starts with the status (how to dictate, or
-/// each problem with its fix), above History…, Settings… ⌘,, About EasyVox and Quit EasyVox ⌘Q.
+/// each problem with its fix), above History…, Settings… ⌘,, About EasyVox, Check for Updates…
+/// and Quit EasyVox ⌘Q.
 /// The self-test reads the permissions as they are, so either status can show; nothing is
 /// chosen in the menu.
 fn menu_bar_at_rest(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
@@ -553,6 +558,7 @@ fn menu_bar_at_rest(controller: &Entity<Controller>, report: &mut Report, cx: &m
         && has(tray::HISTORY_TITLE, "")
         && has(tray::SETTINGS_TITLE, ",")
         && has(tray::ABOUT_TITLE, "")
+        && has(tray::CHECK_FOR_UPDATES_TITLE, "")
         && has(tray::QUIT_TITLE, "q");
     report.check(
         "the menu bar item shows its state in a 30 × 16 pt image and at the top of its menu",
@@ -1040,6 +1046,52 @@ async fn about_page(controller: &Entity<Controller>, report: &mut Report, cx: &m
             view.update(cx, |v, cx| v.show(Page::General, cx));
         }
     });
+}
+
+/// The About page draws its Updates row in every state a check can leave it in: never checked,
+/// checking, up to date, a newer version with Download and Later, and failures (set in
+/// `AppStatus` for the draw only; nothing is clicked, so nothing goes online).
+async fn about_updates(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::about::UPDATES_DRAWN;
+    use easyvox_core::update::{Release, UpdateError};
+    use std::sync::atomic::Ordering::Relaxed;
+    let shown = cx.update(|cx| {
+        let view = controller.read(cx).settings_view()?;
+        view.update(cx, |v, cx| v.show(Page::About, cx));
+        Some(())
+    });
+    let release =
+        Release { version: "9.9.9".into(), url: "https://github.com/brandonbews/easyvox/releases/tag/v9.9.9".into() };
+    let states = [
+        UpdateStatus::Idle,
+        UpdateStatus::Checking,
+        UpdateStatus::Done(Ok(None)),
+        UpdateStatus::Done(Ok(Some(release))),
+        UpdateStatus::Done(Err(UpdateError::Http(404))),
+        UpdateStatus::Done(Err(UpdateError::Offline("The Internet connection appears to be offline.".into()))),
+    ];
+    let mut draws = vec![];
+    for state in states {
+        let (drawn, rows) = cx.update(|cx| {
+            cx.global_mut::<AppStatus>().update = state.clone();
+            cx.refresh_windows();
+            let before = UPDATES_DRAWN.load(Relaxed);
+            let drawn = draw_settings(controller, cx);
+            (drawn, UPDATES_DRAWN.load(Relaxed) - before)
+        });
+        draws.push(json!({"state": format!("{state:?}"), "drawn": drawn, "rows": rows}));
+    }
+    cx.update(|cx| {
+        cx.global_mut::<AppStatus>().update = UpdateStatus::Idle;
+        if let Some(view) = controller.read(cx).settings_view() {
+            view.update(cx, |v, cx| v.show(Page::General, cx));
+        }
+    });
+    report.check(
+        "the About page draws Check for Updates in every state",
+        shown.is_some() && draws.iter().all(|d| d["drawn"] == true && d["rows"].as_u64().unwrap_or(0) >= 1),
+        json!({"draws": draws}),
+    );
 }
 
 /// Settings › Permissions draws its rows for every state the three permissions can show (pinned

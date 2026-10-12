@@ -56,6 +56,7 @@ mod session;
 #[cfg(test)]
 mod testdata;
 pub mod tuning;
+pub mod update;
 
 #[cfg(feature = "sherpa")]
 mod sherpa;

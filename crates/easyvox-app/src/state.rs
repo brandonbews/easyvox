@@ -138,9 +138,34 @@ pub struct AppStatus {
     pub config_path: std::path::PathBuf,
     pub config_error: Option<String>,
     pub config_warnings: Vec<String>,
+    /// Check for Updates, as Settings › About shows it.
+    pub update: UpdateStatus,
 }
 
 impl Global for AppStatus {}
+
+/// Check for Updates: nothing asked yet, a check running, or its answer. Only a click (the menu
+/// item or the About page's button) starts a check; the answer stays until the next one, or
+/// until Later.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum UpdateStatus {
+    #[default]
+    Idle,
+    Checking,
+    /// The release to offer, `None` if this is the latest, or why the check failed.
+    Done(Result<Option<easyvox_core::update::Release>, easyvox_core::update::UpdateError>),
+}
+
+impl UpdateStatus {
+    /// Marks a check as running. False if one already is: a second click does nothing.
+    pub fn start(&mut self) -> bool {
+        if *self == Self::Checking {
+            return false;
+        }
+        *self = Self::Checking;
+        true
+    }
+}
 
 /// Why "hold right ⌥ to talk" is on but doesn't work yet.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -176,4 +201,20 @@ pub enum DownloadStatus {
     /// Why it failed: its `Display` is one sentence for the UI, and onboarding reads the kind
     /// (offline, wrong file, …) to say what to do. Nothing was kept.
     Failed(easyvox_core::download::DownloadError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UpdateStatus;
+    use easyvox_core::update::UpdateError;
+
+    #[test]
+    fn a_check_starts_unless_one_is_running() {
+        let mut status = UpdateStatus::Idle;
+        assert!(status.start());
+        assert_eq!(status, UpdateStatus::Checking);
+        assert!(!status.start(), "a second click while it runs");
+        let mut done = UpdateStatus::Done(Err(UpdateError::Http(404)));
+        assert!(done.start(), "after an answer, a click checks again");
+    }
 }

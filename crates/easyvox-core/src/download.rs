@@ -19,7 +19,8 @@
 //!   ([`ModelInfo::license_notice`]). [`delete`] removes both.
 //!
 //! On macOS the bytes come through NSURLSession (`download/macos.rs`), so System Settings
-//! proxies apply. The rest of this module is plain Rust. `scripts/fetch-model.sh` does the same
+//! proxies apply. The update check (`update.rs`) makes its one request through it too
+//! (`fetch`). The rest of this module is plain Rust. `scripts/fetch-model.sh` does the same
 //! for developers, with its own `.part.XXXXXX` temp files, so the two never touch each other's.
 
 #[cfg(target_os = "macos")]
@@ -141,7 +142,7 @@ impl std::fmt::Display for DownloadError {
 impl std::error::Error for DownloadError {}
 
 /// `e` as a sentence: starts with a capital and ends with a full stop.
-fn sentence(e: &str) -> String {
+pub(crate) fn sentence(e: &str) -> String {
     let e = e.trim();
     let mut chars = e.chars();
     let mut s: String = chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default();
@@ -260,7 +261,14 @@ pub fn download_with(
             }
             Ok(())
         };
-        let result = transport::fetch(model.download_url, before, options.idle_timeout, cancel, &mut sink);
+        let request = Request {
+            url: model.download_url,
+            offset: before,
+            idle_timeout: options.idle_timeout,
+            total_timeout: None,
+            follow: |_| true,
+        };
+        let result = transport::fetch(&request, cancel, &mut sink);
         let retry = match result {
             Ok(()) if done == total => break,
             Ok(()) => Retry::Transient("The connection closed before the end of the file".into()),
@@ -577,6 +585,30 @@ impl<'a> Reporter<'a> {
     }
 }
 
+/// One GET for the transport: a download makes one per attempt, the update check one in all.
+pub(crate) struct Request<'a> {
+    pub url: &'a str,
+    /// Asks for the file from this byte on (`Range: bytes=N-`); 0 asks for all of it.
+    pub offset: u64,
+    /// The request fails after this long without a byte.
+    pub idle_timeout: Duration,
+    /// The request fails after this long in all, however the bytes come. `None`: no limit.
+    pub total_timeout: Option<Duration>,
+    /// A redirect is followed only to a URL this accepts, and never from https to anything
+    /// else. It runs in an Objective-C callback on macOS, so it must never panic.
+    pub follow: fn(&str) -> bool,
+}
+
+/// [`Request`] through the platform's transport (NSURLSession on macOS), for callers outside
+/// this module: `sink` gets the response as it arrives.
+pub(crate) fn fetch<E>(
+    request: &Request,
+    cancel: &CancelToken,
+    sink: &mut dyn FnMut(Fetched) -> Result<(), E>,
+) -> Result<(), FetchError<E>> {
+    transport::fetch(request, cancel, sink)
+}
+
 /// What the transport hands the sink.
 pub(crate) enum Fetched<'a> {
     /// The server answered 200 or 206: the body starts at byte `offset` of a file of `total`
@@ -588,9 +620,9 @@ pub(crate) enum Fetched<'a> {
     Data(&'a [u8]),
 }
 
-/// How one attempt ended, when it didn't end cleanly.
+/// How one attempt ended, when it didn't end cleanly. `E` is what the sink refuses data with.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub(crate) enum FetchError {
+pub(crate) enum FetchError<E = DownloadError> {
     Cancelled,
     /// An error status, other than 200 and 206.
     Http(u16),
@@ -601,7 +633,7 @@ pub(crate) enum FetchError {
     /// Retrying won't help (TLS, a bad URL or redirect).
     Fatal(String),
     /// The sink refused the data.
-    Sink(DownloadError),
+    Sink(E),
 }
 
 /// Free space for a new file in `dir`.
@@ -629,16 +661,13 @@ fn statvfs_available(dir: &Path) -> io::Result<u64> {
 /// In-app downloads need NSURLSession; elsewhere, `scripts/fetch-model.sh` does the job.
 #[cfg(not(target_os = "macos"))]
 mod transport {
-    use super::{CancelToken, DownloadError, FetchError, Fetched};
-    use std::time::Duration;
+    use super::{CancelToken, FetchError, Fetched, Request};
 
-    pub(super) fn fetch(
-        _url: &str,
-        _offset: u64,
-        _idle_timeout: Duration,
+    pub(super) fn fetch<E>(
+        _request: &Request,
         _cancel: &CancelToken,
-        _sink: &mut dyn FnMut(Fetched) -> Result<(), DownloadError>,
-    ) -> Result<(), FetchError> {
+        _sink: &mut dyn FnMut(Fetched) -> Result<(), E>,
+    ) -> Result<(), FetchError<E>> {
         Err(FetchError::Fatal("In-app downloads are macOS-only; use scripts/fetch-model.sh".into()))
     }
 }

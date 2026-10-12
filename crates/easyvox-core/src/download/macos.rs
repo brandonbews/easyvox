@@ -1,4 +1,5 @@
-//! The macOS transport for [`super::download`]: one NSURLSession data task per attempt.
+//! The macOS transport for [`super::download`], and for the update check: one NSURLSession data
+//! task per request.
 //!
 //! NSURLSession is Apple's own networking stack, so downloads honor the proxies, PAC files and
 //! certificates set in System Settings, survive network changes, and show up as EasyVox in
@@ -12,7 +13,7 @@
 //! would unwind into CFNetwork. So no `unwrap`, `expect` or slice indexing in them, only channel
 //! sends (whose errors are ignored) and plain Objective-C calls.
 
-use super::{CancelToken, FetchError, Fetched};
+use super::{CancelToken, FetchError, Fetched, Request};
 use block2::DynBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
@@ -52,6 +53,8 @@ struct Ivars {
     tx: SyncSender<Msg>,
     /// The `Range` header, put back on every redirect: CFNetwork isn't guaranteed to copy it.
     range: Option<String>,
+    /// Which redirects to follow ([`Request::follow`]).
+    follow: fn(&str) -> bool,
 }
 
 define_class!(
@@ -68,7 +71,8 @@ define_class!(
 
     unsafe impl NSURLSessionTaskDelegate for DownloadDelegate {
         /// Follows the redirect with the same `Range` header, but never from https to anything
-        /// else: refusing it delivers the redirect itself, which `fetch` reports as an HTTP error.
+        /// else, nor to a URL `follow` refuses: refusing it delivers the redirect itself, which
+        /// `fetch` reports as an HTTP error.
         #[unsafe(method(URLSession:task:willPerformHTTPRedirection:newRequest:completionHandler:))]
         fn will_redirect(
             &self,
@@ -81,7 +85,9 @@ define_class!(
             let scheme = |url: Option<Retained<NSURL>>| url.and_then(|u| u.scheme()).map(|s| s.to_string());
             let from = scheme(response.URL());
             let to = scheme(request.URL());
-            if from.as_deref() == Some("https") && to.as_deref() != Some("https") {
+            let target = request.URL().and_then(|u| u.absoluteString()).map(|s| s.to_string());
+            let allowed = target.is_some_and(|t| (self.ivars().follow)(&t));
+            if !allowed || (from.as_deref() == Some("https") && to.as_deref() != Some("https")) {
                 completion.call((std::ptr::null_mut(),));
                 return;
             }
@@ -143,8 +149,8 @@ define_class!(
 );
 
 impl DownloadDelegate {
-    fn new(tx: SyncSender<Msg>, range: Option<String>) -> Retained<Self> {
-        let this = Self::alloc().set_ivars(Ivars { tx, range });
+    fn new(tx: SyncSender<Msg>, range: Option<String>, follow: fn(&str) -> bool) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(Ivars { tx, range, follow });
         // SAFETY: NSObject's `init`, on an allocated object whose ivars are set.
         unsafe { msg_send![super(this), init] }
     }
@@ -160,26 +166,29 @@ impl Drop for SessionGuard {
     }
 }
 
-/// One GET of `url` from byte `offset` to the end, following redirects. Feeds the response to
-/// `sink` as it arrives: `Start` once the status is 200 or 206, then `Data` chunks. Returns
-/// `Ok` when the server ended the response cleanly (which may be before the end of the file).
-pub(super) fn fetch(
-    url: &str,
-    offset: u64,
-    idle_timeout: Duration,
+/// One GET of `request.url` from byte `request.offset` to the end, following the redirects
+/// `request.follow` allows. Feeds the response to `sink` as it arrives: `Start` once the status
+/// is 200 or 206, then `Data` chunks. Returns `Ok` when the server ended the response cleanly
+/// (which may be before the end of the file).
+pub(super) fn fetch<E>(
+    request: &Request,
     cancel: &CancelToken,
-    sink: &mut dyn FnMut(Fetched) -> Result<(), super::DownloadError>,
-) -> Result<(), FetchError> {
+    sink: &mut dyn FnMut(Fetched) -> Result<(), E>,
+) -> Result<(), FetchError<E>> {
+    let (url, offset) = (request.url, request.offset);
     let Some(ns_url) = NSURL::URLWithString(&NSString::from_str(url)) else {
         return Err(FetchError::Fatal(format!("not a valid URL: {url}")));
     };
     let range = (offset > 0).then(|| format!("bytes={offset}-"));
     let (tx, rx) = sync_channel(32);
-    let delegate = DownloadDelegate::new(tx, range.clone());
+    let delegate = DownloadDelegate::new(tx, range.clone(), request.follow);
 
     let config = NSURLSessionConfiguration::ephemeralSessionConfiguration();
     // The idle timeout: it restarts with every byte that arrives.
-    config.setTimeoutIntervalForRequest(idle_timeout.as_secs_f64());
+    config.setTimeoutIntervalForRequest(request.idle_timeout.as_secs_f64());
+    if let Some(total) = request.total_timeout {
+        config.setTimeoutIntervalForResource(total.as_secs_f64());
+    }
     // Fail at once when offline: `download` does the waiting and retrying.
     config.setWaitsForConnectivity(false);
     config.setURLCache(None);
@@ -194,15 +203,15 @@ pub(super) fn fetch(
     };
     let session = SessionGuard(session);
 
-    let request = NSMutableURLRequest::requestWithURL(&ns_url);
+    let ns_request = NSMutableURLRequest::requestWithURL(&ns_url);
     let agent = format!("EasyVox/{}", env!("CARGO_PKG_VERSION"));
-    request.setValue_forHTTPHeaderField(Some(&NSString::from_str(&agent)), ns_string!("User-Agent"));
+    ns_request.setValue_forHTTPHeaderField(Some(&NSString::from_str(&agent)), ns_string!("User-Agent"));
     // No transparent decompression, so byte counts and offsets are the file's own.
-    request.setValue_forHTTPHeaderField(Some(ns_string!("identity")), ns_string!("Accept-Encoding"));
+    ns_request.setValue_forHTTPHeaderField(Some(ns_string!("identity")), ns_string!("Accept-Encoding"));
     if let Some(range) = &range {
-        request.setValue_forHTTPHeaderField(Some(&NSString::from_str(range)), ns_string!("Range"));
+        ns_request.setValue_forHTTPHeaderField(Some(&NSString::from_str(range)), ns_string!("Range"));
     }
-    let task = session.0.dataTaskWithRequest(&request);
+    let task = session.0.dataTaskWithRequest(&ns_request);
     task.resume();
     // `receive` owns the receiver, so it's gone before the session is torn down: a delegate
     // blocked on a full channel gets an error and returns.
@@ -214,12 +223,12 @@ pub(super) fn fetch(
 }
 
 /// Drives `sink` from the delegate's messages until the task ends, fails or is cancelled.
-fn receive(
+fn receive<E>(
     rx: Receiver<Msg>,
     offset: u64,
     cancel: &CancelToken,
-    sink: &mut dyn FnMut(Fetched) -> Result<(), super::DownloadError>,
-) -> Result<(), FetchError> {
+    sink: &mut dyn FnMut(Fetched) -> Result<(), E>,
+) -> Result<(), FetchError<E>> {
     loop {
         if cancel.is_cancelled() {
             return Err(FetchError::Cancelled);
@@ -262,7 +271,7 @@ fn parse_content_range(value: &str) -> Option<(u64, Option<u64>)> {
 }
 
 /// Sorts an NSURLSession error into retry (offline, transient) or give up (fatal).
-fn classify(e: &TaskError, cancel: &CancelToken) -> FetchError {
+fn classify<E>(e: &TaskError, cancel: &CancelToken) -> FetchError<E> {
     let message = e.description.clone();
     if e.domain != "NSURLErrorDomain" {
         return FetchError::Transient(message);

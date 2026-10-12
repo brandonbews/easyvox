@@ -14,3 +14,4 @@ The first release, for Apple silicon Macs on macOS 26 or later.
 - First-launch setup asks for the Microphone and Accessibility, then downloads the default model and loads it once.
 - Settings, and a History of past dictations with a copy button for each.
 - A settings file, `~/.config/easyvox/config.toml`, applied as soon as it's saved.
+- Check for Updates…, in the menu bar menu and in Settings › About. It reads `easyvox.dev/latest.json`, which each release commits to the site, and when a newer version is out, offers to open its download page. It runs only when you click it and installs nothing.

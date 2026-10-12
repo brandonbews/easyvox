@@ -34,6 +34,9 @@ libc = "0.2"
 # gpui-kit-assets → rust-embed), so it adds no code there. Uses the ARMv8 SHA-2 instructions.
 sha2 = "0.11"
 rusqlite = { version = "0.40", features = ["bundled"] }
+# Reads latest.json for the update check (`update.rs`). The app already builds this exact
+# version (through GPUI), so it adds no code there.
+serde_json.workspace = true
 cpal = { version = "0.18", optional = true }
 sherpa-onnx = { version = "1.13.8", optional = true }
 transcribe-cpp = { version = "0.3.1", optional = true }

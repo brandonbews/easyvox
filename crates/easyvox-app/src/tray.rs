@@ -20,6 +20,7 @@ pub const MENU_TEST_DICTATION: &str = "test-dictation";
 pub const MENU_SETTINGS: &str = "settings";
 pub const MENU_HISTORY: &str = "history";
 pub const MENU_ABOUT: &str = "about";
+pub const MENU_CHECK_FOR_UPDATES: &str = "check-for-updates";
 pub const MENU_QUIT: &str = "quit";
 /// The rows of a problem in the status at the top: `fix-0` for the first problem, and so on.
 pub const MENU_FIX: &str = "fix-";
@@ -28,6 +29,9 @@ pub const HISTORY_TITLE: &str = "History…";
 /// Opens Settings on its About page: the version, the models' credits and the third-party
 /// notices.
 pub const ABOUT_TITLE: &str = "About EasyVox";
+/// Opens Settings on its About page and checks easyvox.dev for a newer version; the answer
+/// shows there. With About's Check Now, the only way a check starts.
+pub const CHECK_FOR_UPDATES_TITLE: &str = "Check for Updates…";
 pub const QUIT_TITLE: &str = "Quit EasyVox";
 
 /// The item's image: what EasyVox is doing, or that it needs something.
@@ -280,6 +284,7 @@ pub fn create(
         &PredefinedMenuItem::separator(),
         &MenuItem::with_id(MENU_SETTINGS, SETTINGS_TITLE, true, command(Code::Comma)),
         &MenuItem::with_id(MENU_ABOUT, ABOUT_TITLE, true, None),
+        &MenuItem::with_id(MENU_CHECK_FOR_UPDATES, CHECK_FOR_UPDATES_TITLE, true, None),
         &PredefinedMenuItem::separator(),
         &MenuItem::with_id(MENU_QUIT, QUIT_TITLE, true, command(Code::KeyQ)),
     ])?;

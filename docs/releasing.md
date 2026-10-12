@@ -14,6 +14,7 @@ Only maintainers can create `v*` tags. The `release` job waits in the `release` 
 - It checks both with `stapler` and `spctl`, and the app with `syspolicy_check`.
 - The job deletes the keychain and the key files, and keeps the DMG, its notes and the notary service's logs as workflow artifacts.
 - A second job, `publish`, which never sees the signing secrets, attaches the DMG to the release. It sets the notes to the version's changelog section and the DMG's SHA-256, and makes it the latest release.
+- A third job, `latest-json`, commits `site/public/latest.json` to `main`, naming the new version and its release page. Cloudflare Pages deploys it to `easyvox.dev/latest.json`, where the app's Check for Updates reads it. Before the first release the file doesn't exist, and the app says no release is listed yet.
 
 `scripts/release.sh --help` lists the script's options, including an ad-hoc build on a Mac.
 
