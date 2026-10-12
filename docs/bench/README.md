@@ -1,17 +1,17 @@
-# Bench data, 9–11 October 2026
+# Bench data
 
 These files hold the per-run numbers behind [`docs/model-bench.md`](../model-bench.md). That file has the summary tables and the methods. This folder has the runs those tables summarize, one row per run or per sample, so charts can be drawn from them.
 
 - **When:** every run was made on 9, 10 or 11 October 2026. `studies.csv` gives the date of each study.
-- **Machine:** one M4 Mac mini (16 GB), on mains power, macOS 26.6.2, transcribe-cpp 0.3.1, 4 threads.
+- **Machine:** one M4 Mac mini (16 GB), on AC power, macOS 26.6.2, transcribe-cpp 0.3.1, 4 threads.
 - **Code:** each study ran a known commit, or a build on its way to one. See [Studies and builds](#studies-and-builds).
-- **Extracted:** on 10 October 2026, by [`scripts/bench/extract.py`](../../scripts/bench/extract.py), from the raw runs in two session scratch folders. The 11 October rows (study `candidates`) were added on 11 October from a third.
+- **Extracted:** by [`scripts/bench/extract.py`](../../scripts/bench/extract.py) from the raw runs, on 10 October 2026. The 11 October rows (study `candidates`) were added on 11 October.
 
 ## No transcript text
 
 There is no transcript text in this folder. That means no final text, no preview text, no words, no reference text and no word lists.
 
-Two of the recordings are the author's own voice (`structured.wav`, read aloud, and `ramble.wav`, five minutes of talking). They're private and not in the repo. The raw run files hold the text the models decoded from them, so none of that text may be published. The same rule covers the text-to-speech clips in `testdata/`, so there is only one rule.
+Two of the recordings are of a real voice (`structured.wav`, read aloud, and `ramble.wav`, five minutes of unscripted talking). They're private and not in the repo. The raw run files hold the text the models decoded from them, so none of that text may be published. The same rule covers the text-to-speech clips in `testdata/`, so there is only one rule.
 
 Every cell is a number or a label from a fixed list: a model id, a clip file name, a run id, a study or build name, a setting and its value, or a phase. The extractor checks every cell before it writes a file. The only text it reads is the preview's words and the words of a one-pass decode of the same recording, to time the preview (the lag tables). It keeps none of it.
 
@@ -115,7 +115,7 @@ CPU while talking, minute by minute (`cpu_pct` per `minute`, from 1). It backs t
 
 ### `passes.csv` (3,975 rows)
 
-Every preview pass and chunk decode of the 23 "Whisper's preview" runs, from a scratch copy of the bench that logged them:
+Every preview pass and chunk decode of the 23 "Whisper's preview" runs, from an instrumented bench build that logged them:
 
 - `phase`: `preview` or `chunk`;
 - `t_s`: when it ended, in the session;
@@ -219,22 +219,9 @@ Run labels follow each study's own scheme:
 
 Every run is here, including a few that `docs/model-bench.md` left out. "The preview in pauses" dropped two read-aloud runs that overlapped a build on the same Mac: `idle-real/before3-structured` (`build_overlap_s` 26) and, judging by its 4.25 s release, `idle-real/after1-structured`. In the 5-minute ramble, Whisper's preview showed a word made up from room noise at 1.4 s. `first_words_ms` counts that word, but the published table gives 2.2 s, the first real word.
 
-## Regenerating
+## The scripts
 
-The raw runs were in session scratch folders under `/private/tmp`. They held:
-
-- 9 October: `mbench/`, `onepipe/`, `longform/` and `idle/`;
-- 9 October evening to 10 October: `realvoice/`, `joinfix/`, `eq/`, `lightness/`, `idle/`, `engine2/`, `v3/`, `ab/`, `whisper/` and `overlay-anim/`;
-- 11 October: `candidates/runs/`, in the second of those folders.
-
-With the folders:
-
-```sh
-python3 -I scripts/bench/extract.py --s1 <9 Oct evening to 10 Oct folder> --s2 <9 Oct folder> \
-    --s3 <9 Oct evening to 10 Oct folder>/candidates
-```
-
-It also reads the private `structured.wav` (from `--recordings`), if it's there, for where the speech starts in the read-aloud stress copies. The raw run files, and any audio cut from the private recordings, stay private.
+The raw runs aren't kept. [`scripts/bench/extract.py`](../../scripts/bench/extract.py) wrote these files from them.
 
 The other scripts in `scripts/bench/` make and read new runs. All of them print numbers only.
 

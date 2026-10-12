@@ -25,20 +25,20 @@ The file holds no permissions. Microphone, Accessibility and Input Monitoring ar
 EasyVox never stops over a bad setting, and never overwrites your file to fix it:
 
 - **A value out of range, or of the wrong type** (`preview_interval_ms = 60000`, `keep_model_loaded = "yes"`): that key falls back to its default, and the others still apply.
-- **A model the app doesn't offer**: an unknown id, or one that's for `easyvox-bench` only, like Parakeet Unified since 10 October 2026. EasyVox uses the default model (Parakeet TDT v2) and says why.
-- **A key EasyVox doesn't know**, maybe misspelt (`previw_interval_ms`), or in the wrong place (an `[advanced]` key at the top, or a top key after `[advanced]`): it's ignored, and the warning says so (suggesting the key you probably meant, when one is close).
+- **A model the app doesn't offer**: an unknown id, or one that's for `easyvox-bench` only, like Parakeet Unified. EasyVox uses the default model (Parakeet TDT v2) and says why.
+- **A key EasyVox doesn't know**, maybe misspelled (`previw_interval_ms`), or in the wrong place (an `[advanced]` key at the top, or a top key after `[advanced]`): it's ignored, and the warning says so (suggesting the key you probably meant, when one is close).
 - **A file that isn't valid TOML:** EasyVox keeps the settings it had (the defaults, if it was just starting) and leaves the file alone until you fix it. Changes you make in the Settings window meanwhile apply, but aren't saved.
 
-Problems show under **Settings → General → Settings file**, and in the log (stderr: `open --stderr /tmp/easyvox.log dist/EasyVox.app`).
+Problems show under **Settings › General › Settings file**, and in the log (stderr: `open --stderr /tmp/easyvox.log dist/EasyVox.app`).
 
 ## Loudness is in decibels
 
 Six keys say how loud is "quiet" or "speech": `gate_quiet_db` and `pause_quiet_db` compare with your own speech, `speech_above_noise_db` with the room, and `gate_silence_dbfs`, `pause_silence_dbfs` and `speech_loud_dbfs` with the loudest sound a microphone can record. Two more measure spans of loudness for the overlay's level meter: `meter_range_db`, how far over the line where speech starts a sound fills the meter, and `meter_step_db`, the smallest change it shows.
 
 - **dB** (`_db`) is relative to another level. -20 dB is a tenth of it, -6 dB about half, 0 dB the same, and 20 dB ten times it.
-- **dBFS** (`_dbfs`) is relative to full scale, the loudest a sample can be (0 dBFS). In the recordings EasyVox was tuned on (AirPods in an office), speech is about -17 dBFS and the room about -50 dBFS.
+- **dBFS** (`_dbfs`) is relative to full scale, the loudest a sample can be (0 dBFS). In the real-voice recordings EasyVox was tuned on, speech is about -17 dBFS and the room about -50 dBFS.
 
-The `_dbfs` keys are always 0 or below, and so are the two `_quiet_db` keys; `speech_above_noise_db` and the two `meter_*_db` keys are 0 or above, since speech is louder than the room. Closer to 0 dBFS means louder. Before October 2026 the `gate_*` and `pause_*` levels were linear (0.1 and 0.0018); the defaults moved to -20 dB and -55 dBFS, and behave the same on every test clip.
+The `_dbfs` keys are always 0 or below, and so are the two `_quiet_db` keys; `speech_above_noise_db` and the two `meter_*_db` keys are 0 or above, since speech is louder than the room. Closer to 0 dBFS means louder.
 
 ## Examples
 
@@ -73,7 +73,7 @@ gate_quiet_db = -14
 gate_silence_dbfs = -45
 ```
 
-A recording with no speech in it gives no text: nothing is decoded, nothing is pasted, and the overlay says it didn't catch anything. The check errs towards decoding, but if it ever happens to you while you did speak (a whisper, or a microphone turned right down in a noisy room), count fainter sounds as speech. `speech_min_ms = 0` turns the check off, and decodes every recording.
+A recording with no speech in it gives no text: nothing is decoded, nothing is pasted, and the overlay says it didn't catch anything. The check errs toward decoding, but if it ever happens to you while you did speak (a whisper, or a microphone turned right down in a noisy room), count fainter sounds as speech. `speech_min_ms = 0` turns the check off, and decodes every recording.
 
 ```toml
 [advanced]

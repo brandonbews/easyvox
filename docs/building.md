@@ -22,6 +22,8 @@ Models go in `~/Library/Application Support/EasyVox/models/` and are checked aga
 
 ## Build and test
 
+The model tests, the bench and the self-test use text-to-speech clips that aren't in the repo: run `testdata/generate.sh` once to make them with macOS's `say`. If a voice is missing, the script says which one to add. Without the clips, `cargo test` skips the two tests that read them.
+
 ```sh
 cargo build
 cargo test                                          # includes the downloader, against a local server
@@ -31,7 +33,7 @@ cargo test -p easyvox-core --release -- --ignored   # end-to-end engine tests; n
 EASYVOX_LIVE_DOWNLOADS=1 cargo test -p easyvox-core --test download_live -- --ignored
 ```
 
-CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs rustfmt, clippy, the build and the tests on macOS 26 for pushes to `main` and pull requests.
+CI runs rustfmt, clippy, the build and the test suite on a macOS 26 runner for every push to `main` and every pull request.
 
 ## The app
 
@@ -42,6 +44,8 @@ open dist/EasyVox.app
 ```
 
 This writes `dist/EasyVox.app`, signed ad hoc with the hardened runtime, as a release is. `--dev` makes a debug build without the hardened runtime, so a debugger can attach. macOS ties permissions to the signature, so after a rebuild it may ask for the Microphone and Accessibility again. Other arguments are passed to `cargo build`.
+
+`scripts/bundle.sh` copies the third-party notices, `packaging/THIRD_PARTY_NOTICES.html`, into the app. After a dependency update, regenerate them with `scripts/notices.sh` (it needs `cargo install --locked cargo-about --features cli`); `cargo test` fails until you do.
 
 ### Self-test
 

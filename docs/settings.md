@@ -17,7 +17,7 @@ Set only the keys you want to change. Keys you leave out use their defaults, so 
 
 | Key | Default | Effect |
 |---|---|---|
-| `unload_after_secs` | `600` | Idle seconds before the model is freed: about 670 MB down to 90 MB. 1 to 86400. |
+| `unload_after_secs` | `600` | Idle seconds before the model is freed: with the default model, about 670 MB down to 90 MB. 1 to 86400. |
 | `overlay_hide_after_final_ms` | `600` | How long the pill stays up after pasting. 0 to 10000. |
 | `overlay_dock_gap_pt` | `24` | Gap between the Dock and the pill, in points. 0 to 400. |
 | `preview_interval_ms` | `1600` | Time between preview updates. Lower updates more often and uses more power. |
@@ -43,7 +43,7 @@ EasyVox never rewrites your file to fix it.
 - An unknown key is ignored, with a suggestion when it looks like a typo.
 - A file that isn't valid TOML is ignored until you fix it, and the previous settings stay.
 
-Problems show under **Settings → General → Settings file**.
+Problems show under **Settings › General › Settings file**.
 
 ## Every key
 

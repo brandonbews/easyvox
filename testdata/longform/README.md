@@ -1,8 +1,8 @@
 # Long-dictation clips
 
-People often hold the push-to-talk key for several minutes and just ramble. The clips in `testdata/` are 30 s or shorter, so these five clips of 1 to 9 minutes test long dictation: how soon the text is ready after release, peak memory, whether text is dropped or doubled where chunks join, and whether the live preview keeps up. Results are in `docs/model-bench.md`, "Long dictation".
+Long dictations are normal use: people hold the key for minutes. The clips in `testdata/` are 30 s or shorter, so these five clips of 1 to 9 minutes test long dictation: how soon the text is ready after release, peak memory, whether text is dropped or doubled where chunks join, and whether the live preview keeps up. The results are in the model bench's [Long dictation](../../docs/model-bench.md#long-dictation) section.
 
-They're macOS text-to-speech (`say`) reading `paragraphs.txt`: 22 paragraphs of dictation-style notes, emails and lists with numbers, times, money and punctuation, written for this project. TTS speech is far cleaner than real dictation, and its pauses are pure silence, so treat the numbers as a best case.
+They're macOS text-to-speech (`say`) reading `paragraphs.txt`: 22 paragraphs of fictional notes, emails and lists, written for this project, with numbers, times, money and punctuation. TTS speech is far cleaner than real dictation, and its pauses are pure silence, so treat the numbers as a best case.
 
 | Clip | Voice | Length | Words | Content |
 |---|---|---:|---:|---|
@@ -45,7 +45,7 @@ uptime   # timings drift when the machine is busy: aim for a load average around
 
 - A replay takes as long as the clip: about 9 minutes for `lf_10m`.
 - The numbers to read are `finalize_ms` (text ready after release), `wer`, `chunks.polished` (chunks polished while talking) and `mem_end.peak_footprint_mb`.
-- `--chunk 0` decodes the whole recording in one pass on release, the old behaviour, for comparison.
+- `--chunk 0` decodes the whole recording in one pass on release, the old behavior, for comparison.
 - `--quiet` hides the partial lines on stderr. Keep them if you want to measure preview lag against `clips/manifest.json`.
 - `$B help` lists the other options.
 - For a short-clip baseline, run the same command on `clips/para/Samantha_03.wav` with `--ref clips/para/Samantha_03.txt`.
