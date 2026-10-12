@@ -226,6 +226,10 @@ grep -q com.apple.security.device.audio-input <<<"$signed_entitlements" || die "
 # Apple's syspolicy_check on the app. It exits non-zero for any finding, warnings included, so
 # this prints every finding and stops only for one above Warning level. An ad-hoc signature is
 # always one Warning, "Adhoc Signed App".
+#
+# One Fatal finding is let through: "Internal Xprotect Error", which GitHub's macos-26 runner
+# reported for the first 0.1.0 run while the same check passed on a Mac. It's XProtect failing
+# on the machine, and the notary service runs Apple's own malware scan on every upload.
 syspolicy() { # <mode>
   local mode=$1 report
   step "syspolicy_check $mode"
@@ -235,8 +239,11 @@ syspolicy() { # <mode>
   fi
   jq -r '.output[] | "    \(.SyspolicyCheckErrorLevel): \(.SyspolicyCheckShortError): \(.SyspolicyCheckLongError)"' \
     <<<"$report" 2>/dev/null || printf '%s\n' "$report" | sed 's/^/    /'
-  jq -e '(.output | length) > 0 and all(.output[]; .SyspolicyCheckErrorLevel == "Warning")' \
+  jq -e '(.output | length) > 0 and all(.output[];
+      .SyspolicyCheckErrorLevel == "Warning" or .SyspolicyCheckShortError == "Internal Xprotect Error")' \
     <<<"$report" >/dev/null 2>&1 || die "syspolicy_check $mode rejected the app"
+  ! jq -e 'any(.output[]; .SyspolicyCheckShortError == "Internal Xprotect Error")' <<<"$report" \
+    >/dev/null 2>&1 || echo "    XProtect failed on this machine; the notary service scans the upload"
 }
 
 # Apple's pre-notarization check, run locally, so a problem stops the release before an upload.
