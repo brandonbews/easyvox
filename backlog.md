@@ -1,6 +1,6 @@
 # Backlog
 
-0 in progress · 3 ready · 2 blocked · 19 on hold · 40 inbox · 53 done · 1 cancelled
+0 in progress · 2 ready · 2 blocked · 19 on hold · 40 inbox · 54 done · 1 cancelled
 
 ## In progress
 
@@ -11,7 +11,6 @@ _None._
 | ID | Task | Priority | Labels |
 |---|---|---:|---|
 | [`tuh-3xb8`](tasks/tuh-01M4MJQZ9ZPPHC1MZY01T63XB8.md) | Monorepo: the app plus a light website (homepage and docs) | 3 | `website` `repo` |
-| [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) | Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once | — | `test` `flaky` `overlay` |
 | [`tuh-p4hy`](tasks/tuh-01M4PJ2XQ4RGDWGY6CJB0XP4HY.md) | Site: a _headers file for Cloudflare Pages (security headers; X-Robots-Tag noindex while NOINDEX is on) | — | `website` |
 
 ## Blocked / waiting
@@ -147,6 +146,7 @@ Untriaged captures — promoting one to open means writing it a real (prompt-qua
 - [`tuh-svbn`](tasks/tuh-01M4NXG7XGT9V9TPESKKJESVBN.md) Flaky test: session::tests::speech_moves_the_level_meter_at_up_to_its_rate failed once under load
 - [`tuh-p403`](tasks/tuh-01M4NXYZ58FXM7E0GC7W4VP403.md) Hands-on: the restyled app in light and dark (menu bar, pill, notices, Settings, setup, History, Reduce motion)
 - [`tuh-g2rd`](tasks/tuh-01M4PCSBAE8V7WCK4G2PTKG2RD.md) Permissions: Settings watches them live; ask for Input Monitoring so EasyVox appears in its list
+- [`tuh-9a3b`](tasks/tuh-01M4PFGJX1TVQ2K3V139WZ9A3B.md) Flaky self-test: 'Reduce motion swaps the open and close's pop…' read the open's scale as 0.85 once
 
 ## Cancelled
 
