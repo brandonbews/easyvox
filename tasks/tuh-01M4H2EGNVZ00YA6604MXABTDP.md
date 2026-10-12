@@ -35,6 +35,13 @@ DMG background staged (11 October, lane C1): packaging/dmg/background.tiff, made
 - create-dmg equivalent: --volname "EasyVox" --background background.tiff --window-pos 200 120 --window-size 660 400 --icon-size 128 --text-size 13 --icon "EasyVox.app" 170 164 --hide-extension "EasyVox.app" --app-drop-link 490 164.
 - Only the light picture ships: a DMG background can't follow the appearance. The hand-off says Finder keeps labels black over a background picture even in Dark Mode; docs/branding.md said they turn white. Check by hand on macOS 26, light and dark, before release.
 
+Built and rehearsed ad hoc (12 October, agent, uncommitted in worktree agent-a5c0f787750044b9e):
+- Added packaging/EasyVox.entitlements (audio-input only), packaging/dmg/settings.py (dmgbuild 1.6.7 through uvx, with ds_store 1.3.3 and mac_alias 2.2.3 pinned), scripts/release.sh, CHANGELOG.md, .github/workflows/release.yml and docs/releasing.md. bundle.sh signs the dist and --release builds with the hardened runtime; --dev builds stay as they were.
+- `scripts/release.sh --allow-dirty` passes end to end: flags=0x10002(adhoc,runtime), the entitlement, no get-task-allow, arm64, minos 26.0. `syspolicy_check notary-submission` reports only the ad-hoc signature. EasyVox-0.1.0.dmg is 9.3 MB (ULFO). Its .DS_Store was read back: window {{200, 120}, {660, 400}}, icons at (170, 164) and (490, 164), size 128, text 13, picture background.
+- Two changes from the hand-off. dmgbuild stores the background as the hidden file /.background.tiff, not in a .background folder. There's no hide-extension, because it puts com.apple.FinderInfo on the bundle and that fails `codesign --verify --strict`. Finder hides ".app" anyway.
+- The workflow is dormant until the release environment and its five secrets exist. zizmor 1.30.1 and actionlint 1.7.12 (with shellcheck) report nothing.
+- Still to do: the self-test under the hardened runtime (an EasyVox was running), the DMG window check (tuh-01M4NQE2KBMZ8WST33GWHJ82YA), the certificate, key and GitHub setup (Brandon's runbook), and the first CI run.
+
 ## History
 
 ### 2026-10-11 14:56 UTC — edit by `brandon`
@@ -48,3 +55,7 @@ description edited
 ### 2026-10-12 06:44 UTC — edit by `brandon`
 
 retitled · description edited
+
+### 2026-10-12 07:20 UTC — edit by `brandon`
+
+description edited
