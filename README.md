@@ -36,6 +36,16 @@ EasyVox reads `~/.config/easyvox/config.toml` and applies edits when you save; t
 
 [`docs/model-bench.md`](docs/model-bench.md) has the measurements behind the model list and the defaults.
 
+## Private notes
+
+The maintainer keeps the design decisions, the backlog, release steps and the rules agents follow for this project in a private repo, `brandonbews/easyvox-internal`, cloned into this checkout as `internal/`. This repo ignores `/internal` and `/CLAUDE.local.md`, and everything builds and tests the same without them. To set up a computer with it:
+
+1. Clone this repo, then the private one inside it: `git clone https://github.com/brandonbews/easyvox-internal.git internal`.
+2. Run `sh internal/scripts/install-hooks.sh`, and again after moving either checkout. It's safe to rerun, and it refuses to replace a file or a hook it didn't write.
+   - It links `CLAUDE.local.md` here to `internal/agent-rules.md`, so Claude Code loads those rules in this checkout and in worktrees under `.claude/worktrees/`.
+   - It installs a `post-checkout` hook that links `internal` into every new worktree (and `CLAUDE.local.md`, for a worktree outside this checkout).
+3. Copy `internal/recordings/` from the old computer by hand: the real-voice clips for the local benchmarks. No repo carries them.
+
 ## License
 
 [MIT](LICENSE). Third-party notices: [`packaging/THIRD_PARTY_NOTICES.html`](packaging/THIRD_PARTY_NOTICES.html). The speech models keep their own licenses; Settings › About credits each one.
