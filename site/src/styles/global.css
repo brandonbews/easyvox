@@ -751,8 +751,8 @@ kbd {
   font-size: clamp(2rem, 1.2rem + 2.6vw, 3.5rem);
 }
 
-/* The Homebrew command under the install buttons. A click selects all of it, with no script; on a
- * phone it wraps rather than widen the page. */
+/* The Homebrew command under the hero's and the closing section's buttons. A click selects all
+ * of it, with no script; on a phone it wraps rather than widen the page. */
 .brew {
   margin-top: 1.5rem;
   color: var(--color-fg-muted);
