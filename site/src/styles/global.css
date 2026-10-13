@@ -593,7 +593,7 @@ kbd {
   }
 }
 
-/* The feature grid: thin line icons over short columns. */
+/* The feature grid: a heading and a line each. */
 
 .features,
 .stats {
@@ -608,24 +608,11 @@ kbd {
 }
 
 .features li {
-  display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr);
-  gap: 0.25rem 0.75rem;
   padding: 1.25rem 0;
 }
 
-.features svg {
-  width: 1.5rem;
-  height: 1.5rem;
-  grid-row: span 2;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .features h3 {
+  margin: 0 0 0.25rem;
   font-size: 1.0625rem;
   letter-spacing: -0.01em;
 }
@@ -648,16 +635,8 @@ kbd {
   }
 
   .features li {
-    display: block;
     padding-bottom: 0;
     padding-right: 1rem;
-  }
-
-  .features svg {
-    display: block;
-    width: 30px;
-    height: 30px;
-    margin-bottom: 1.5rem;
   }
 
   .features h3 {
