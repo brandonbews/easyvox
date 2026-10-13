@@ -13,7 +13,13 @@ EasyVox goes online only when you ask: to download a speech model, and to check 
 
 ## Install
 
-Download the signed, notarized DMG from the [latest release](https://github.com/brandonbews/easyvox/releases/latest). EasyVox needs macOS 26 or later on Apple silicon. Or [build it from source](#build-from-source).
+Download the signed, notarized DMG from the [latest release](https://github.com/brandonbews/easyvox/releases/latest), or install EasyVox with [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask brandonbews/tap/easyvox
+```
+
+EasyVox needs macOS 26 or later on Apple silicon. Or [build it from source](#build-from-source).
 
 ## Build from source
 
