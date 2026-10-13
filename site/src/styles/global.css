@@ -270,16 +270,15 @@ kbd {
   background: var(--color-fill-hover);
 }
 
-.button-soon {
+.button-secondary,
+.button-secondary:hover {
   background: transparent;
   color: var(--color-fg);
   box-shadow: inset 0 0 0 1px var(--color-outline);
 }
 
-/* Not a link: there's nothing to download yet. */
-.button-soon {
-  color: var(--color-fg-muted);
-  cursor: default;
+.button-secondary:hover {
+  background: var(--color-bg-raised);
 }
 
 .actions {
@@ -389,7 +388,7 @@ kbd {
 .site-nav {
   display: flex;
   align-items: center;
-  gap: 1rem; /* the header fits a 390 px phone */
+  gap: 1rem;
 }
 
 .site-nav > a:not(.button) {
@@ -405,6 +404,16 @@ kbd {
 
 .site-nav > a[aria-current] {
   font-weight: 500;
+}
+
+/* On a phone the header keeps the lockup, Benchmarks and Docs on one row. GitHub goes (the
+ * footer links to it), and so does Download: EasyVox is Mac-only, and the homepage's hero has
+ * the button. */
+@media (max-width: 40rem) {
+  .site-nav-github,
+  .site-nav-download {
+    display: none;
+  }
 }
 
 @media (min-width: 48rem) {

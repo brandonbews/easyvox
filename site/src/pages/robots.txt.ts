@@ -1,5 +1,5 @@
-// robots.txt, from the same flag as the noindex tag (NOINDEX in src/config.ts): before launch,
-// crawlers are asked to stay out, and any page they reach anyway says noindex.
+// robots.txt, from the same flag as the noindex tag (NOINDEX in src/config.ts): allow everything,
+// or, with NOINDEX on, ask crawlers to stay out (any page they reach anyway says noindex).
 import type { APIRoute } from "astro";
 import { NOINDEX } from "../config";
 

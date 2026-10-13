@@ -2,6 +2,7 @@
 // The homepage: the pitch and the demo, four features, the two models, install. It doesn't
 // explain dictation and never mentions AI. Numbers match /benchmarks.
 import Demo from "../components/Demo.astro";
+import { DOWNLOAD_URL } from "../config";
 import Base from "../layouts/Base.astro";
 ---
 
@@ -10,8 +11,8 @@ import Base from "../layouts/Base.astro";
     <section class="hero container" aria-labelledby="top">
       <h1 id="top">Simple, local, fast, free speech-to-text.</h1>
       <div class="actions">
-        <a class="button button-primary" href="/docs/building">Build from source</a>
-        <span class="button button-soon">Download: coming soon</span>
+        <a class="button button-primary" href={DOWNLOAD_URL}>Download</a>
+        <a class="button button-secondary" href="/docs/building">Build from source</a>
       </div>
       <p class="meta-line">macOS 26 or later <span aria-hidden="true">·</span> Apple silicon <span aria-hidden="true">·</span> MIT license</p>
       <Demo />
@@ -70,8 +71,8 @@ import Base from "../layouts/Base.astro";
     <section class="cta container" aria-labelledby="install">
       <h2 id="install">Get EasyVox.</h2>
       <div class="actions">
-        <a class="button button-primary" href="/docs/building">Build from source</a>
-        <span class="button button-soon">Download: coming soon</span>
+        <a class="button button-primary" href={DOWNLOAD_URL}>Download</a>
+        <a class="button button-secondary" href="/docs/building">Build from source</a>
       </div>
       <div class="requirements">
         <h3 id="requirements">Requirements</h3>
