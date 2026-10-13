@@ -50,10 +50,11 @@ jobs:
       # The build renders every published doc and fails on a broken link or anchor.
       - name: Build
         run: npm run build
-      - name: No JavaScript on any page
+      # Small inline scripts are allowed (site/AGENTS.md); script files are not.
+      - name: No script files
         run: |
-          if grep -rl '<script' dist --include='*.html'; then
-            echo "::error::a page ships a <script>; the site is meant to have none"
+          if grep -rlE '<script[^>]*\bsrc=' dist --include='*.html'; then
+            echo "::error::a page loads a script file; only small inline scripts are allowed"
             exit 1
           fi
           if find dist -name '*.js' | grep .; then

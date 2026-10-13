@@ -751,8 +751,9 @@ kbd {
   font-size: clamp(2rem, 1.2rem + 2.6vw, 3.5rem);
 }
 
-/* The Homebrew command under the hero's and the closing section's buttons. A click selects all
- * of it, with no script; on a phone it wraps rather than widen the page. */
+/* The Homebrew command under the hero's and the closing section's buttons, with a Copy button
+ * (the homepage's one script shows it). A click on the command selects all of it; on a phone it
+ * wraps rather than widen the page. */
 .brew {
   margin-top: 1.5rem;
   color: var(--color-fg-muted);
@@ -763,14 +764,39 @@ kbd {
   margin: 0 0 0.5rem;
 }
 
-.brew code {
-  display: inline-block;
+.brew-command {
+  display: inline-flex;
+  align-items: center;
   max-width: 100%;
+  border-radius: 8px;
+  background: var(--color-bg-raised);
+}
+
+.brew code {
   padding: 0.45em 0.8em;
+  background: none;
   color: var(--color-fg);
   overflow-wrap: anywhere;
   -webkit-user-select: all;
   user-select: all;
+}
+
+.brew-copy {
+  flex: none;
+  margin: 0.25rem 0.25rem 0.25rem -0.35rem;
+  padding: 0.3rem 0.65rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-fg-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.brew-copy:hover {
+  background: var(--color-rule);
+  color: var(--color-fg);
 }
 
 .requirements {

@@ -1,6 +1,6 @@
 ---
-// Every page: head, header, footer. No JavaScript: nothing here (or anywhere on the site)
-// renders a client component, so Astro emits no <script>.
+// Every page: head, header, footer. Nothing here (or anywhere on the site) renders a client
+// component, so Astro emits no script files; a page adds an inline script only when it needs one.
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import { NOINDEX, SITE_NAME, SITE_URL, siteUrl } from "../config";
