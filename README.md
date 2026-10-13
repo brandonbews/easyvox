@@ -44,7 +44,6 @@ The maintainer keeps the design decisions, the backlog, release steps and the ru
 2. Run `sh internal/scripts/install-hooks.sh`, and again after moving either checkout. It's safe to rerun, and it refuses to replace a file or a hook it didn't write.
    - It links `CLAUDE.local.md` here to `internal/agent-rules.md`, so Claude Code loads those rules in this checkout and in worktrees under `.claude/worktrees/`.
    - It installs a `post-checkout` hook that links `internal` into every new worktree (and `CLAUDE.local.md`, for a worktree outside this checkout).
-3. Copy `internal/recordings/` from the old computer by hand: the real-voice clips for the local benchmarks. No repo carries them.
 
 ## License
 
