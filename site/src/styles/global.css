@@ -772,6 +772,28 @@ kbd {
   font-size: clamp(2rem, 1.2rem + 2.6vw, 3.5rem);
 }
 
+/* The Homebrew command under the install buttons. A click selects all of it, with no script; on a
+ * phone it wraps rather than widen the page. */
+.brew {
+  margin-top: 1.5rem;
+  color: var(--color-fg-muted);
+  font-size: 0.9375rem;
+}
+
+.brew p {
+  margin: 0 0 0.5rem;
+}
+
+.brew code {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.45em 0.8em;
+  color: var(--color-fg);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
 .requirements {
   margin-top: 2.5rem;
 }
