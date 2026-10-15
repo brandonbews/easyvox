@@ -6,7 +6,7 @@ import { DOWNLOAD_URL } from "../config";
 import Base from "../layouts/Base.astro";
 ---
 
-<Base description="Simple, local, fast, free speech-to-text for the Mac. Open source, MIT license.">
+<Base description="Fast, local-only speech-to-text for the Mac, with a live preview. Free and open source, MIT license.">
   <main id="main" class="landing">
     <section class="hero container" aria-labelledby="top">
       <h1 id="top">Simple, local, fast, free speech-to-text.</h1>
@@ -28,20 +28,20 @@ import Base from "../layouts/Base.astro";
     <section class="section section-features container" aria-label="Features">
       <ul class="features">
         <li>
-          <h3>Fast</h3>
-          <p>Your text is in place under half a second after you let go.</p>
+          <h3>Super fast</h3>
+          <p>Talk as long as you want and paste in under 0.5s.</p>
         </li>
         <li>
-          <h3>Preview as you talk</h3>
-          <p>Your words appear while you're still talking.</p>
+          <h3>Live preview</h3>
+          <p>Check the transcript as you go.</p>
         </li>
         <li>
-          <h3>Local</h3>
-          <p>Everything runs on your Mac. Nothing you say goes to a server.</p>
+          <h3>Local only</h3>
+          <p>Nothing ever leaves your machine.</p>
         </li>
         <li>
           <h3>Free and open source</h3>
-          <p>MIT license. Fork it, change it, share it.</p>
+          <p>MIT license. Fork it, change it, whatever.</p>
         </li>
       </ul>
     </section>
@@ -54,7 +54,7 @@ import Base from "../layouts/Base.astro";
         <li class="model">
           <p class="badge">Default</p>
           <h3>Parakeet TDT 0.6B v2</h3>
-          <p>The best all-round model. A 539 MB download.</p>
+          <p>The best all-round model in my <a href="/benchmarks">testing</a> (539 MB).</p>
           <p class="model-credit">
             By NVIDIA, under CC BY 4.0. <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2">Model card</a>
           </p>
@@ -62,7 +62,7 @@ import Base from "../layouts/Base.astro";
         <li class="model">
           <p class="badge">The small one</p>
           <h3>Whisper base.en</h3>
-          <p>For an 8 GB Mac: smaller, but less accurate. An 85 MB download.</p>
+          <p>Super small, but less accurate (85 MB).</p>
           <p class="model-credit">
             By OpenAI, under Apache 2.0. <a href="https://huggingface.co/openai/whisper-base.en">Model card</a>
           </p>
