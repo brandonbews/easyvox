@@ -69,18 +69,35 @@ mod mac {
         Ok(ClipboardWrite { change_count_before: before, change_count_after: after, has_string_type, access_behavior })
     }
 
-    /// Posts Cmd+V key down/up to the HID event tap. Key code 9 is the ANSI "V" position,
-    /// with the flags forced to Command only. Non-QWERTY layouts may need a layout lookup.
+    /// Posts Cmd+V to the HID event tap: key code 9 (the ANSI "V" position) down with Command
+    /// only, then up with no flags. Non-QWERTY layouts may need a layout lookup.
     pub fn post_cmd_v() -> anyhow::Result<()> {
         const KVK_ANSI_V: u16 = 9;
         let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState);
         for down in [true, false] {
             let ev = CGEvent::new_keyboard_event(src.as_deref(), KVK_ANSI_V, down)
                 .ok_or_else(|| anyhow::anyhow!("CGEventCreateKeyboardEvent returned NULL"))?;
-            CGEvent::set_flags(Some(&ev), CGEventFlags::MaskCommand);
+            CGEvent::set_flags(Some(&ev), v_flags(down));
             CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&ev));
         }
         Ok(())
+    }
+
+    /// AppKit drops a key-up flagged Command, and with no Command key-up to follow, a Mac
+    /// Catalyst app can miss V's release and repeat the paste.
+    fn v_flags(down: bool) -> CGEventFlags {
+        if down { CGEventFlags::MaskCommand } else { CGEventFlags(0) }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn only_the_v_key_down_carries_command() {
+            assert_eq!(v_flags(true), CGEventFlags::MaskCommand);
+            assert_eq!(v_flags(false), CGEventFlags(0));
+        }
     }
 }
 
