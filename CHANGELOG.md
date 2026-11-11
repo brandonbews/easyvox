@@ -4,6 +4,10 @@ Notable changes in each release, newest first, in the [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Fixed
+
+- In Craft's Quick Entry window, and possibly other Mac Catalyst apps, the paste could repeat until another key was pressed. The V key-up of the simulated ⌘V no longer carries the Command flag.
+
 ## 0.1.0 - 2026-10-12
 
 The first release, for Apple silicon Macs on macOS 26 or later.
