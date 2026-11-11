@@ -1,3 +1,4 @@
+<!-- Code comments cite this file's headings by name, so renaming a heading breaks them: grep for it first. -->
 # Model bench
 
 The measurements behind EasyVox's model list and its pipeline defaults. Every run was made on 9–11 October 2026 on one M4 Mac mini; the per-run numbers are in [`bench/`](bench/README.md).
