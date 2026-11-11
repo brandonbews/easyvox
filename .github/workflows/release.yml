@@ -27,7 +27,7 @@ on:
 permissions:
   contents: read
 
-# One release at a time, and never cancelled halfway through a notarization.
+# One release at a time, and never canceled halfway through a notarization.
 concurrency:
   group: release
   cancel-in-progress: false

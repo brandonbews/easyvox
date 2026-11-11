@@ -135,7 +135,7 @@ fn fetch(url: &str, follow: fn(&str) -> bool) -> Result<Vec<u8>, UpdateError> {
         Err(FetchError::Http(code)) => Err(UpdateError::Http(code)),
         Err(FetchError::Offline(e)) => Err(UpdateError::Offline(e)),
         Err(FetchError::Transient(e) | FetchError::Fatal(e)) => Err(UpdateError::Network(e)),
-        Err(FetchError::Cancelled) => Err(UpdateError::Network("The check was cancelled.".into())),
+        Err(FetchError::Canceled) => Err(UpdateError::Network("The check was canceled.".into())),
     }
 }
 

@@ -933,15 +933,14 @@ impl OverlayView {
             let alpha = (opacity.clamp(0., 1.) * 255.).round() as u32;
             svg().path(glyph.path()).flex_none().size(px(GLYPH)).text_color(rgba(palette.text << 8 | alpha))
         };
-        let (bars, colour) = match (self.mode, self.bars(self.level_at(now))) {
+        let (bars, color) = match (self.mode, self.bars(self.level_at(now))) {
             (Mode::Final, _) => return slot.child(glyph(Glyph::Pasted, check)),
             (Mode::Notice, _) => return slot.when_some(self.notice.as_ref(), |s, n| s.child(glyph(n.glyph, 1.))),
             (_, Some(bars)) if !self.cant_hear => (bars, palette.meter),
             _ => ([BAR_MIN; BARS], palette.secondary),
         };
-        slot.gap(px(BAR_PITCH - BAR_WIDTH)).children(
-            bars.map(|height| div().w(px(BAR_WIDTH)).h(px(height)).flex_none().rounded_full().bg(rgb(colour))),
-        )
+        slot.gap(px(BAR_PITCH - BAR_WIDTH))
+            .children(bars.map(|height| div().w(px(BAR_WIDTH)).h(px(height)).flex_none().rounded_full().bg(rgb(color))))
     }
 }
 
@@ -1486,8 +1485,8 @@ mod tests {
             let text = channels(p.text);
             let provisional = over(text, 1. - p.provisional_fade as f64, pill);
             let all = [text, provisional, channels(p.secondary), channels(p.meter)];
-            for (w, colour) in worst.iter_mut().zip(all) {
-                *w = w.min(contrast(colour, pill));
+            for (w, color) in worst.iter_mut().zip(all) {
+                *w = w.min(contrast(color, pill));
             }
         }
         worst

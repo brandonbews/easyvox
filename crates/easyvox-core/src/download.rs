@@ -12,7 +12,7 @@
 //! - **Resume only within one call.** A dropped or stalled connection is picked up where it
 //!   stopped (`Range: bytes=N-`), from the pinned Hugging Face URL each time, up to
 //!   [`DownloadOptions::max_failures`] tries in a row without new bytes. That covers Wi-Fi
-//!   dropping out and the Mac sleeping. A cancelled or failed download starts again from zero.
+//!   dropping out and the Mac sleeping. A canceled or failed download starts again from zero.
 //! - **No request for a model that's already there.** A copy that checks out is kept as it is.
 //! - **The license travels with the file.** Once a model checks out, its license, credit,
 //!   modification note and disclaimer are written next to it, as `<file>.LICENSE.txt`
@@ -61,7 +61,7 @@ impl CancelToken {
         self.0.store(true, Ordering::Relaxed);
     }
 
-    pub fn is_cancelled(&self) -> bool {
+    pub fn is_canceled(&self) -> bool {
         self.0.load(Ordering::Relaxed)
     }
 }
@@ -84,7 +84,7 @@ pub enum Progress {
 /// path, no partial file. `Display` gives one sentence for the UI.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DownloadError {
-    Cancelled,
+    Canceled,
     /// The catalog entry isn't a single file with a checksum (the bench-only sherpa archives).
     NotDownloadable,
     /// This model is already downloading (here or in another process).
@@ -114,7 +114,7 @@ pub enum DownloadError {
 impl std::fmt::Display for DownloadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Cancelled => write!(f, "The download was cancelled."),
+            Self::Canceled => write!(f, "The download was canceled."),
             Self::NotDownloadable => write!(f, "This model can't be downloaded in the app."),
             Self::Busy => write!(f, "This model is already downloading."),
             Self::NotEnoughSpace { needed, available } => write!(
@@ -272,7 +272,7 @@ pub fn download_with(
         let retry = match result {
             Ok(()) if done == total => break,
             Ok(()) => Retry::Transient("The connection closed before the end of the file".into()),
-            Err(FetchError::Cancelled) => return Err(DownloadError::Cancelled),
+            Err(FetchError::Canceled) => return Err(DownloadError::Canceled),
             Err(FetchError::Sink(e)) => return Err(e),
             Err(FetchError::Fatal(e)) => return Err(DownloadError::Network(e)),
             Err(FetchError::Http(code)) if code == 408 || code == 429 || (500..600).contains(&code) => {
@@ -282,8 +282,8 @@ pub fn download_with(
             Err(FetchError::Offline(e)) => Retry::Offline(e),
             Err(FetchError::Transient(e)) => Retry::Transient(e),
         };
-        if cancel.is_cancelled() {
-            return Err(DownloadError::Cancelled);
+        if cancel.is_canceled() {
+            return Err(DownloadError::Canceled);
         }
         // Tries in a row without new bytes. One that brought bytes starts the count again, so
         // a connection that keeps dropping but keeps making progress is never given up on.
@@ -298,8 +298,8 @@ pub fn download_with(
         reporter.emit(Progress::Reconnecting { attempt: failures + 1, max: options.max_failures, done, total });
         // 1, 1, 2, 4, 8 s by default.
         let wait = options.first_backoff.saturating_mul(1 << failures.saturating_sub(1).min(16));
-        if !sleep_unless_cancelled(wait, cancel) {
-            return Err(DownloadError::Cancelled);
+        if !sleep_unless_canceled(wait, cancel) {
+            return Err(DownloadError::Canceled);
         }
     }
 
@@ -355,10 +355,10 @@ fn check_space(needed: u64, available: u64) -> Result<(), DownloadError> {
     if available < needed { Err(DownloadError::NotEnoughSpace { needed, available }) } else { Ok(()) }
 }
 
-/// Waits `wait`, a slice at a time. False if the download was cancelled meanwhile.
-fn sleep_unless_cancelled(wait: Duration, cancel: &CancelToken) -> bool {
+/// Waits `wait`, a slice at a time. False if the download was canceled meanwhile.
+fn sleep_unless_canceled(wait: Duration, cancel: &CancelToken) -> bool {
     let until = Instant::now() + wait;
-    while !cancel.is_cancelled() {
+    while !cancel.is_canceled() {
         let left = until.saturating_duration_since(Instant::now());
         if left.is_zero() {
             return true;
@@ -369,7 +369,7 @@ fn sleep_unless_cancelled(wait: Duration, cancel: &CancelToken) -> bool {
 }
 
 /// Whether the file at `path` is `size` bytes with sha256 `expected`. Reads it in 1 MiB
-/// chunks, stopping if the download is cancelled.
+/// chunks, stopping if the download is canceled.
 fn copy_checks_out(path: &Path, size: u64, expected: &str, cancel: &CancelToken) -> Result<bool, DownloadError> {
     let mut file = File::open(path).map_err(|e| disk(path, e))?;
     if file.metadata().map_err(|e| disk(path, e))?.len() != size {
@@ -378,8 +378,8 @@ fn copy_checks_out(path: &Path, size: u64, expected: &str, cancel: &CancelToken)
     let mut hasher = Sha256::new();
     let mut buf = vec![0; CHUNK];
     loop {
-        if cancel.is_cancelled() {
-            return Err(DownloadError::Cancelled);
+        if cancel.is_canceled() {
+            return Err(DownloadError::Canceled);
         }
         match file.read(&mut buf) {
             Ok(0) => break,
@@ -623,7 +623,7 @@ pub(crate) enum Fetched<'a> {
 /// How one attempt ended, when it didn't end cleanly. `E` is what the sink refuses data with.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) enum FetchError<E = DownloadError> {
-    Cancelled,
+    Canceled,
     /// An error status, other than 200 and 206.
     Http(u16),
     /// No route to the server (offline, DNS, refused). Retried.
@@ -741,9 +741,9 @@ mod tests {
     fn cancel_token_is_shared_between_clones() {
         let token = CancelToken::new();
         let clone = token.clone();
-        assert!(!token.is_cancelled());
+        assert!(!token.is_canceled());
         clone.cancel();
-        assert!(token.is_cancelled());
-        assert!(!sleep_unless_cancelled(Duration::from_secs(10), &token), "returns at once");
+        assert!(token.is_canceled());
+        assert!(!sleep_unless_canceled(Duration::from_secs(10), &token), "returns at once");
     }
 }

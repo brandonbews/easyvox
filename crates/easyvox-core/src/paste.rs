@@ -70,14 +70,18 @@ mod mac {
     }
 
     /// Posts Cmd+V to the HID event tap: key code 9 (the ANSI "V" position) down with Command
-    /// only, then up with no flags. Non-QWERTY layouts may need a layout lookup.
+    /// only, then up with no flags. Both events are made before either is posted, so a key-up
+    /// that can't be made never leaves V held down. Non-QWERTY layouts may need a layout lookup.
     pub fn post_cmd_v() -> anyhow::Result<()> {
         const KVK_ANSI_V: u16 = 9;
         let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState);
-        for down in [true, false] {
+        let key = |down| {
             let ev = CGEvent::new_keyboard_event(src.as_deref(), KVK_ANSI_V, down)
                 .ok_or_else(|| anyhow::anyhow!("CGEventCreateKeyboardEvent returned NULL"))?;
             CGEvent::set_flags(Some(&ev), v_flags(down));
+            anyhow::Ok(ev)
+        };
+        for ev in [key(true)?, key(false)?] {
             CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&ev));
         }
         Ok(())

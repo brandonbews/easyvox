@@ -74,6 +74,9 @@ pub struct Watch<P> {
     /// Self-test only: how many times the system was asked.
     #[cfg(feature = "self-test")]
     reads: usize,
+    /// Self-test only: how many of those reads the timer made.
+    #[cfg(feature = "self-test")]
+    polls: usize,
     _activation: Subscription,
 }
 
@@ -104,6 +107,8 @@ impl<P: Copy + PartialEq + Debug + 'static> Watch<P> {
             pinned: None,
             #[cfg(feature = "self-test")]
             reads: 1,
+            #[cfg(feature = "self-test")]
+            polls: 0,
             _activation: activation,
         }
     }
@@ -128,7 +133,14 @@ impl<P: Copy + PartialEq + Debug + 'static> Watch<P> {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(POLL).await;
-                match this.update(cx, |view, cx| field(view).check(cx)) {
+                let polled = this.update(cx, |view, cx| {
+                    #[cfg(feature = "self-test")]
+                    {
+                        field(view).polls += 1;
+                    }
+                    field(view).check(cx)
+                });
+                match polled {
                     Ok(true) => {}
                     _ => break, // all allowed, or the window is gone
                 }
@@ -165,9 +177,9 @@ impl<P: Copy + PartialEq + Debug + 'static> Watch<P> {
         cx.notify();
     }
 
-    /// How many times this watch asked the system.
+    /// How many times this watch asked the system, and how many of those its timer did.
     #[cfg(feature = "self-test")]
-    pub fn reads(&self) -> usize {
-        self.reads
+    pub fn reads(&self) -> (usize, usize) {
+        (self.reads, self.polls)
     }
 }

@@ -214,8 +214,8 @@ impl OverlayPanel {
         let shown = presentation(&layer);
         let t = shown.transform();
         // Where the transform drawn now puts the layer's center, against where it is.
-        let (dx, dy) = to_centre(&layer);
-        let centre_shift = (t.m11 * dx + t.m21 * dy + t.m41 - dx).hypot(t.m12 * dx + t.m22 * dy + t.m42 - dy);
+        let (dx, dy) = to_center(&layer);
+        let center_shift = (t.m11 * dx + t.m21 * dy + t.m41 - dx).hypot(t.m12 * dx + t.m22 * dy + t.m42 - dy);
         let animation = |key: &str| {
             // SAFETY: only read for whether it exists, its duration and where it starts.
             unsafe { layer.animationForKey(&NSString::from_str(key)) }
@@ -229,7 +229,7 @@ impl OverlayPanel {
         MotionState {
             opacity: f64::from(shown.opacity()),
             scale: (t.m11, t.m22),
-            centre_shift,
+            center_shift,
             resting_opacity: self.view.alphaValue(),
             fade_secs: secs(FADE),
             scale_secs: secs(SCALE),
@@ -257,7 +257,7 @@ fn drawn(layer: &CALayer) -> (f64, f64) {
 
 /// From the layer's anchor point, about which its transform applies, to its center, in its own
 /// coordinates. AppKit puts the anchor of a view's layer at a corner.
-fn to_centre(layer: &CALayer) -> (f64, f64) {
+fn to_center(layer: &CALayer) -> (f64, f64) {
     let (bounds, anchor) = (layer.bounds(), layer.anchorPoint());
     ((0.5 - anchor.x) * bounds.size.width, (0.5 - anchor.y) * bounds.size.height)
 }
@@ -314,7 +314,7 @@ impl Animated {
         match self {
             Self::Opacity | Self::Scale => Retained::into_super(NSNumber::new_f64(v)),
             Self::Shift => {
-                let (dx, dy) = to_centre(layer);
+                let (dx, dy) = to_center(layer);
                 // SAFETY: a plain value constructor.
                 unsafe { NSValue::valueWithSize(NSSize::new(dx * (1. - v), dy * (1. - v))) }
             }
@@ -711,7 +711,7 @@ pub struct MotionState {
     pub scale: (f64, f64),
     /// How far the transform drawn moves the layer's center, in points: 0 when it scales about
     /// it.
-    pub centre_shift: f64,
+    pub center_shift: f64,
     pub resting_opacity: f64,
     /// The durations of the fade and the scale on the layer, if there are any, and the opacity
     /// and scale they start from.

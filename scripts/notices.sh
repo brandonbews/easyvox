@@ -11,6 +11,8 @@
 # Needs cargo-about 0.9 (`cargo install --locked cargo-about --features cli`). Works offline,
 # from the crates in ~/.cargo/registry (after any build, or `cargo fetch`).
 set -euo pipefail
+# sort and comm in byte order, so every machine writes the same file.
+export LC_ALL=C
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"

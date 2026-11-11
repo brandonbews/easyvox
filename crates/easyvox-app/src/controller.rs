@@ -151,7 +151,7 @@ pub struct Controller {
     onboarding_view: Option<WeakEntity<OnboardingView>>,
     hide_task: Option<Task<()>>,
     load_task: Option<Task<()>>,
-    /// Frees the model when it fires; replaced (cancelled) by every dictation.
+    /// Frees the model when it fires; replaced (canceled) by every dictation.
     unload_task: Option<Task<()>>,
     /// The current session started with the model unloaded, so it's reloading it.
     reloading: bool,
@@ -814,11 +814,11 @@ impl Controller {
         cx.refresh_windows();
     }
 
-    /// Stops a running download. Its `Done(Err(Cancelled))` follows and clears its status;
+    /// Stops a running download. Its `Done(Err(Canceled))` follows and clears its status;
     /// nothing is left on disk.
     pub fn cancel_download(&mut self, model_id: &str) {
         if let Some(job) = self.downloads.get(model_id) {
-            log::info!("download: cancelling {model_id}");
+            log::info!("download: canceling {model_id}");
             job.cancel.cancel();
         }
     }
@@ -876,8 +876,8 @@ impl Controller {
                             self.use_model(model, cx);
                         }
                     }
-                    Err(DownloadError::Cancelled) => {
-                        log::info!("download: {model} cancelled");
+                    Err(DownloadError::Canceled) => {
+                        log::info!("download: {model} canceled");
                         downloads.remove(model);
                     }
                     Err(e) => {

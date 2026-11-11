@@ -216,7 +216,7 @@ fn step_row(
                 div().text_size(brand::TEXT_KEY).line_height(px(16.)).text_color(rgb(words)).child(step.text.clone()),
             )
             .when(step.id == StepId::Model, |this| {
-                this.child(div().mt(px(8.)).child(ModelRow::new(model).emphasised(current)))
+                this.child(div().mt(px(8.)).child(ModelRow::new(model).emphasized(current)))
             }),
     )
 }

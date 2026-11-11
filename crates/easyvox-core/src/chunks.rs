@@ -302,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn context_words_belong_to_the_neighbouring_chunks() {
+    fn context_words_belong_to_the_neighboring_chunks() {
         let mut p = polished(true);
         // Chunk 0..5 s, decoded with 1 s of right context; the cut is in a pause at 5 s.
         let first = ws(&[("We", 0.5, 0.7), ("met", 0.8, 1.0), ("Tuesday.", 3.0, 4.6), ("Then", 5.4, 5.7)]);

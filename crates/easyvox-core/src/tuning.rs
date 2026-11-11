@@ -361,7 +361,7 @@ mod tests {
     /// The defaults, pinned in the units the code works in, so changing one takes a deliberate
     /// edit here too.
     #[test]
-    fn defaults_equal_the_old_constants() {
+    fn defaults_are_pinned_in_the_units_the_code_uses() {
         let t = Tuning::default();
         // session.rs
         assert_eq!((t.preview_interval_ms, t.preview_context_ms), (1_600, 1_000));
@@ -376,7 +376,7 @@ mod tests {
         assert_eq!(t.gate_settle_passes, 2);
         // -20 dB is exactly 0.1, and -55 dBFS (0.00178) is within 1.2 % of 0.0018, the linear
         // levels the pipeline was tuned with. On the test clips, the gate and the pause finder
-        // decide the same with either (`pause::tests::db_defaults_decide_like_the_old_levels`).
+        // decide the same with either (`pause::tests::db_defaults_decide_like_the_tuned_linear_levels`).
         assert_eq!((db_to_linear(t.gate_quiet_db), db_to_linear(t.pause_quiet_db)), (0.1, 0.1));
         for level in [t.gate_silence_dbfs, t.pause_silence_dbfs] {
             assert!((db_to_linear(level) / 0.0018 - 1.0).abs() < 0.013, "{level} dBFS");

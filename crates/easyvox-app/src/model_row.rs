@@ -106,18 +106,18 @@ struct RowUi {
 pub struct ModelRow {
     model: &'static ModelInfo,
     /// Download is the vermilion button.
-    emphasised: bool,
+    emphasized: bool,
 }
 
 impl ModelRow {
     pub fn new(model: &'static ModelInfo) -> Self {
-        Self { model, emphasised: true }
+        Self { model, emphasized: true }
     }
 
     /// Whether Download is the vermilion button (it is unless this says otherwise). Onboarding
     /// keeps vermilion for the step to do next.
-    pub fn emphasised(mut self, emphasised: bool) -> Self {
-        self.emphasised = emphasised;
+    pub fn emphasized(mut self, emphasized: bool) -> Self {
+        self.emphasized = emphasized;
         self
     }
 }
@@ -166,7 +166,7 @@ impl RenderOnce for ModelRow {
             ModelState::NotDownloaded | ModelState::Failed(_) => {
                 let label = if matches!(state, ModelState::Failed(_)) { "Try again" } else { "Download" };
                 let ui = ui.clone();
-                let button = if self.emphasised {
+                let button = if self.emphasized {
                     brand::primary(key("download"), label)
                 } else {
                     brand::button(key("download"), label)

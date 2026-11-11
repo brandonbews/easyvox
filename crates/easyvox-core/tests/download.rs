@@ -35,7 +35,7 @@ fn options() -> DownloadOptions {
 
 /// How the server answers. Every field applies to every request unless it says otherwise.
 #[derive(Clone, Default)]
-struct Behaviour {
+struct Behavior {
     /// `/resolve/…` answers 302 to `/cdn/…`, like huggingface.co to its CDN.
     redirect: bool,
     /// Answer this status, with no body, instead of the file.
@@ -73,7 +73,7 @@ struct Server {
 }
 
 impl Server {
-    fn start(payload: Vec<u8>, behaviour: Behaviour) -> Server {
+    fn start(payload: Vec<u8>, behavior: Behavior) -> Server {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let log: Arc<Mutex<Vec<Request>>> = Arc::default();
@@ -88,9 +88,9 @@ impl Server {
                     break;
                 }
                 let Ok(stream) = stream else { continue };
-                let (payload, log, behaviour, file_requests, has_bytes) =
-                    (payload.clone(), log2.clone(), behaviour.clone(), file_requests.clone(), has_bytes2.clone());
-                std::thread::spawn(move || serve(stream, &payload, &behaviour, &log, &file_requests, &has_bytes));
+                let (payload, log, behavior, file_requests, has_bytes) =
+                    (payload.clone(), log2.clone(), behavior.clone(), file_requests.clone(), has_bytes2.clone());
+                std::thread::spawn(move || serve(stream, &payload, &behavior, &log, &file_requests, &has_bytes));
             }
         });
         Server { port, log, stop, client_has_bytes }
@@ -124,7 +124,7 @@ impl Drop for Server {
 fn serve(
     mut stream: TcpStream,
     payload: &[u8],
-    b: &Behaviour,
+    b: &Behavior,
     log: &Mutex<Vec<Request>>,
     file_requests: &Mutex<usize>,
     client_has_bytes: &AtomicBool,
@@ -355,7 +355,7 @@ fn assert_installed(m: &ModelInfo, dir: &Path, bytes: &[u8]) {
 #[test]
 fn success() {
     let bytes = payload(1, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour::default());
+    let server = Server::start(bytes.clone(), Behavior::default());
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("success"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
     check(&m, &dir, &result, &events);
@@ -370,7 +370,7 @@ fn success() {
 fn wrong_sha256() {
     let expected = payload(1, PAYLOAD_LEN);
     let served = payload(2, PAYLOAD_LEN);
-    let server = Server::start(served.clone(), Behaviour::default());
+    let server = Server::start(served.clone(), Behavior::default());
     let (m, dir) = (model(&server.url(), &expected), temp_models_dir("wrong-sha256"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
     check(&m, &dir, &result, &events);
@@ -385,7 +385,7 @@ fn wrong_sha256() {
 #[test]
 fn interrupted_then_resumed() {
     let bytes = payload(3, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour { cut_at: Some((MIB, 1)), ..Default::default() });
+    let server = Server::start(bytes.clone(), Behavior { cut_at: Some((MIB, 1)), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("resumed"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
@@ -405,7 +405,7 @@ fn interrupted_then_resumed() {
 #[test]
 fn interrupted_every_time() {
     let bytes = payload(4, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour { cut_at: Some((MIB, usize::MAX)), ..Default::default() });
+    let server = Server::start(bytes.clone(), Behavior { cut_at: Some((MIB, usize::MAX)), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("interrupted"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
@@ -426,7 +426,7 @@ fn interrupted_every_time() {
 #[test]
 fn truncated_file() {
     let bytes = payload(5, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour { truncate_to: Some(PAYLOAD_LEN / 2), ..Default::default() });
+    let server = Server::start(bytes.clone(), Behavior { truncate_to: Some(PAYLOAD_LEN / 2), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("truncated"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
     check(&m, &dir, &result, &events);
@@ -434,25 +434,25 @@ fn truncated_file() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// ★ Cancelled from the progress callback while the server trickles: `Cancelled` within a
+/// ★ Canceled from the progress callback while the server trickles: `Canceled` within a
 /// second, and nothing left.
 #[test]
 fn cancel() {
     let bytes = payload(6, PAYLOAD_LEN);
-    let behaviour = Behaviour { trickle: Some((64 * 1024, Duration::from_millis(50))), ..Default::default() };
-    let server = Server::start(bytes.clone(), behaviour);
+    let behavior = Behavior { trickle: Some((64 * 1024, Duration::from_millis(50))), ..Default::default() };
+    let server = Server::start(bytes.clone(), behavior);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("cancel"));
     let cancel = CancelToken::new();
-    let mut cancelled_at = None;
+    let mut canceled_at = None;
     let (result, events) = run(&m, &dir, &cancel, |p| {
-        if matches!(p, Progress::Downloading { .. }) && cancelled_at.is_none() {
+        if matches!(p, Progress::Downloading { .. }) && canceled_at.is_none() {
             cancel.cancel();
-            cancelled_at = Some(Instant::now());
+            canceled_at = Some(Instant::now());
         }
     });
-    let took = cancelled_at.expect("a progress event").elapsed();
+    let took = canceled_at.expect("a progress event").elapsed();
     check(&m, &dir, &result, &events);
-    assert_eq!(result, Err(DownloadError::Cancelled));
+    assert_eq!(result, Err(DownloadError::Canceled));
     assert!(took < Duration::from_secs(1), "cancel took {took:?}");
     drop(server);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -462,7 +462,7 @@ fn cancel() {
 #[test]
 fn already_present() {
     let bytes = payload(7, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour::default());
+    let server = Server::start(bytes.clone(), Behavior::default());
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("present"));
     std::fs::create_dir_all(dir.join("gguf")).unwrap();
     std::fs::write(m.resolve(&dir), &bytes).unwrap();
@@ -479,7 +479,7 @@ fn already_present() {
 #[test]
 fn already_present_but_damaged() {
     let bytes = payload(8, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour::default());
+    let server = Server::start(bytes.clone(), Behavior::default());
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("damaged"));
     std::fs::create_dir_all(dir.join("gguf")).unwrap();
     std::fs::write(m.resolve(&dir), payload(9, PAYLOAD_LEN)).unwrap();
@@ -496,7 +496,7 @@ fn already_present_but_damaged() {
 #[test]
 fn not_found() {
     let bytes = payload(10, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour { status: Some(404), ..Default::default() });
+    let server = Server::start(bytes.clone(), Behavior { status: Some(404), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("404"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
     check(&m, &dir, &result, &events);
@@ -509,7 +509,7 @@ fn not_found() {
 #[test]
 fn server_error_is_retried() {
     let bytes = payload(11, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour { status: Some(503), ..Default::default() });
+    let server = Server::start(bytes.clone(), Behavior { status: Some(503), ..Default::default() });
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("503"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
     check(&m, &dir, &result, &events);
@@ -523,8 +523,8 @@ fn server_error_is_retried() {
 #[test]
 fn redirect_then_resume() {
     let bytes = payload(12, PAYLOAD_LEN);
-    let behaviour = Behaviour { redirect: true, cut_at: Some((MIB, 1)), ..Default::default() };
-    let server = Server::start(bytes.clone(), behaviour);
+    let behavior = Behavior { redirect: true, cut_at: Some((MIB, 1)), ..Default::default() };
+    let server = Server::start(bytes.clone(), behavior);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("redirect"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
@@ -545,8 +545,8 @@ fn redirect_then_resume() {
 #[test]
 fn range_ignored() {
     let bytes = payload(13, PAYLOAD_LEN);
-    let behaviour = Behaviour { ignore_range: true, cut_at: Some((MIB, 1)), ..Default::default() };
-    let server = Server::start(bytes.clone(), behaviour);
+    let behavior = Behavior { ignore_range: true, cut_at: Some((MIB, 1)), ..Default::default() };
+    let server = Server::start(bytes.clone(), behavior);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("range-ignored"));
     let (result, events) = run(&m, &dir, &CancelToken::new(), |p| server.saw(p));
     check(&m, &dir, &result, &events);
@@ -563,8 +563,8 @@ fn range_ignored() {
 #[test]
 fn stall() {
     let bytes = payload(14, PAYLOAD_LEN);
-    let behaviour = Behaviour { stall: Some((MIB, Duration::from_secs(4))), ..Default::default() };
-    let server = Server::start(bytes.clone(), behaviour);
+    let behavior = Behavior { stall: Some((MIB, Duration::from_secs(4))), ..Default::default() };
+    let server = Server::start(bytes.clone(), behavior);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("stall"));
     let started = Instant::now();
     let (result, events) = run(&m, &dir, &CancelToken::new(), |_| {});
@@ -581,7 +581,7 @@ fn stall() {
 #[test]
 fn wrong_size_announced() {
     let bytes = payload(15, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour::default());
+    let server = Server::start(bytes.clone(), Behavior::default());
     let mut m = model(&server.url(), &bytes);
     m.download_bytes += 1;
     let dir = temp_models_dir("wrong-size");
@@ -600,8 +600,8 @@ fn wrong_size_announced() {
 #[test]
 fn busy() {
     let bytes = payload(16, PAYLOAD_LEN);
-    let behaviour = Behaviour { trickle: Some((256 * 1024, Duration::from_millis(50))), ..Default::default() };
-    let server = Server::start(bytes.clone(), behaviour);
+    let behavior = Behavior { trickle: Some((256 * 1024, Duration::from_millis(50))), ..Default::default() };
+    let server = Server::start(bytes.clone(), behavior);
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("busy"));
     let (started_tx, started_rx) = std::sync::mpsc::channel();
     let first = {
@@ -651,7 +651,7 @@ fn remove_partials_sweeps_only_stale_part_files() {
 #[test]
 fn leftover_part_file_is_not_used() {
     let bytes = payload(17, PAYLOAD_LEN);
-    let server = Server::start(bytes.clone(), Behaviour::default());
+    let server = Server::start(bytes.clone(), Behavior::default());
     let (m, dir) = (model(&server.url(), &bytes), temp_models_dir("leftover"));
     std::fs::create_dir_all(dir.join("gguf")).unwrap();
     std::fs::write(m.partial_path(&dir), payload(18, 3 * MIB)).unwrap();
@@ -667,7 +667,7 @@ fn leftover_part_file_is_not_used() {
 #[test]
 fn no_checksum_no_download() {
     let bytes = payload(19, 1024);
-    let server = Server::start(bytes.clone(), Behaviour::default());
+    let server = Server::start(bytes.clone(), Behavior::default());
     let mut m = model(&server.url(), &bytes);
     m.sha256 = None;
     let dir = temp_models_dir("no-checksum");

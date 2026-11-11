@@ -106,9 +106,10 @@ impl SettingsView {
         Watch::pin(self, Self::watch, permissions, cx);
     }
 
-    /// How many times the window asked the system for the permissions.
+    /// How many times the window asked the system for the permissions, and how many of those its
+    /// timer did.
     #[cfg(feature = "self-test")]
-    pub fn permission_reads(&self) -> usize {
+    pub fn permission_reads(&self) -> (usize, usize) {
         self.permissions.reads()
     }
 

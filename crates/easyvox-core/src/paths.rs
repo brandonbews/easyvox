@@ -75,7 +75,7 @@ mod tests {
     }
 
     #[test]
-    fn config_file_honours_xdg_config_home() {
+    fn config_file_honors_xdg_config_home() {
         let path = resolve(None, Some("/tmp/xdg"), Some("/Users/me"));
         assert_eq!(path, PathBuf::from("/tmp/xdg/easyvox/config.toml"));
     }

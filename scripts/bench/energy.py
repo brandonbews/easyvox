@@ -98,7 +98,7 @@ def foreign_cpu(ps_path, lo, hi, bench_pid):
     return sum(totals) / len(totals), max(totals), " ".join("%s:%.0f" % kv for kv in top)
 
 
-def analyse(run_dir, label):
+def analyze(run_dir, label):
     meta = json.load(open(os.path.join(run_dir, label + ".meta.json")))
     samples = load_samples(os.path.join(run_dir, label + ".jsonl"))
     bench_path = os.path.join(run_dir, label + ".json")
@@ -190,7 +190,7 @@ def analyse(run_dir, label):
 def main():
     run_dir = sys.argv[1]
     labels = sys.argv[2:] or sorted(os.path.basename(p)[: -len(".meta.json")] for p in glob.glob(os.path.join(run_dir, "*.meta.json")))
-    rows = [analyse(run_dir, l) for l in labels]
+    rows = [analyze(run_dir, l) for l in labels]
     if not rows:
         sys.exit("no runs")
     with open(os.path.join(run_dir, "energy.csv"), "w", newline="") as f:

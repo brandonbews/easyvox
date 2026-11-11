@@ -680,7 +680,7 @@ async fn reduce_motion(controller: &Entity<Controller>, report: &mut Report, cx:
 /// a point), and changing size, or not, as an animation of its scale says.
 fn scaled_in_place(m: &platform::MotionState) -> bool {
     let (x, y) = m.scale;
-    (x - y).abs() < 1e-9 && m.centre_shift < 0.05 && (m.scale_secs.is_some() || x == 1.)
+    (x - y).abs() < 1e-9 && m.center_shift < 0.05 && (m.scale_secs.is_some() || x == 1.)
 }
 
 /// A press during the close (here, the show it makes) brings the pill straight back, from
@@ -738,7 +738,7 @@ async fn reopen_during_close(controller: &Entity<Controller>, report: &mut Repor
             && settled.scale == (1., 1.)
             && hidden.is_some(),
         json!({"mid_close": motion_json(&fading), "turned": motion_json(&turned), "no_jump": no_jump,
-               "reopened": motion_json(&back), "close_cancelled": !closing_after, "up_after": up,
+               "reopened": motion_json(&back), "close_canceled": !closing_after, "up_after": up,
                "settled": motion_json(&settled), "hidden_after_ms": hidden}),
     );
 }
@@ -1095,8 +1095,8 @@ async fn about_updates(controller: &Entity<Controller>, report: &mut Report, cx:
 }
 
 /// Settings › Permissions draws its rows for every state the three permissions can show (pinned
-/// in the view: the real ones aren't touched, and no button is clicked). Its watch reads the
-/// permissions every second while one is missing, not at all once all are allowed, and goes
+/// in the view: the real ones aren't touched, and no button is clicked). Its watch's timer reads
+/// the permissions every second while one is missing, not at all once all are allowed, and goes
 /// with the window, which this closes.
 async fn settings_permissions(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
     use crate::platform::InputMonitoring;
@@ -1136,21 +1136,28 @@ async fn settings_permissions(controller: &Entity<Controller>, report: &mut Repo
         });
         draws.push(json!({"case": case, "drawn": drawn}));
     }
-    // Pinning reads them once, then the watch goes on (or not) as if they were the system's.
+    // Pinning reads them once, then the timer goes on (or not) as if they were the system's.
+    // The window coming forward, which macOS may make it do at any point here, reads them once
+    // more and restarts the timer. So with all allowed only the timer's reads count; with one
+    // missing they all do, since the restart's read stands in for the poll it puts off.
     // Timers on time, as with the screen on: App Nap would stretch the one-second reads.
     let _awake = cx.background_executor().prevent_app_nap("EasyVox self-test");
     let reads = |cx: &mut AsyncApp| cx.update(|cx| view.read(cx).permission_reads());
+    let since = |(all, polls): (usize, usize), cx: &mut AsyncApp| {
+        let now = reads(cx);
+        (now.0 - all, now.1 - polls)
+    };
     let watch = |pinned: AllPermissions, cx: &mut AsyncApp| {
         cx.update(|cx| view.update(cx, |v, cx| v.pin_permissions(Some(pinned), cx)));
     };
     watch(allowed, cx);
     let before = reads(cx);
     sleep(cx, 3000).await;
-    let reads_all_allowed = reads(cx) - before;
+    let (reads_all_allowed, polls_all_allowed) = since(before, cx);
     watch(missing, cx);
     let before = reads(cx);
     sleep(cx, 3000).await;
-    let reads_one_missing = reads(cx) - before;
+    let (reads_one_missing, polls_one_missing) = since(before, cx);
     cx.update(|cx| {
         view.update(cx, |v, cx| {
             v.pin_permissions(None, cx);
@@ -1168,11 +1175,13 @@ async fn settings_permissions(controller: &Entity<Controller>, report: &mut Repo
     report.check(
         name,
         draws.iter().all(|d| d["drawn"] == true)
-            && reads_all_allowed == 0
+            && polls_all_allowed == 0
             && (2..=4).contains(&reads_one_missing)
             && released.is_some(),
-        json!({"draws": draws, "reads_in_3s_all_allowed": reads_all_allowed,
-               "reads_in_3s_one_missing": reads_one_missing, "released_after_close_ms": released}),
+        json!({"draws": draws,
+               "reads_in_3s_all_allowed": reads_all_allowed, "polls_in_3s_all_allowed": polls_all_allowed,
+               "reads_in_3s_one_missing": reads_one_missing, "polls_in_3s_one_missing": polls_one_missing,
+               "released_after_close_ms": released}),
     );
 }
 
@@ -1229,7 +1238,7 @@ async fn model_download(controller: &Entity<Controller>, options: &Options, repo
             .await;
     let left = names_in(&dir.join("gguf"));
     report.check(
-        "a cancelled model download leaves nothing behind",
+        "a canceled model download leaves nothing behind",
         progressed.is_some() && cleared.is_some() && left.is_empty(),
         json!({"progress_ms": progressed, "cleared_ms": cleared, "files_left": left}),
     );
@@ -1779,7 +1788,7 @@ fn serve_file(
             (Body::File(_), None) => return,
         };
         if stream.write_all(piece).is_err() {
-            return; // the download was cancelled
+            return; // the download was canceled
         }
         at += n as u64;
         if let Some((_, every)) = serve.pace {
@@ -1838,7 +1847,7 @@ fn draw_each_redraw(controller: &Entity<Controller>, on: bool, cx: &mut AsyncApp
 }
 
 fn motion_json(m: &platform::MotionState) -> Value {
-    json!({"opacity": m.opacity, "scale": [m.scale.0, m.scale.1], "centre_shift_pt": m.centre_shift,
+    json!({"opacity": m.opacity, "scale": [m.scale.0, m.scale.1], "center_shift_pt": m.center_shift,
            "resting_opacity": m.resting_opacity, "fade_secs": m.fade_secs, "scale_secs": m.scale_secs,
            "fade_from": m.fade_from, "scale_from": m.scale_from,
            "layer_size": [m.layer_size.0, m.layer_size.1], "anchor": [m.anchor.0, m.anchor.1],

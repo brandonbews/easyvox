@@ -111,7 +111,7 @@ define_class!(
     }
 
     unsafe impl NSURLSessionDataDelegate for DownloadDelegate {
-        /// Lets 200 and 206 through; anything else is cancelled here and reported by `fetch`.
+        /// Lets 200 and 206 through; anything else is canceled here and reported by `fetch`.
         #[unsafe(method(URLSession:dataTask:didReceiveResponse:completionHandler:))]
         fn did_receive_response(
             &self,
@@ -222,7 +222,7 @@ pub(super) fn fetch<E>(
     result
 }
 
-/// Drives `sink` from the delegate's messages until the task ends, fails or is cancelled.
+/// Drives `sink` from the delegate's messages until the task ends, fails or is canceled.
 fn receive<E>(
     rx: Receiver<Msg>,
     offset: u64,
@@ -230,8 +230,8 @@ fn receive<E>(
     sink: &mut dyn FnMut(Fetched) -> Result<(), E>,
 ) -> Result<(), FetchError<E>> {
     loop {
-        if cancel.is_cancelled() {
-            return Err(FetchError::Cancelled);
+        if cancel.is_canceled() {
+            return Err(FetchError::Canceled);
         }
         let msg = match rx.recv_timeout(CANCEL_POLL) {
             Ok(msg) => msg,
@@ -277,10 +277,10 @@ fn classify<E>(e: &TaskError, cancel: &CancelToken) -> FetchError<E> {
         return FetchError::Transient(message);
     }
     match e.code {
-        -999 if cancel.is_cancelled() => FetchError::Cancelled,
+        -999 if cancel.is_canceled() => FetchError::Canceled,
         // Not connected, can't find or reach the host, DNS, data not allowed (cellular, roaming).
         -1009 | -1003 | -1004 | -1006 | -1018 | -1020 => FetchError::Offline(message),
-        // Cancelled by something else, bad or unsupported URL, too many redirects, a redirect to
+        // Canceled by something else, bad or unsupported URL, too many redirects, a redirect to
         // nowhere, App Transport Security, TLS and certificates (a captive portal or a TLS
         // inspecting proxy: trying again won't help).
         -999 | -1000 | -1002 | -1007 | -1010 | -1022 | -1206..=-1200 => FetchError::Fatal(message),

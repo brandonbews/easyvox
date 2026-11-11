@@ -72,18 +72,6 @@ def transcribe_words(path):
     return out
 
 
-def cuts(err_path):
-    out = []
-    for line in open(err_path, errors="replace"):
-        if line.startswith("CUT at"):
-            m = re.search(r"CUT at ([\d.]+) s \(span ([\d.]+)\.\.([\d.]+), audio ([\d.]+) s, wall ([\d.]+) s\) words \+(\d+) decode (\d+) ms", line)
-            out.append({"at": float(m.group(1)), "span": (float(m.group(2)), float(m.group(3))), "audio": float(m.group(4)),
-                        "wall": float(m.group(5)), "words": int(m.group(6)), "decode_ms": int(m.group(7))})
-        elif line.startswith("CUTDBG"):
-            out.append({"dbg": line.strip()})
-    return out
-
-
 def partials(err_path):
     """Partial lines: [(ms, confirmed, provisional)]."""
     out = []

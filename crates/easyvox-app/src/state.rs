@@ -122,7 +122,7 @@ pub struct AppStatus {
     pub models_dir: std::path::PathBuf,
     pub engine: EngineStatus,
     /// Model downloads running or failed, by catalog id. One is removed when it succeeds or is
-    /// cancelled; a failed one stays until the next try or a delete.
+    /// canceled; a failed one stays until the next try or a delete.
     pub downloads: std::collections::HashMap<&'static str, DownloadStatus>,
     /// The macOS Microphone prompt is up (asked from onboarding or Settings).
     pub mic_asking: bool,

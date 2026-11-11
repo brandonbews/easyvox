@@ -320,10 +320,10 @@ pub(crate) mod tests {
     /// workspace) to check others too, e.g. the long-dictation clips:
     /// `EASYVOX_CLIPS="$(ls testdata/longform/clips/*.wav)"`.
     #[test]
-    fn db_defaults_decide_like_the_old_levels() {
+    fn db_defaults_decide_like_the_tuned_linear_levels() {
         let t = Tuning::default();
-        let old_gate = Quiet { ratio: 0.1, silence: 0.0018 };
-        let old_pause = PauseFinder { quiet: old_gate, min_frames: PauseFinder::new(&t).min_frames };
+        let linear = Quiet { ratio: 0.1, silence: 0.0018 };
+        let linear_pause = PauseFinder { quiet: linear, min_frames: PauseFinder::new(&t).min_frames };
         let Some(mut clips) = crate::testdata::listed() else { return };
         if let Some(extra) = std::env::var_os("EASYVOX_CLIPS") {
             let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
@@ -333,14 +333,14 @@ pub(crate) mod tests {
         for clip in &clips {
             let pcm = crate::audio::load_wav_16k_mono(clip).unwrap();
             let name = clip.display();
-            let new_ticks = gate_ticks(SpeechGate::new(&t), &pcm);
-            assert_eq!(new_ticks, gate_ticks(SpeechGate::with(old_gate, t.gate_settle_passes), &pcm), "{name}");
+            let db_ticks = gate_ticks(SpeechGate::new(&t), &pcm);
+            assert_eq!(db_ticks, gate_ticks(SpeechGate::with(linear, t.gate_settle_passes), &pcm), "{name}");
             // Every stretch of 2-60 s ending on a 0.5 s step, as the chunker searches them.
-            let new_pause = PauseFinder::new(&t);
+            let db_pause = PauseFinder::new(&t);
             for end in (SR / 2..=pcm.len()).step_by(SR / 2) {
                 for len in [2, 5, 10, 30, 60] {
                     let stretch = &pcm[end.saturating_sub(len * SR)..end];
-                    assert_eq!(new_pause.longest(stretch), old_pause.longest(stretch), "{name} at {end}");
+                    assert_eq!(db_pause.longest(stretch), linear_pause.longest(stretch), "{name} at {end}");
                     stretches += 1;
                 }
             }
