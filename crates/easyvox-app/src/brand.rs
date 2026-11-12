@@ -349,7 +349,6 @@ pub const GLYPH_NO_MICROPHONE: &str = "brand/pill/no-microphone.svg";
 pub const GLYPH_INFO: &str = "brand/pill/info.svg";
 pub const GLYPH_PASTED: &str = "brand/pill/pasted.svg";
 pub const GLYPH_COPIED: &str = "brand/pill/copied.svg";
-pub const GLYPH_SECURE_FIELD: &str = "brand/pill/secure-field.svg";
 
 /// The Settings sidebar's page icons, and the thin "allowed" glyph: 16 pt, a 1.4 pt stroke.
 /// General and About are the design's; Models (a wave) and Permissions (a shield) are drawn the
@@ -373,7 +372,6 @@ const FILES: &[(&str, &[u8])] = &[
     (GLYPH_INFO, include_bytes!("../assets/brand/pill/info.svg")),
     (GLYPH_PASTED, include_bytes!("../assets/brand/pill/pasted.svg")),
     (GLYPH_COPIED, include_bytes!("../assets/brand/pill/copied.svg")),
-    (GLYPH_SECURE_FIELD, include_bytes!("../assets/brand/pill/secure-field.svg")),
     (ICON_GENERAL, include_bytes!("../assets/brand/settings/general.svg")),
     (ICON_MODELS, include_bytes!("../assets/brand/settings/models.svg")),
     (ICON_PERMISSIONS, include_bytes!("../assets/brand/settings/permissions.svg")),

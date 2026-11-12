@@ -40,7 +40,7 @@ use crate::onboarding::LaunchFacts;
 use crate::onboarding_window::OnboardingView;
 use crate::overlay::{Notice, Overlay};
 use crate::permissions::Permissions;
-use crate::platform::{FocusedElement, InputMonitoring};
+use crate::platform::InputMonitoring;
 use crate::settings::{Page, SettingsView};
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, RightOptionProblem, UpdateStatus};
 use crate::{platform, tray};
@@ -87,7 +87,6 @@ enum Phase {
         seq: u64,
         session: Session,
         started: Instant,
-        focus: StartFocus,
         _no_app_nap: ActivityGuard,
     },
     /// Released; waiting for `Final`. The session is kept until then, because dropping it
@@ -96,7 +95,6 @@ enum Phase {
         seq: u64,
         session: Session,
         released: Instant,
-        focus: StartFocus,
         _no_app_nap: ActivityGuard,
     },
 }
@@ -134,82 +132,6 @@ pub fn with<R>(cx: &mut App, f: impl FnOnce(&mut Controller, &mut Context<Contro
 /// Drops a session on its own thread: `Session`'s `Drop` stops and joins its worker.
 fn drop_off_main_thread(session: Session) {
     let _ = std::thread::Builder::new().name("session-drop".into()).spawn(move || drop(session));
-}
-
-/// What has the keyboard focus, as far as EasyVox can tell: it neither listens in nor pastes
-/// into a password field.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Focus {
-    Password,
-    Other,
-    /// Nothing has the focus, the app didn't answer in time, or Accessibility isn't allowed and
-    /// secure input is off.
-    Unknown,
-}
-
-/// A password field is a secure text field. Without Accessibility, macOS's secure input stands
-/// in: a password field turns it on, but so do Terminal's Secure Keyboard Entry and the lock
-/// screen, and an app can leave it on.
-fn focus_of(element: &FocusedElement, secure_input: bool) -> Focus {
-    match element {
-        FocusedElement::Element { secure_text_field: true } => Focus::Password,
-        FocusedElement::Element { secure_text_field: false } | FocusedElement::EasyVox => Focus::Other,
-        FocusedElement::NotAllowed if secure_input => Focus::Password,
-        FocusedElement::NotAllowed | FocusedElement::NoAnswer(_) => Focus::Unknown,
-    }
-}
-
-/// What has the keyboard focus now.
-fn focus_now(cx: &App) -> Focus {
-    let timeout = Duration::from_millis(cx.global::<AppSettings>().app.focus_check_timeout_ms.into());
-    let element = platform::focused_element(timeout);
-    if let FocusedElement::NoAnswer(error) = element {
-        log::info!("focus: no answer from Accessibility (AXError {error})");
-    }
-    focus_of(&element, platform::secure_input())
-}
-
-/// What had the keyboard focus when a dictation started, for the check before the paste. Never
-/// a password field: that stops the start.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum StartFocus {
-    /// Something other than a password field, which the words are for.
-    Elsewhere,
-    Unknown,
-}
-
-/// Whether a dictation can start, or why not. A password field comes first: EasyVox doesn't
-/// listen there, whatever the permission. And never open the microphone while its permission is
-/// undetermined: CoreAudio hangs. `mic` is `None` for a replayed clip.
-fn start_check(focus: Focus, mic: Option<MicPermission>) -> Result<StartFocus, Notice> {
-    match (focus, mic) {
-        (Focus::Password, _) => Err(Notice::password_field()),
-        (_, Some(MicPermission::NotDetermined)) => Err(Notice::microphone_not_asked()),
-        (_, Some(permission)) if permission != MicPermission::Authorized => Err(Notice::microphone_off()),
-        (Focus::Other, _) => Ok(StartFocus::Elsewhere),
-        (Focus::Unknown, _) => Ok(StartFocus::Unknown),
-    }
-}
-
-/// Where the final text goes.
-#[derive(Debug, PartialEq, Eq)]
-enum Delivery {
-    /// Pasted (or copied), and kept in History.
-    Paste,
-    /// A password field has the focus now, so nothing is pasted or copied. The words were meant
-    /// for what had the focus at the start, so History keeps them.
-    HistoryOnly,
-    /// A password field has the focus now, and nothing said what had it at the start: the words
-    /// may be for the password field, so they're dropped.
-    Nowhere,
-}
-
-fn delivery(start: StartFocus, now: Focus) -> Delivery {
-    match (now, start) {
-        (Focus::Other | Focus::Unknown, _) => Delivery::Paste,
-        (Focus::Password, StartFocus::Elsewhere) => Delivery::HistoryOnly,
-        (Focus::Password, StartFocus::Unknown) => Delivery::Nowhere,
-    }
 }
 
 pub struct Controller {
@@ -437,40 +359,46 @@ impl Controller {
 
     fn push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
         if pressed {
+            if !self.is_idle() {
+                // Key repeat, a second source, or a press while the last session finishes, before
+                // the microphone check, so no notice covers the finishing pill.
+                return;
+            }
             let audio = match &self.source_override {
                 Some(wav) => AudioSource::WavReplay(wav.clone()),
-                None => AudioSource::Microphone,
+                None => {
+                    // Never open the mic while permission is undetermined: CoreAudio hangs.
+                    let permission = easyvox_core::mic_permission_status();
+                    if permission != MicPermission::Authorized {
+                        log::warn!("push-to-talk: Microphone access is {permission:?}");
+                        let notice = match permission {
+                            MicPermission::NotDetermined => Notice::microphone_not_asked(),
+                            _ => Notice::microphone_off(),
+                        };
+                        self.show_notice(notice, cx);
+                        return;
+                    }
+                    AudioSource::Microphone
+                }
             };
             self.start_session(audio, source, cx);
         } else if matches!(self.phase, Phase::Recording { .. }) {
-            let Phase::Recording { seq, session, started, focus, _no_app_nap } =
+            let Phase::Recording { seq, session, started, _no_app_nap } =
                 std::mem::replace(&mut self.phase, Phase::Idle)
             else {
                 unreachable!()
             };
             session.stop(); // returns at once; Final follows on the channel
             log::info!("session {seq}: released after {:.2} s", started.elapsed().as_secs_f32());
-            self.phase = Phase::Finalizing { seq, session, released: Instant::now(), focus, _no_app_nap };
+            self.phase = Phase::Finalizing { seq, session, released: Instant::now(), _no_app_nap };
             self.overlay.view.update(cx, |v, cx| v.set_finishing(cx));
         }
     }
 
-    /// Starts a dictation, unless a password field has the focus or the microphone's permission
-    /// is missing (`start_check`): then the pill says why.
     pub fn start_session(&mut self, audio: AudioSource, source: &str, cx: &mut Context<Self>) {
         if !self.is_idle() {
-            return; // key repeat, or a press while the last session finishes
+            return; // a session is running or finishing
         }
-        let focus = focus_now(cx);
-        let mic = matches!(audio, AudioSource::Microphone).then(easyvox_core::mic_permission_status);
-        let focus = match start_check(focus, mic) {
-            Ok(start) => start,
-            Err(notice) => {
-                log::info!("{source}: not starting (focus {focus:?}, microphone {mic:?})");
-                self.show_notice(notice, cx);
-                return;
-            }
-        };
         let Some(engine) = self.engine.clone() else {
             let downloading = self.downloads.contains_key(cx.global::<AppSettings>().model.as_str());
             let notice = match &cx.global::<AppStatus>().engine {
@@ -520,7 +448,7 @@ impl Controller {
         }
         // Keep timers precise while dictating.
         let no_app_nap = cx.background_executor().prevent_app_nap("EasyVox dictation");
-        self.phase = Phase::Recording { seq, session, started: Instant::now(), focus, _no_app_nap: no_app_nap };
+        self.phase = Phase::Recording { seq, session, started: Instant::now(), _no_app_nap: no_app_nap };
         self.hide_task = None;
         self.unload_task = None;
         self.reloading = reloading;
@@ -555,12 +483,11 @@ impl Controller {
                     Phase::Finalizing { released, .. } => format!("{} ms", released.elapsed().as_millis()),
                     _ => "n/a".into(),
                 };
-                let (Phase::Recording { session, focus, .. } | Phase::Finalizing { session, focus, .. }) =
+                if let Phase::Recording { session, .. } | Phase::Finalizing { session, .. } =
                     std::mem::replace(&mut self.phase, Phase::Idle)
-                else {
-                    unreachable!("a session is running: its seq matched")
-                };
-                drop_off_main_thread(session);
+                {
+                    drop_off_main_thread(session);
+                }
                 log::info!(
                     "session {seq}: final, {} chars from {audio_secs:.1} s of audio (final pass {finalize_ms} ms, \
                      release → final {since_release})",
@@ -568,7 +495,7 @@ impl Controller {
                 );
                 self.sync_engine_status(cx);
                 self.schedule_unload(cx);
-                self.deliver(text, audio_secs, focus, cx);
+                self.deliver(text, audio_secs, cx);
                 self.refresh_tray(cx);
                 if let Some(model) = self.pending_model.take() {
                     self.use_model(&model, cx);
@@ -600,20 +527,11 @@ impl Controller {
     }
 
     /// The final text: clipboard (and ⌘V), history, then hide the pill.
-    fn deliver(&mut self, text: String, audio_secs: f32, focus: StartFocus, cx: &mut Context<Self>) {
+    fn deliver(&mut self, text: String, audio_secs: f32, cx: &mut Context<Self>) {
         if text.trim().is_empty() {
             // Nothing heard: leave the clipboard and history alone.
             let shortcut = crate::hotkey::label(&cx.global::<AppSettings>().shortcut);
             self.show_notice(Notice::nothing_heard(&shortcut), cx);
-            return;
-        }
-        let delivery = delivery(focus, focus_now(cx));
-        if delivery != Delivery::Paste {
-            log::info!("paste: a password field has the keyboard now, so nothing was pasted ({delivery:?})");
-            if delivery == Delivery::HistoryOnly {
-                self.keep_in_history(text, audio_secs, cx);
-            }
-            self.show_notice(Notice::password_field(), cx);
             return;
         }
         self.overlay.view.update(cx, |v, cx| v.set_final(text.clone(), cx));
@@ -625,7 +543,8 @@ impl Controller {
         } else {
             easyvox_core::copy_to_clipboard(&text).map(|_| ())
         };
-        self.keep_in_history(text, audio_secs, cx);
+        let model = self.engine.as_ref().map(|e| e.model_info().id).unwrap_or_default();
+        self.history.update(cx, |h, cx| h.push(text, audio_secs, model, cx));
         match result {
             Ok(()) => {
                 let after = cx.global::<AppSettings>().app.overlay_hide_after_final_ms;
@@ -645,11 +564,6 @@ impl Controller {
                 self.show_notice(notice, cx);
             }
         }
-    }
-
-    fn keep_in_history(&mut self, text: String, audio_secs: f32, cx: &mut Context<Self>) {
-        let model = self.engine.as_ref().map(|e| e.model_info().id).unwrap_or_default();
-        self.history.update(cx, |h, cx| h.push(text, audio_secs, model, cx));
     }
 
     /// The menu bar item's check, for `menubar_pasted_ms`; then it goes back to how it was.
@@ -1381,80 +1295,5 @@ fn window_options(title: &str, window_size: Size<Pixels>, cx: &mut App) -> Windo
         show: true,
         kind: WindowKind::Normal,
         ..Default::default()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // Not `super::*`: that brings in GPUI's own `test` macro, which shadows `#[test]`.
-    use super::{Delivery, Focus, StartFocus, delivery, focus_of, start_check};
-    use crate::overlay::Notice;
-    use crate::platform::FocusedElement;
-    use easyvox_core::MicPermission;
-
-    const EVERY_PERMISSION: [MicPermission; 5] = [
-        MicPermission::Authorized,
-        MicPermission::NotDetermined,
-        MicPermission::Denied,
-        MicPermission::Restricted,
-        MicPermission::Unknown,
-    ];
-
-    /// `kAXErrorCannotComplete`: the app didn't answer in time.
-    const TIMED_OUT: FocusedElement = FocusedElement::NoAnswer(-25204);
-
-    #[test]
-    fn only_a_secure_text_field_is_a_password_field_whatever_secure_input_says() {
-        for secure_input in [false, true] {
-            let field = |secure_text_field| FocusedElement::Element { secure_text_field };
-            assert_eq!(focus_of(&field(true), secure_input), Focus::Password);
-            assert_eq!(focus_of(&field(false), secure_input), Focus::Other);
-            assert_eq!(focus_of(&FocusedElement::EasyVox, secure_input), Focus::Other, "no password fields there");
-        }
-    }
-
-    #[test]
-    fn with_no_answer_it_cant_tell_whatever_secure_input_says() {
-        for secure_input in [false, true] {
-            assert_eq!(focus_of(&TIMED_OUT, secure_input), Focus::Unknown);
-            assert_eq!(focus_of(&FocusedElement::NoAnswer(-25212), secure_input), Focus::Unknown);
-        }
-    }
-
-    #[test]
-    fn without_accessibility_secure_input_stands_in() {
-        assert_eq!(focus_of(&FocusedElement::NotAllowed, true), Focus::Password);
-        assert_eq!(focus_of(&FocusedElement::NotAllowed, false), Focus::Unknown);
-    }
-
-    #[test]
-    fn in_a_password_field_nothing_starts_whatever_the_permission() {
-        assert_eq!(start_check(Focus::Password, None), Err(Notice::password_field()));
-        for permission in EVERY_PERMISSION {
-            assert_eq!(start_check(Focus::Password, Some(permission)), Err(Notice::password_field()), "{permission:?}");
-        }
-    }
-
-    #[test]
-    fn outside_a_password_field_only_the_permission_decides() {
-        for (focus, start) in [(Focus::Other, StartFocus::Elsewhere), (Focus::Unknown, StartFocus::Unknown)] {
-            assert_eq!(start_check(focus, None), Ok(start), "a replayed clip needs no permission");
-            assert_eq!(start_check(focus, Some(MicPermission::Authorized)), Ok(start));
-            assert_eq!(start_check(focus, Some(MicPermission::NotDetermined)), Err(Notice::microphone_not_asked()));
-            for permission in [MicPermission::Denied, MicPermission::Restricted, MicPermission::Unknown] {
-                assert_eq!(start_check(focus, Some(permission)), Err(Notice::microphone_off()), "{permission:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn the_text_is_pasted_unless_a_password_field_has_the_focus_by_then() {
-        for start in [StartFocus::Elsewhere, StartFocus::Unknown] {
-            assert_eq!(delivery(start, Focus::Other), Delivery::Paste);
-            assert_eq!(delivery(start, Focus::Unknown), Delivery::Paste, "a slow app doesn't hold back the paste");
-        }
-        let (elsewhere, unknown) = (StartFocus::Elsewhere, StartFocus::Unknown);
-        assert_eq!(delivery(elsewhere, Focus::Password), Delivery::HistoryOnly, "the words were for something else");
-        assert_eq!(delivery(unknown, Focus::Password), Delivery::Nowhere, "they may be for the password field");
     }
 }

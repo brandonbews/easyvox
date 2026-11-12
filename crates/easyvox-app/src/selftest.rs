@@ -5,17 +5,11 @@
 //! It writes a JSON report and exits 0 through the tray's Quit item when every check passes,
 //! or 1 otherwise.
 //!
-//! The microphone is never opened (a test clip is replayed; the presses without a clip are made
-//! in a password field, which stops them before the microphone), ⌘V is never sent (the text is
-//! only copied), and history goes to a temporary database. The settings file is a temporary one
-//! too, unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then
-//! puts it back as it was. The model download checks never touch the internet: they download from
-//! a server of their own on 127.0.0.1 into the temporary folder, and delete only from there.
-//!
-//! What has the keyboard focus is answered by the self-test in Accessibility's place
-//! (`platform::fake_focused_element`): a text field, unless a check fakes a password field. So no
-//! dictation depends on what this Mac has in focus, such as the login window's password field
-//! while it's locked. One check asks Accessibility for real, and only reports what it says.
+//! The microphone is never opened (a test clip is replayed), ⌘V is never sent (the text is only
+//! copied), and history goes to a temporary database. The settings file is a temporary one too,
+//! unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then puts
+//! it back as it was. The model download checks never touch the internet: they download from a
+//! server of their own on 127.0.0.1 into the temporary folder, and delete only from there.
 //!
 //! Check for Updates is never clicked: the About page is drawn in each of its states, set for
 //! the draw, so the self-test never asks easyvox.dev.
@@ -49,7 +43,7 @@ use crate::onboarding::{Busy, LaunchFacts, Onboarding, Problem, State, StepId};
 use crate::onboarding_window::chosen_model;
 use crate::overlay::{CANT_HEAR, Glyph, Mode, Notice};
 use crate::permissions::{AllPermissions, Permissions};
-use crate::platform::{self, FocusedElement, PanelState};
+use crate::platform::{self, PanelState};
 use crate::settings::Page;
 use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, UpdateStatus};
 use crate::tray;
@@ -73,9 +67,6 @@ const CLIP: &str = "punct_samantha";
 const RELEASE_BEFORE_END: f64 = 0.3;
 /// Word error rate the final text may have against the transcript.
 const MAX_WER: f64 = 0.15;
-/// A short command with no numbers to write as digits: with Live text on, its first words show
-/// about 0.6 s in.
-const SHORT: &str = "cmd_karen";
 
 #[derive(Clone)]
 pub struct Options {
@@ -132,7 +123,6 @@ impl Options {
 
 pub fn start(controller: Entity<Controller>, options: Options, cx: &mut App) {
     log::info!("self-test: starting; report goes to {}", options.out.display());
-    platform::fake_focused_element::set(Some(text_field()));
     controller.update(cx, |c, _| {
         c.source_override = Some(crate::testdata_dir().join(format!("{CLIP}.wav")));
         c.auto_paste = false;
@@ -238,9 +228,6 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
             dictation_after_unload(&controller, id, &mut report, cx).await;
             silence(&controller, id, &mut report, cx).await;
             live_text_off(&controller, id, &mut report, cx).await;
-            focused_element_query(&mut report, cx);
-            press_in_password_field(&controller, id, &mut report, cx).await;
-            password_field_by_the_paste(&controller, id, &mut report, cx).await;
         }
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
@@ -901,7 +888,12 @@ async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut R
 /// pill stays as it is before the first words, and the final text still comes, with its check.
 /// Then an outside edit to the file turns it back on, and the file is put back as it was.
 async fn live_text_off(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
-    let (clip, clip_secs) = test_clip(SHORT);
+    // A short command with no numbers to write as digits: with Live text on, its first words
+    // show about 0.6 s in.
+    const SHORT: &str = "cmd_karen";
+    let clip = crate::testdata_dir().join(format!("{SHORT}.wav"));
+    let clip_secs = easyvox_core::audio::load_wav_16k_mono(&clip)
+        .map_or(0., |pcm| pcm.len() as f64 / easyvox_core::SAMPLE_RATE as f64);
     let path = cx.update(|cx| cx.global::<AppStatus>().config_path.clone());
     let original = std::fs::read_to_string(&path).ok();
     cx.update(|cx| {
@@ -978,208 +970,6 @@ async fn live_text_off(controller: &Entity<Controller>, hotkey_id: u32, report: 
     };
     // The watcher applies the file as it was; let that land before the next checks.
     wait_for(cx, Duration::from_secs(3), |cx| controller.read(cx).config_reloads > reloads_before).await;
-}
-
-/// A test clip's path and length in seconds.
-fn test_clip(id: &str) -> (PathBuf, f64) {
-    let clip = crate::testdata_dir().join(format!("{id}.wav"));
-    let secs = easyvox_core::audio::load_wav_16k_mono(&clip)
-        .map_or(0., |pcm| pcm.len() as f64 / easyvox_core::SAMPLE_RATE as f64);
-    (clip, secs)
-}
-
-/// What the self-test answers in Accessibility's place, unless a check says otherwise.
-fn text_field() -> FocusedElement {
-    FocusedElement::Element { secure_text_field: false }
-}
-
-fn secure_text_field() -> FocusedElement {
-    FocusedElement::Element { secure_text_field: true }
-}
-
-/// Accessibility asked for real: it answers within its timeout (a message for the focused
-/// element, one for its subrole), and says it isn't allowed exactly when it isn't. What has the
-/// focus isn't checked: it's whatever this Mac shows. With EasyVox in front (onboarding may be),
-/// nothing is asked.
-fn focused_element_query(report: &mut Report, cx: &mut AsyncApp) {
-    let timeout_ms = cx.update(|cx| cx.global::<AppSettings>().app.focus_check_timeout_ms);
-    let allowed = easyvox_core::accessibility_trusted();
-    platform::fake_focused_element::set(None);
-    let asked = Instant::now();
-    let answer = platform::focused_element(Duration::from_millis(timeout_ms.into()));
-    let took_ms = asked.elapsed().as_millis();
-    platform::fake_focused_element::set(Some(text_field()));
-    report.check(
-        "Accessibility says what has the keyboard focus in time, and that it isn't allowed exactly when it isn't",
-        match answer {
-            FocusedElement::EasyVox => true,
-            FocusedElement::NotAllowed => !allowed,
-            FocusedElement::Element { .. } | FocusedElement::NoAnswer(_) => allowed,
-        } && took_ms <= 2 * u128::from(timeout_ms) + 50,
-        json!({"answer": format!("{answer:?}"), "took_ms": took_ms, "timeout_ms": timeout_ms,
-               "accessibility_allowed": allowed}),
-    );
-}
-
-/// A press in a password field, with no test clip, so the microphone is the source: it must not
-/// record, the pill says why, and nothing is pasted or saved. First in a field Accessibility
-/// says is one (faked), then, as if Accessibility weren't allowed, with macOS's secure input on
-/// (the self-test turns it on for itself, as a password field does). It presses only once the
-/// fake answers, or while it holds secure input, so the microphone can't open, and lets go of
-/// secure input at the release, since other apps' event taps miss keystrokes while it's on.
-/// Secure input must then read as it did before: letting go mustn't clear another app's hold,
-/// such as the lock screen's.
-async fn press_in_password_field(
-    controller: &Entity<Controller>,
-    hotkey_id: u32,
-    report: &mut Report,
-    cx: &mut AsyncApp,
-) {
-    const NAME: &str = "in a password field (or, without Accessibility, with secure input on), a press doesn't listen, and the pill says why";
-    let at_rest = |cx: &mut App| {
-        let c = controller.read(cx);
-        c.is_idle() && !c.overlay.panel.state().visible
-    };
-    wait_for(cx, Duration::from_secs(3), at_rest).await;
-    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
-    let clipboard_before = platform::clipboard_change_count();
-    let clip = cx.update(|cx| controller.update(cx, |c, _| c.source_override.take()));
-
-    platform::fake_focused_element::set(Some(secure_text_field()));
-    let timeout = cx.update(|cx| Duration::from_millis(cx.global::<AppSettings>().app.focus_check_timeout_ms.into()));
-    let faked = platform::focused_element(timeout) == secure_text_field();
-    let in_field = if faked { refused_press(controller, hotkey_id, at_rest, cx).await } else { json!("not faked") };
-
-    platform::fake_focused_element::set(Some(FocusedElement::NotAllowed));
-    let secure_before = platform::secure_input();
-    let held = platform::SecureInputHeld::hold();
-    let secure_held = platform::secure_input();
-    let without_accessibility = match held {
-        Ok(held) if secure_held => {
-            let press = refused_press(controller, hotkey_id, at_rest, cx).await;
-            drop(held);
-            press
-        }
-        held => json!({"enable_error": held.err(), "secure_input_held": secure_held}),
-    };
-    let secure_after = platform::secure_input();
-
-    platform::fake_focused_element::set(Some(text_field()));
-    cx.update(|cx| controller.update(cx, |c, _| c.source_override = clip));
-    let history_after = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
-    let clipboard_after = platform::clipboard_change_count();
-    let refused = |press: &Value| press["refused"] == json!(true);
-    report.check(
-        NAME,
-        refused(&in_field)
-            && refused(&without_accessibility)
-            && history_after == history_before
-            && clipboard_after == clipboard_before
-            && secure_after == secure_before,
-        json!({"in_a_password_field": in_field, "without_accessibility_secure_input_on": without_accessibility,
-               "history_entries_added": history_after - history_before,
-               "clipboard_changed": clipboard_after != clipboard_before,
-               "secure_input_before": secure_before, "secure_input_after": secure_after}),
-    );
-}
-
-/// Presses and releases the shortcut, from rest, expecting the press to be refused for a
-/// password field: the pill comes up and says so, nothing records, and it hides once the
-/// notice's time is up.
-async fn refused_press(
-    controller: &Entity<Controller>,
-    hotkey_id: u32,
-    at_rest: impl Fn(&mut App) -> bool,
-    cx: &mut AsyncApp,
-) -> Value {
-    let pressed = platform::post_hotkey_event(hotkey_id, true);
-    let expected = Notice::password_field();
-    // The pill coming up marks this press: the notice may still be there from the last one.
-    let shown = wait_for(cx, Duration::from_secs(1), |cx| {
-        let c = controller.read(cx);
-        c.overlay.panel.is_visible() && c.overlay.view.read(cx).notice.as_ref() == Some(&expected)
-    })
-    .await;
-    let drawn = cx.update(|cx| draw_overlay(controller, cx));
-    let recording = cx.update(|cx| !controller.read(cx).is_idle());
-    let released = platform::post_hotkey_event(hotkey_id, false);
-    sleep(cx, 100).await;
-    let recording_after_release = cx.update(|cx| !controller.read(cx).is_idle());
-    let notice_ms = cx.update(|cx| cx.global::<AppSettings>().app.overlay_hide_after_notice_ms);
-    let hidden = wait_for(cx, Duration::from_millis(u64::from(notice_ms) + 2000), at_rest).await;
-    let refused = pressed == 0
-        && released == 0
-        && shown.is_some()
-        && drawn
-        && !recording
-        && !recording_after_release
-        && hidden.is_some();
-    json!({"refused": refused, "notice_after_ms": shown, "says": expected.title, "drawn": drawn,
-           "recording": recording || recording_after_release, "hidden_after_ms": hidden})
-}
-
-/// Secure input on outside a password field, as Terminal's Secure Keyboard Entry has it, doesn't
-/// stop a press: it records (a test clip). Then a password field takes the focus before the
-/// release: nothing is pasted or copied, the pill says why, and History keeps the words, which
-/// were meant for the field the dictation started in. Secure input is held only for the press.
-async fn password_field_by_the_paste(
-    controller: &Entity<Controller>,
-    hotkey_id: u32,
-    report: &mut Report,
-    cx: &mut AsyncApp,
-) {
-    let (clip, clip_secs) = test_clip(SHORT);
-    wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).overlay.panel.state().visible).await;
-    cx.update(|cx| controller.update(cx, |c, _| c.source_override = Some(clip)));
-    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
-    let clipboard_before = platform::clipboard_change_count();
-
-    let held = platform::SecureInputHeld::hold();
-    let secure_held = platform::secure_input();
-    let pressed_status = platform::post_hotkey_event(hotkey_id, true);
-    let pressed = Instant::now();
-    let started = wait_for(cx, Duration::from_secs(1), |cx| !controller.read(cx).is_idle()).await;
-    let held_ok = held.is_ok();
-    drop(held);
-    report.check(
-        "with secure input on outside a password field (as in Terminal), a press listens",
-        held_ok && secure_held && pressed_status == 0 && started.is_some(),
-        json!({"secure_input_held": secure_held, "started_ms": started}),
-    );
-
-    platform::fake_focused_element::set(Some(secure_text_field()));
-    let release_at = Duration::from_secs_f64((clip_secs - RELEASE_BEFORE_END).max(0.5));
-    sleep(cx, release_at.saturating_sub(pressed.elapsed()).as_millis() as u64).await;
-    let released_status = platform::post_hotkey_event(hotkey_id, false);
-    let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
-    let (mode, notice, kept) = cx.update(|cx| {
-        let c = controller.read(cx);
-        let view = c.overlay.view.read(cx);
-        let entries = &c.history.read(cx).entries;
-        (view.mode, view.notice.clone(), (entries.len() > history_before).then(|| entries[0].text.clone()))
-    });
-    let clipboard_after = platform::clipboard_change_count();
-    platform::fake_focused_element::set(Some(text_field()));
-    cx.update(|cx| {
-        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join(format!("{CLIP}.wav"))))
-    });
-    let history_added = cx.update(|cx| controller.read(cx).history.read(cx).entries.len()) - history_before;
-    let wer = kept.as_deref().map(|t| word_error_rate(&ground_truth(SHORT).unwrap_or_default(), t));
-    report.check(
-        "when a password field has the focus by the paste, nothing is pasted or copied, the pill says why, and History keeps the words",
-        started.is_some()
-            && released_status == 0
-            && finished.is_some()
-            && mode == Mode::Notice
-            && notice == Some(Notice::password_field())
-            && clipboard_after == clipboard_before
-            && history_added == 1
-            && wer.is_some_and(|w| w <= MAX_WER),
-        json!({"release_to_idle_ms": finished, "overlay": format!("{mode:?}"),
-               "says": notice.map(|n| n.title), "clipboard_changed": clipboard_after != clipboard_before,
-               "history_entries_added": history_added, "kept": kept, "wer": wer}),
-    );
-    wait_for(cx, Duration::from_secs(6), |cx| !controller.read(cx).overlay.panel.state().visible).await;
 }
 
 /// An outside edit to the settings file applies without a restart; the app's own write (a

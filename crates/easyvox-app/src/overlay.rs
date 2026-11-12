@@ -413,7 +413,6 @@ pub enum Glyph {
     Info,
     Pasted,
     Copied,
-    SecureField,
     GettingReady,
 }
 
@@ -425,7 +424,6 @@ impl Glyph {
             Self::Info => brand::GLYPH_INFO,
             Self::Pasted => brand::GLYPH_PASTED,
             Self::Copied => brand::GLYPH_COPIED,
-            Self::SecureField => brand::GLYPH_SECURE_FIELD,
             Self::GettingReady => brand::KNOT,
         }
     }
@@ -472,16 +470,6 @@ impl Notice {
     /// The recording couldn't start for another reason: its first sentence.
     pub fn cant_start(error: &str) -> Self {
         Self::new(Glyph::Warning, "Can't start dictating", first_sentence(error))
-    }
-
-    /// A password field has the keyboard: at a press, the microphone stays off; by the paste,
-    /// nothing is pasted.
-    pub fn password_field() -> Self {
-        Self::new(
-            Glyph::SecureField,
-            "Can't type into password fields",
-            "Password fields stay private, so EasyVox isn't listening.",
-        )
     }
 
     pub fn nothing_heard(shortcut: &str) -> Self {
@@ -1533,7 +1521,6 @@ mod tests {
             Notice::downloading(),
             Notice::no_model(),
             Notice::model_failed(),
-            Notice::password_field(),
         ];
         for notice in &all {
             // A title without a full stop, then one or two sentences ending in one.

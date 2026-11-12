@@ -246,15 +246,6 @@ overlay_meter_frame_ms = 33
 # In milliseconds, from 0 to 10000.
 menubar_pasted_ms = 1000
 
-# How long EasyVox waits for an app to answer whether a password field has the keyboard,
-# when you press the shortcut and again just before the paste. Apps answer within a few
-# milliseconds; one still busy after this is taken as not being in a password field, and
-# the dictation goes ahead. EasyVox asks twice each time, so a busy app can hold up the
-# press or the paste for up to twice this. Higher waits longer for a busy app; lower
-# keeps the press and the paste prompt.
-# In milliseconds, from 10 to 1000.
-focus_check_timeout_ms = 100
-
 # How often the preview re-decodes the newest audio while the key is held. Lower shows
 # words sooner but wakes the GPU more often; higher is lighter, and the preview lags
 # further behind and updates in bigger steps. At 1600, 95 % of words showed up within

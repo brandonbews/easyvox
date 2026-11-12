@@ -8,7 +8,7 @@ Set only the keys you want to change. Keys you leave out use their defaults, so 
 
 | Key | Default | Effect |
 |---|---|---|
-| `shortcut` | `"alt-space"` | Hold to dictate, release to paste. In a password field, EasyVox doesn't listen or paste, and the pill says why. Without Accessibility it can't see the field, so it holds back whenever macOS's secure input is on. Modifiers (`ctrl`, `alt`, `shift`, `cmd`) and a key, joined by `-`: `"ctrl-shift-space"`, `"f5"`. |
+| `shortcut` | `"alt-space"` | Hold to dictate, release to paste. Modifiers (`ctrl`, `alt`, `shift`, `cmd`) and a key, joined by `-`: `"ctrl-shift-space"`, `"f5"`. |
 | `hold_right_option` | `false` | Also dictate while right ⌥ is held on its own. Needs Input Monitoring. |
 | `live_text` | `true` | Show your words in the pill as you speak. When off, the pill shows only that it's listening, and dictating uses less power. |
 | `model` | `"parakeet-tdt-0.6b-v2-q5_k_m-gguf"` | The speech model. The other one offered is `"whisper-base.en-q8_0-gguf"`. |
