@@ -4,7 +4,7 @@ Notable changes in each release, newest first, in the [Keep a Changelog](https:/
 
 ## Unreleased
 
-## 0.2.0 - 2026-11-11
+## 0.2.0 - 2026-11-12
 
 ### Added
 
