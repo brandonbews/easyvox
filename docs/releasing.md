@@ -18,6 +18,10 @@ Only maintainers can create `v*` tags. The `release` job waits in the `release` 
 
 `scripts/release.sh --help` lists the script's options, including an ad-hoc build on a Mac.
 
+## Homebrew
+
+`brew install --cask brandonbews/tap/easyvox` installs from the cask `Casks/easyvox.rb` in [brandonbews/homebrew-tap](https://github.com/brandonbews/homebrew-tap), which the workflow doesn't update. After each release, a pull request on the tap sets the cask's `version` and `sha256` to the new release's. The `release` job prints both at the end of its "Build, sign, notarize and package" step, and the release notes give the DMG's SHA-256. The maintainer checks the pull request's `sha256` against the release page, then merges it. Until then, `brew upgrade` keeps the previous version.
+
 ## Verifying a download
 
 Check the DMG against the SHA-256 on the release page, then ask Gatekeeper:

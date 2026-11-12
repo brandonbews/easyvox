@@ -4,14 +4,17 @@ Notable changes in each release, newest first, in the [Keep a Changelog](https:/
 
 ## Unreleased
 
+## 0.2.0 - 2026-11-11
+
 ### Added
 
-- A Live text switch in Settings › General (`live_text` in the settings file). Off, the pill doesn't show your words as you speak, and dictating uses less power. It replaces `[advanced] preview_interval_ms = 0`, which now falls back to the default.
+- A Live text switch in Settings › General (`live_text` in the settings file). When it's off, the pill doesn't show your words as you speak, and dictating uses less power. If you turned the preview off with `[advanced] preview_interval_ms = 0`, turn Live text off instead: 0 is now out of range, so it falls back to the default.
 - An Open at login switch in Settings › General, also offered once setup is done. It's off until you turn it on, and it follows System Settings › General › Login Items & Extensions, where you can remove EasyVox too.
 
 ### Fixed
 
-- In Craft's Quick Entry window, and possibly other Mac Catalyst apps, the paste could repeat until another key was pressed. The V key-up of the simulated ⌘V no longer carries the Command flag.
+- In Craft's Quick Entry window, and possibly other Mac Catalyst apps, the paste could repeat until another key was pressed. The V key-up of EasyVox's ⌘V no longer carries the Command flag.
+- A rare failure could leave the V key held down after a paste. EasyVox now creates both key events of its ⌘V before posting either.
 
 ## 0.1.0 - 2026-10-12
 

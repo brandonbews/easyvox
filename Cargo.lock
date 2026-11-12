@@ -1670,7 +1670,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "easyvox-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "easyvox-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "easyvox-core",
@@ -1701,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "easyvox-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "block2 0.6.2",

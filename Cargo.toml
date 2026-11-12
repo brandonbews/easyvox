@@ -4,7 +4,7 @@ members = ["crates/easyvox-core", "crates/easyvox-app", "crates/easyvox-bench"]
 default-members = ["crates/easyvox-core", "crates/easyvox-app"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/brandonbews/easyvox"
