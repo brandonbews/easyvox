@@ -134,6 +134,18 @@ fn drop_off_main_thread(session: Session) {
     let _ = std::thread::Builder::new().name("session-drop".into()).spawn(move || drop(session));
 }
 
+/// Why a press can't record from the microphone, if it can't. Secure input comes first: while
+/// it's on, as in a password field, EasyVox doesn't listen, whatever the permission. And never
+/// open the microphone while its permission is undetermined: CoreAudio hangs.
+fn mic_refusal(secure_input: bool, permission: MicPermission) -> Option<Notice> {
+    match permission {
+        _ if secure_input => Some(Notice::password_field()),
+        MicPermission::Authorized => None,
+        MicPermission::NotDetermined => Some(Notice::microphone_not_asked()),
+        _ => Some(Notice::microphone_off()),
+    }
+}
+
 pub struct Controller {
     pub engine: Option<Engine>,
     pub hotkeys: HotkeyService,
@@ -343,7 +355,9 @@ impl Controller {
         }
     }
 
-    /// Press: start a session and show the overlay. Release: stop it; `Final` follows.
+    /// Press: start a session and show the overlay. Release: stop it; `Final` follows. A press
+    /// that can't record from the microphone (secure input is on, as in a password field, or the
+    /// permission is missing) shows why instead (`mic_refusal`).
     /// Every press reads the permissions again, for the menu bar item, which shows each press and
     /// release; and, once the session has started, Input Monitoring if right ⌥ waits for it.
     pub fn on_push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
@@ -359,17 +373,20 @@ impl Controller {
 
     fn push_to_talk(&mut self, pressed: bool, source: &str, cx: &mut Context<Self>) {
         if pressed {
+            if !self.is_idle() {
+                return; // a press while the last session finishes
+            }
             let audio = match &self.source_override {
                 Some(wav) => AudioSource::WavReplay(wav.clone()),
                 None => {
-                    // Never open the mic while permission is undetermined: CoreAudio hangs.
+                    let secure_input = platform::secure_input();
                     let permission = easyvox_core::mic_permission_status();
-                    if permission != MicPermission::Authorized {
-                        log::warn!("push-to-talk: Microphone access is {permission:?}");
-                        let notice = match permission {
-                            MicPermission::NotDetermined => Notice::microphone_not_asked(),
-                            _ => Notice::microphone_off(),
-                        };
+                    if let Some(notice) = mic_refusal(secure_input, permission) {
+                        if secure_input {
+                            log::info!("push-to-talk: secure input is on (a password field?); not listening");
+                        } else {
+                            log::warn!("push-to-talk: Microphone access is {permission:?}");
+                        }
                         self.show_notice(notice, cx);
                         return;
                     }
@@ -1290,5 +1307,37 @@ fn window_options(title: &str, window_size: Size<Pixels>, cx: &mut App) -> Windo
         show: true,
         kind: WindowKind::Normal,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Not `super::*`: that brings in GPUI's own `test` macro, which shadows `#[test]`.
+    use super::mic_refusal;
+    use crate::overlay::Notice;
+    use easyvox_core::MicPermission;
+
+    const EVERY_PERMISSION: [MicPermission; 5] = [
+        MicPermission::Authorized,
+        MicPermission::NotDetermined,
+        MicPermission::Denied,
+        MicPermission::Restricted,
+        MicPermission::Unknown,
+    ];
+
+    #[test]
+    fn with_secure_input_on_a_press_never_reaches_the_microphone() {
+        for permission in EVERY_PERMISSION {
+            assert_eq!(mic_refusal(true, permission), Some(Notice::password_field()), "{permission:?}");
+        }
+    }
+
+    #[test]
+    fn with_secure_input_off_only_the_permission_decides() {
+        assert_eq!(mic_refusal(false, MicPermission::Authorized), None);
+        assert_eq!(mic_refusal(false, MicPermission::NotDetermined), Some(Notice::microphone_not_asked()));
+        for permission in [MicPermission::Denied, MicPermission::Restricted, MicPermission::Unknown] {
+            assert_eq!(mic_refusal(false, permission), Some(Notice::microphone_off()), "{permission:?}");
+        }
     }
 }

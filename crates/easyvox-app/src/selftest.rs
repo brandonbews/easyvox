@@ -5,8 +5,9 @@
 //! It writes a JSON report and exits 0 through the tray's Quit item when every check passes,
 //! or 1 otherwise.
 //!
-//! The microphone is never opened (a test clip is replayed), ⌘V is never sent (the text is only
-//! copied), and history goes to a temporary database. The settings file is a temporary one too,
+//! The microphone is never opened (a test clip is replayed; the one press without a clip is made
+//! with macOS's secure input on, which stops it before the microphone), ⌘V is never sent (the
+//! text is only copied), and history goes to a temporary database. The settings file is a temporary one too,
 //! unless `EASYVOX_CONFIG` names one; the self-test edits it to check live reloading, then puts
 //! it back as it was. The model download checks never touch the internet: they download from a
 //! server of their own on 127.0.0.1 into the temporary folder, and delete only from there.
@@ -225,6 +226,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
             dictation_after_unload(&controller, id, &mut report, cx).await;
             silence(&controller, id, &mut report, cx).await;
             live_text_off(&controller, id, &mut report, cx).await;
+            password_field(&controller, id, &mut report, cx).await;
         }
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
@@ -966,6 +968,74 @@ async fn live_text_off(controller: &Entity<Controller>, hotkey_id: u32, report: 
     };
     // The watcher applies the file as it was; let that land before the next checks.
     wait_for(cx, Duration::from_secs(3), |cx| controller.read(cx).config_reloads > reloads_before).await;
+}
+
+/// A press in a password field. The self-test turns macOS's secure input on for itself, as a
+/// password field does, and presses with no test clip, so the microphone is the source: the
+/// press must not record, the pill says why, and nothing is pasted or saved. It presses only
+/// while it holds secure input, so the microphone can't open, and lets go of it at the release,
+/// since other apps' event taps miss keystrokes while it's on. Secure input must then read as it
+/// did before: letting go mustn't clear another app's hold, such as the lock screen's.
+async fn password_field(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
+    const NAME: &str = "in a password field (secure input on), a press doesn't listen, and the pill says why";
+    let at_rest = |cx: &mut App| {
+        let c = controller.read(cx);
+        c.is_idle() && !c.overlay.panel.state().visible
+    };
+    wait_for(cx, Duration::from_secs(3), at_rest).await;
+    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let clipboard_before = platform::clipboard_change_count();
+    let secure_before = platform::secure_input();
+    let held = platform::SecureInputHeld::hold();
+    let secure_held = platform::secure_input();
+    let held = match held {
+        Ok(held) if secure_held => held,
+        held => {
+            let detail = json!({"enable_error": held.err(), "secure_input_held": secure_held});
+            return report.check(NAME, false, detail);
+        }
+    };
+    let clip = cx.update(|cx| controller.update(cx, |c, _| c.source_override.take()));
+    let pressed = platform::post_hotkey_event(hotkey_id, true);
+    let expected = Notice::password_field();
+    let shown = wait_for(cx, Duration::from_secs(1), |cx| {
+        controller.read(cx).overlay.view.read(cx).notice.as_ref() == Some(&expected)
+    })
+    .await;
+    let drawn = cx.update(|cx| draw_overlay(controller, cx));
+    let (visible, recording) = cx.update(|cx| {
+        let c = controller.read(cx);
+        (c.overlay.panel.is_visible(), !c.is_idle())
+    });
+    let released = platform::post_hotkey_event(hotkey_id, false);
+    sleep(cx, 100).await;
+    let recording_after_release = cx.update(|cx| !controller.read(cx).is_idle());
+    cx.update(|cx| controller.update(cx, |c, _| c.source_override = clip));
+    drop(held);
+    let secure_after = platform::secure_input();
+    let notice_ms = cx.update(|cx| cx.global::<AppSettings>().app.overlay_hide_after_notice_ms);
+    let hidden = wait_for(cx, Duration::from_millis(u64::from(notice_ms) + 2000), at_rest).await;
+    let history_after = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let clipboard_after = platform::clipboard_change_count();
+    report.check(
+        NAME,
+        pressed == 0
+            && released == 0
+            && shown.is_some()
+            && drawn
+            && visible
+            && !recording
+            && !recording_after_release
+            && hidden.is_some()
+            && history_after == history_before
+            && clipboard_after == clipboard_before
+            && secure_after == secure_before,
+        json!({"notice_after_ms": shown, "says": expected.title, "drawn": drawn, "pill_up": visible,
+               "recording": recording || recording_after_release, "hidden_after_ms": hidden,
+               "history_entries_added": history_after - history_before,
+               "clipboard_changed": clipboard_after != clipboard_before,
+               "secure_input_before": secure_before, "secure_input_after": secure_after}),
+    );
 }
 
 /// An outside edit to the settings file applies without a restart; the app's own write (a

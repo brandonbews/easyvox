@@ -672,6 +672,51 @@ pub mod modifier_tap {
     }
 }
 
+// ───────────────────────── Secure input ─────────────────────────
+
+#[link(name = "Carbon", kind = "framework")]
+unsafe extern "C" {
+    fn IsSecureEventInputEnabled() -> u8;
+    #[cfg(feature = "self-test")]
+    fn EnableSecureEventInput() -> i32;
+    #[cfg(feature = "self-test")]
+    fn DisableSecureEventInput() -> i32;
+}
+
+/// Whether macOS's secure input is on, as it is while a password field has the keyboard. It's
+/// one switch for the whole Mac: any app can turn it on, in front or not (Terminal's Secure
+/// Keyboard Entry does, and so does the lock screen), and this reads it whichever did. Needs no
+/// permission.
+pub fn secure_input() -> bool {
+    // SAFETY: a plain Carbon call with no arguments; it only reads.
+    unsafe { IsSecureEventInputEnabled() != 0 }
+}
+
+/// Turns macOS's secure input on for this process, as a password field does, until dropped.
+/// While it's on, other apps' event taps don't see keystrokes, so hold it only for a moment.
+#[cfg(feature = "self-test")]
+pub struct SecureInputHeld(());
+
+#[cfg(feature = "self-test")]
+impl SecureInputHeld {
+    /// Holds secure input, or returns `EnableSecureEventInput`'s error status.
+    pub fn hold() -> Result<Self, i32> {
+        // SAFETY: a plain Carbon call; `Drop` balances it.
+        match unsafe { EnableSecureEventInput() } {
+            0 => Ok(Self(())),
+            status => Err(status),
+        }
+    }
+}
+
+#[cfg(feature = "self-test")]
+impl Drop for SecureInputHeld {
+    fn drop(&mut self) {
+        // SAFETY: balances the `EnableSecureEventInput` in `hold`.
+        unsafe { DisableSecureEventInput() };
+    }
+}
+
 // ───────────────────────── Self-test helpers ─────────────────────────
 
 /// Lets the self-test give [`reduce_motion`] an answer instead of the system's.
