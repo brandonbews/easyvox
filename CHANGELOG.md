@@ -8,6 +8,7 @@ Notable changes in each release, newest first, in the [Keep a Changelog](https:/
 
 - A Live text switch in Settings › General (`live_text` in the settings file). Off, the pill doesn't show your words as you speak, and dictating uses less power. It replaces `[advanced] preview_interval_ms = 0`, which now falls back to the default.
 - EasyVox doesn't listen in password fields. While macOS's secure input is on, as it is when a password field has the keyboard, the shortcut doesn't start the microphone: the pill says why, and nothing is pasted or saved.
+- An Open at login switch in Settings › General, also offered once setup is done. It's off until you turn it on, and it follows System Settings › General › Login Items & Extensions, where you can remove EasyVox too.
 
 ### Fixed
 

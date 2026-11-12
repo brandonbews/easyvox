@@ -20,6 +20,9 @@
 //! missing), and otherwise shows the windows injected answers. It never clicks a button that
 //! would bring up a macOS prompt.
 //!
+//! Open at login is only read from macOS, never changed: the switch is checked against a fake
+//! login item that answers in the system's place (`platform::fake_login_item`).
+//!
 //! The speech models come from the models folder (`EASYVOX_MODELS_DIR` moves it). Nothing here
 //! writes to it or deletes from it; onboarding's download check reads the chosen model from it
 //! to serve on 127.0.0.1. Switching models needs a second offered model in it, or that check is
@@ -239,6 +242,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
     models_page(&controller, &mut report, cx).await;
     about_page(&controller, &mut report, cx).await;
     about_updates(&controller, &mut report, cx).await;
+    open_at_login(&controller, &mut report, cx).await;
     settings_permissions(&controller, &mut report, cx).await;
     model_download(&controller, &options, &mut report, cx).await;
     match (engine_ready, hotkey_id) {
@@ -1254,6 +1258,97 @@ async fn about_updates(controller: &Entity<Controller>, report: &mut Report, cx:
     );
 }
 
+/// Open at login. On this Mac's real answer, only read: macOS has a login item for the app, and
+/// Settings shows what macOS says about it. Then with
+/// a fake login item answering in place of the system's, so this Mac's login items are never
+/// changed: Settings reads it again when it opens, the switch's action turns it off and on (and
+/// asks nothing when it's that way already), a refusal shows in one line until the next read,
+/// waiting for approval says where to give it, and the row draws in each. Settings stays open on
+/// General.
+async fn open_at_login(controller: &Entity<Controller>, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::login_item::{self, DRAWN};
+    use crate::platform::{LoginItem, fake_login_item as fake};
+    use std::sync::atomic::Ordering::Relaxed;
+    let name = "Open at login shows what macOS says when Settings opens, and its switch turns it off and on";
+    let shown = |cx: &mut AsyncApp| {
+        cx.update(|cx| {
+            let status = cx.global::<AppStatus>();
+            (status.login_item, status.login_item_error.clone())
+        })
+    };
+    // Draws General, and says whether the row was drawn and what it says under its title.
+    let draw = |cx: &mut AsyncApp| {
+        cx.update(|cx| {
+            let before = DRAWN.load(Relaxed);
+            let drawn = draw_settings(controller, cx) && DRAWN.load(Relaxed) > before;
+            let status = cx.global::<AppStatus>();
+            (drawn, login_item::problem(status.login_item, status.login_item_error.as_deref()))
+        })
+    };
+    // macOS has a login item for this app: otherwise every read would say off.
+    let service = platform::login_item_service();
+    let real = platform::login_item();
+    let (at_launch, _) = shown(cx);
+
+    // Settings closed and opened again, with the fake saying it's on.
+    fake::answer(Some(LoginItem::On));
+    cx.update(|cx| {
+        if let Some(handle) = controller.read(cx).windows()[0] {
+            let _ = handle.update(cx, |_, window, _| window.remove_window());
+        }
+    });
+    let closed = wait_for(cx, Duration::from_secs(3), |cx| controller.read(cx).settings_view().is_none()).await;
+    cx.update(|cx| controller.update(cx, |c, cx| c.open_settings(cx)));
+    let reopened = shown(cx).0;
+    let (drawn_on, said_on) = draw(cx);
+
+    cx.update(|cx| login_item::set(false, cx));
+    let turned_off = shown(cx);
+    let (drawn_off, said_off) = draw(cx);
+    cx.update(|cx| login_item::set(true, cx));
+    let turned_on = shown(cx);
+    cx.update(|cx| login_item::set(true, cx)); // on already: asks nothing
+    fake::refuse(Some("Injected refusal"));
+    cx.update(|cx| login_item::set(false, cx));
+    let refused = shown(cx);
+    let (drawn_refused, said_refused) = draw(cx);
+    let asked = fake::asked();
+    fake::answer(Some(LoginItem::NeedsApproval));
+    cx.update(login_item::read);
+    let approval = shown(cx);
+    let (drawn_approval, said_approval) = draw(cx);
+
+    fake::answer(None);
+    cx.update(login_item::read);
+    let restored = shown(cx);
+    report.check(
+        name,
+        service.is_ok()
+            && at_launch == real
+            && closed.is_some()
+            && reopened == LoginItem::On
+            && drawn_on
+            && said_on.is_none()
+            && turned_off == (LoginItem::Off, None)
+            && drawn_off
+            && said_off.is_none()
+            && turned_on == (LoginItem::On, None)
+            && asked == [false, true, false]
+            && refused.0 == LoginItem::On
+            && said_refused.as_deref() == Some("Couldn't turn Open at login off. Injected refusal.")
+            && drawn_refused
+            && approval == (LoginItem::NeedsApproval, None)
+            && said_approval.as_deref().is_some_and(|s| s.contains("Login Items & Extensions"))
+            && drawn_approval
+            && restored == (real, None),
+        json!({"service": service.err(), "macos_says": format!("{real:?}"), "settings_showed": format!("{at_launch:?}"),
+               "reopened_with_fake_on": format!("{reopened:?}"), "turned_off": format!("{turned_off:?}"),
+               "turned_on": format!("{turned_on:?}"), "refused": said_refused, "approval": said_approval,
+               "asked": asked, "drawn": [drawn_on, drawn_off, drawn_refused, drawn_approval],
+               "restored": format!("{restored:?}")}),
+    );
+}
+
 /// Settings › Permissions draws its rows for every state the three permissions can show (pinned
 /// in the view: the real ones aren't touched, and no button is clicked). Its watch's timer reads
 /// the permissions every second while one is missing, not at all once all are allowed, and goes
@@ -1589,11 +1684,14 @@ async fn onboarding_decision(controller: &Entity<Controller>, report: &mut Repor
 
 /// The window in every state a step can be in, from injected answers (the permissions pinned
 /// in the view, the download and the engine set in `AppStatus` for the draw only): what each
-/// step says matches, and the window draws. Everything is put back afterwards.
+/// step says matches, and the window draws, with Open at login only once every step is done.
+/// Everything is put back afterwards.
 async fn onboarding_states(controller: &Entity<Controller>, options: &Options, report: &mut Report, cx: &mut AsyncApp) {
+    use crate::login_item::DRAWN as LOGIN_DRAWN;
     use crate::onboarding_window::DRAWN;
     use std::sync::atomic::Ordering::Relaxed;
-    let name = "onboarding draws every step state, with the failure states' actions";
+    let name =
+        "onboarding draws every step state, with the failure states' actions, and Open at login once all are done";
     let Some(view) = cx.update(|cx| controller.read(cx).onboarding_view()) else {
         return report.check(name, false, json!("the onboarding window isn't open"));
     };
@@ -1637,7 +1735,7 @@ async fn onboarding_states(controller: &Entity<Controller>, options: &Options, r
     ];
     let mut draws = vec![];
     for (case, mic, mic_asking, accessibility, prompted, download, downloaded, engine, expected) in cases {
-        let (drawn, states, finished) = cx.update(|cx| {
+        let (drawn, states, finished, login_row) = cx.update(|cx| {
             let status = cx.global_mut::<AppStatus>();
             status.mic_asking = mic_asking;
             status.accessibility_prompted = prompted;
@@ -1649,15 +1747,19 @@ async fn onboarding_states(controller: &Entity<Controller>, options: &Options, r
             };
             view.update(cx, |v, cx| v.pin_permissions(Some(Permissions { mic, accessibility }), cx));
             cx.refresh_windows();
-            let before = DRAWN.load(Relaxed);
+            let (before, login_before) = (DRAWN.load(Relaxed), LOGIN_DRAWN.load(Relaxed));
             let drawn = draw_onboarding(controller, cx) && DRAWN.load(Relaxed) > before;
+            let login_row = LOGIN_DRAWN.load(Relaxed) > login_before;
             let onboarding = view.read(cx).onboarding(cx);
             let states: Vec<State> =
                 onboarding.as_ref().map(|o| o.steps.iter().map(|s| s.state.clone()).collect()).unwrap_or_default();
-            (drawn, states, onboarding.is_some_and(|o| o.finished()))
+            (drawn, states, onboarding.is_some_and(|o| o.finished()), login_row)
         });
-        let ok = drawn && states == expected && finished == (case == "all done");
-        draws.push(json!({"case": case, "drawn": drawn, "states": format!("{states:?}"), "ok": ok}));
+        // Open at login shows once every step is done, as on the design's last step.
+        let all_done = case == "all done";
+        let ok = drawn && states == expected && finished == all_done && login_row == all_done;
+        draws.push(json!({"case": case, "drawn": drawn, "states": format!("{states:?}"),
+                          "open_at_login_shown": login_row, "ok": ok}));
     }
     cx.update(|cx| {
         let status = cx.global_mut::<AppStatus>();

@@ -10,7 +10,7 @@ Every key in EasyVox's settings file, with its default, its range and what it tr
 
 The file doesn't have to exist: without it, everything is at its default. EasyVox creates the folder when it starts (so it can watch it), and the file the first time you change something in the Settings window. A symlink is fine, say into a dotfiles repository: EasyVox writes through it and watches where it points.
 
-The file holds no permissions. Microphone, Accessibility and Input Monitoring are granted in System Settings, by a person.
+The file holds no permissions. Microphone, Accessibility and Input Monitoring are granted in System Settings, by a person. Open at login isn't in it either: it's macOS's own setting, which Settings › General and System Settings › General › Login Items & Extensions both change.
 
 ## How it works
 

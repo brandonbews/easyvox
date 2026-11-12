@@ -18,6 +18,7 @@ mod curve;
 mod history;
 mod hotkey;
 mod logger;
+mod login_item;
 mod model_row;
 mod onboarding;
 mod onboarding_window;

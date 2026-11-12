@@ -119,9 +119,15 @@ easyvox_core::tunables! {
 
 impl Global for AppSettings {}
 
-/// Runtime status, written by the controller and shown in Settings and onboarding.
+/// Runtime status, written by the controller (and `login_item.rs`) and shown in Settings and
+/// onboarding.
 #[derive(Default)]
 pub struct AppStatus {
+    /// Whether EasyVox opens at login, as macOS said when a window that shows it last opened or
+    /// came forward, or after its switch was used. Not in the settings file: it's macOS's.
+    pub login_item: crate::platform::LoginItem,
+    /// Why the Open at login switch couldn't do what it was asked, until the next read.
+    pub login_item_error: Option<String>,
     /// Where models are downloaded to and loaded from: `easyvox_core::paths::models_dir()`,
     /// set at launch. The self-test points it at a temporary folder for a while.
     pub models_dir: std::path::PathBuf,

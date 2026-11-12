@@ -1,6 +1,7 @@
 //! macOS: the System Settings deep links, the overlay panel shim, key guard and open and close
-//! animations, Reduce motion, and the right-⌥ event tap with its Input Monitoring permission.
-//! Small helpers the self-test needs sit at the bottom, behind the `self-test` feature.
+//! animations, Reduce motion, the right-⌥ event tap with its Input Monitoring permission, secure
+//! input, and the login item. Small helpers the self-test needs sit at the bottom, behind the
+//! `self-test` feature.
 
 use crate::curve::{Curve, EASE_IN, FADE_IN, POP, along};
 use anyhow::Context as _;
@@ -714,6 +715,143 @@ impl Drop for SecureInputHeld {
     fn drop(&mut self) {
         // SAFETY: balances the `EnableSecureEventInput` in `hold`.
         unsafe { DisableSecureEventInput() };
+    }
+}
+
+// ───────────────────────── Open at login ─────────────────────────
+
+// `SMAppService` is looked up by name at run time; this links the framework that has it.
+#[link(name = "ServiceManagement", kind = "framework")]
+unsafe extern "C" {}
+
+/// Whether EasyVox opens at login, as macOS has it: the app's own login item
+/// (`SMAppService.mainAppService`), listed under Open at Login in System Settings › General ›
+/// Login Items & Extensions, where the user can remove it too.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LoginItem {
+    /// Not registered, or macOS can't find the app (`notFound`): it doesn't open at login.
+    #[default]
+    Off,
+    /// Registered: it opens at login.
+    On,
+    /// Registered, but it won't open at login until the user allows it in System Settings
+    /// (`requiresApproval`).
+    NeedsApproval,
+}
+
+/// The app's own login item.
+fn main_app_service() -> Result<Retained<AnyObject>, String> {
+    let class = objc2::runtime::AnyClass::get(c"SMAppService").ok_or("ServiceManagement isn't available.")?;
+    // SAFETY: `+[SMAppService mainAppService]` takes nothing and returns an SMAppService.
+    let service: Option<Retained<AnyObject>> = unsafe { objc2::msg_send![class, mainAppService] };
+    service.ok_or_else(|| "macOS has no login item for this app.".into())
+}
+
+/// Whether EasyVox opens at login now. Never changes it.
+pub fn login_item() -> LoginItem {
+    #[cfg(feature = "self-test")]
+    if let Some(fake) = fake_login_item::status() {
+        return fake;
+    }
+    let service = match main_app_service() {
+        Ok(service) => service,
+        Err(e) => {
+            log::error!("login item: {e}");
+            return LoginItem::Off;
+        }
+    };
+    // SAFETY: `-[SMAppService status]` returns an SMAppServiceStatus, an NSInteger.
+    let status: isize = unsafe { objc2::msg_send![&service, status] };
+    match status {
+        1 => LoginItem::On,
+        2 => LoginItem::NeedsApproval,
+        _ => LoginItem::Off,
+    }
+}
+
+/// Registers EasyVox as a login item (`on`), or unregisters it. Errs with macOS's reason, which
+/// for registering an item that already is, or unregistering one that isn't, is an error too.
+pub fn set_login_item(on: bool) -> Result<(), String> {
+    #[cfg(feature = "self-test")]
+    if let Some(result) = fake_login_item::set(on) {
+        return result;
+    }
+    let service = main_app_service()?;
+    // SAFETY: both take an `NSError **` and return a BOOL.
+    let result: Result<(), Retained<objc2_foundation::NSError>> = unsafe {
+        if on {
+            objc2::msg_send![&service, registerAndReturnError: _]
+        } else {
+            objc2::msg_send![&service, unregisterAndReturnError: _]
+        }
+    };
+    result.map_err(|e| {
+        log::warn!("login item: {e:?}");
+        e.localizedDescription().to_string()
+    })
+}
+
+/// Whether macOS gives this app a login item at all: ServiceManagement is linked and answers.
+/// Without one, [`login_item`] reads as off. Never changes it.
+#[cfg(feature = "self-test")]
+pub fn login_item_service() -> Result<(), String> {
+    main_app_service().map(drop)
+}
+
+/// A login item the self-test sets up in place of the system's, so it can turn Open at login on
+/// and off without adding EasyVox to this Mac's login items.
+#[cfg(feature = "self-test")]
+pub mod fake_login_item {
+    use super::LoginItem;
+    use std::sync::{Mutex, PoisonError};
+
+    struct Fake {
+        status: LoginItem,
+        /// Every change asked for: `true` to register.
+        asked: Vec<bool>,
+        /// Why the next changes fail, if they do.
+        refuse: Option<String>,
+    }
+
+    static FAKE: Mutex<Option<Fake>> = Mutex::new(None);
+
+    fn with<R>(f: impl FnOnce(&mut Option<Fake>) -> R) -> R {
+        f(&mut FAKE.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    /// Answers with `status` from now on (`None`: the system's again), with no changes asked.
+    pub fn answer(status: Option<LoginItem>) {
+        with(|fake| *fake = status.map(|status| Fake { status, asked: vec![], refuse: None }));
+    }
+
+    /// Makes the changes asked from now on fail with `reason`, or succeed (`None`).
+    pub fn refuse(reason: Option<&str>) {
+        with(|fake| fake.iter_mut().for_each(|f| f.refuse = reason.map(Into::into)));
+    }
+
+    /// The changes asked so far: `true` to register.
+    pub fn asked() -> Vec<bool> {
+        with(|fake| fake.as_ref().map(|f| f.asked.clone()).unwrap_or_default())
+    }
+
+    pub(super) fn status() -> Option<LoginItem> {
+        with(|fake| fake.as_ref().map(|f| f.status))
+    }
+
+    /// As macOS does: registering one that is, or unregistering one that isn't, fails.
+    pub(super) fn set(on: bool) -> Option<Result<(), String>> {
+        with(|fake| {
+            let f = fake.as_mut()?;
+            f.asked.push(on);
+            if let Some(reason) = &f.refuse {
+                return Some(Err(reason.clone()));
+            }
+            if (f.status != LoginItem::Off) == on {
+                return Some(Err(format!("injected: already {:?}", f.status)));
+            }
+            f.status = if on { LoginItem::On } else { LoginItem::Off };
+            Some(Ok(()))
+        })
     }
 }
 

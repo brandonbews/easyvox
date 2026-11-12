@@ -14,6 +14,8 @@ Set only the keys you want to change. Keys you leave out use their defaults, so 
 | `model` | `"parakeet-tdt-0.6b-v2-q5_k_m-gguf"` | The speech model. The other one offered is `"whisper-base.en-q8_0-gguf"`. |
 | `keep_model_loaded` | `false` | Keep the model in memory. When off, the model is freed after `unload_after_secs` and reloads (about 0.15 s) when you next press the shortcut. Recording starts at once either way. |
 
+**Open at login**, also in Settings › General, isn't in the file. It's macOS's own setting: removing EasyVox from System Settings › General › Login Items & Extensions turns the switch off too. It's off until you turn it on.
+
 ## Under `[advanced]`
 
 | Key | Default | Effect |

@@ -3,19 +3,20 @@
 //! Every change applies at once.
 //!
 //! - **General**: the shortcut (a keycap and Change…, see [`ShortcutRecorder`]), Hold right ⌥ to
-//!   talk and Live text in the pill, the speech model in use and Keep model loaded, and the
-//!   settings file.
+//!   talk and Live text in the pill, Open at login (`login_item.rs`), the speech model in use and
+//!   Keep model loaded, and the settings file.
 //! - **Models**: every offered model, to download, use or delete (`model_row.rs`), and the
 //!   models folder.
 //! - **Permissions**: the privacy line, the three macOS permissions, and onboarding again.
 //! - **About** (`about.rs`).
 //!
 //! The pages and their groups are plain elements, drawn from the app's state at each render, so
-//! the window needs no state of its own beyond the page shown, the shortcut recorder, and the
-//! `permissions::Watch` it keeps on the permissions it shows.
+//! the window needs no state of its own beyond the page shown, the shortcut recorder, the
+//! `permissions::Watch` it keeps on the permissions it shows, and its reads of Open at login.
 
 use crate::brand::{self, Colors};
 use crate::controller;
+use crate::login_item;
 use crate::model_row::{ModelRow, download_words};
 use crate::permissions::{AllPermissions, Watch};
 use crate::platform::{InputMonitoring, PRIVACY_ACCESSIBILITY, PRIVACY_INPUT_MONITORING, PRIVACY_MICROPHONE};
@@ -73,6 +74,8 @@ pub struct SettingsView {
     page: Page,
     /// The three permissions, read again while one is missing.
     permissions: Watch<AllPermissions>,
+    /// Reads Open at login when the window comes forward.
+    _login_item: Subscription,
     _appearance: Subscription,
 }
 
@@ -82,7 +85,8 @@ impl SettingsView {
         let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
         let permissions = Watch::new(window, cx, Self::watch, AllPermissions::read, |p| !p.all_allowed());
-        Self { recorder, page: Page::default(), permissions, _appearance }
+        let _login_item = login_item::watch(window, cx);
+        Self { recorder, page: Page::default(), permissions, _login_item, _appearance }
     }
 
     fn watch(&mut self) -> &mut Watch<AllPermissions> {
@@ -267,7 +271,7 @@ impl SettingsView {
             .mx(px(12.)),
             (None, []) => brand::footnote(
                 c,
-                "Every setting is in this file, including advanced ones this window doesn't show (see \
+                "Every setting but Open at login is in this file, including advanced ones this window doesn't show (see \
                  easyvox.dev/docs/settings). Edits to it apply as soon as you save, and changes here are written to it.",
             ),
             (None, warnings) => {
@@ -279,6 +283,8 @@ impl SettingsView {
 
         v_flex()
             .child(dictating)
+            .child(div().h(px(20.)))
+            .child(brand::group(c, [login_item::row(c, None, cx).into_any_element()]))
             .child(div().h(px(20.)))
             .child(model)
             .child(div().h(px(20.)))

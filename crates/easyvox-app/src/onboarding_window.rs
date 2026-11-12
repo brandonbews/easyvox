@@ -6,7 +6,8 @@
 //! It's a checklist on one page: the download runs while you answer the prompts. The header has
 //! the app icon and the design's wording. Each step is a row: the next one has a vermilion number
 //! and the only vermilion button, a done one a tick, a problem a warning glyph and words. The
-//! footer shows progress.
+//! footer shows progress. Once every step is done, the Open at login switch (`login_item.rs`)
+//! shows above it, as on the design's last step.
 //!
 //! It only ever asks: the Microphone and Accessibility prompts come up when their button is
 //! clicked, and nothing here opens the microphone.
@@ -16,6 +17,7 @@
 
 use crate::brand::{self, Colors};
 use crate::controller;
+use crate::login_item;
 use crate::model_row::{ModelRow, ModelState};
 use crate::onboarding::{Action, Busy, Facts, LaunchFacts, Onboarding, Pane, State, Step, StepId};
 use crate::permissions::{Permissions, Watch};
@@ -55,6 +57,8 @@ pub static DRAWN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsiz
 pub struct OnboardingView {
     /// The Microphone and Accessibility, read again while one is missing.
     permissions: Watch<Permissions>,
+    /// Reads Open at login when the window comes forward.
+    _login_item: Subscription,
     _appearance: Subscription,
 }
 
@@ -63,7 +67,8 @@ impl OnboardingView {
         let _appearance =
             cx.observe_window_appearance(window, |_, window, cx| Theme::sync_system_appearance(Some(window), cx));
         let permissions = Watch::new(window, cx, Self::watch, Permissions::read, |p| !p.all_allowed());
-        Self { permissions, _appearance }
+        let _login_item = login_item::watch(window, cx);
+        Self { permissions, _login_item, _appearance }
     }
 
     fn watch(&mut self) -> &mut Watch<Permissions> {
@@ -144,7 +149,15 @@ impl Render for OnboardingView {
             .child(brand::group(c, steps))
             .overflow_y_scrollbar()
             .id("onboarding-steps");
-        root.child(header).child(steps).child(footer(&onboarding, c, cx))
+        // Once all is done, Open at login, as on the design's last step. It shows what macOS
+        // says, so it's off until turned on here or in Settings.
+        let login = onboarding.finished().then(|| {
+            div().flex_shrink_0().px(px(32.)).pb(px(12.)).child(brand::group(
+                c,
+                [login_item::row(c, Some("Start EasyVox when you log in to this Mac."), cx).into_any_element()],
+            ))
+        });
+        root.child(header).child(steps).children(login).child(footer(&onboarding, c, cx))
     }
 }
 
