@@ -114,6 +114,13 @@ easyvox_core::tunables! {
         /// How long the menu bar item shows a check after EasyVox pastes your text, before it
         /// goes back to how it was. Higher leaves more time to glance at it; 0 skips the check.
         menubar_pasted_ms: u32 = 1_000, 0..=10_000;
+        /// How long EasyVox waits for an app to answer whether a password field has the keyboard,
+        /// when you press the shortcut and again just before the paste. Apps answer within a few
+        /// milliseconds; one still busy after this is taken as not being in a password field, and
+        /// the dictation goes ahead. EasyVox asks twice each time, so a busy app can hold up the
+        /// press or the paste for up to twice this. Higher waits longer for a busy app; lower
+        /// keeps the press and the paste prompt.
+        focus_check_timeout_ms: u32 = 100, 10..=1_000;
     }
 }
 

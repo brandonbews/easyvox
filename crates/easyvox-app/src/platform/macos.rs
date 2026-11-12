@@ -545,6 +545,7 @@ unsafe extern "C" {
     fn CFRunLoopGetMain() -> *mut c_void;
     fn CFRunLoopAddSource(rl: *mut c_void, source: *mut c_void, mode: *const c_void);
     fn CFRelease(cf: *const c_void);
+    fn CFEqual(cf1: *const c_void, cf2: *const c_void) -> u8;
     static kCFRunLoopCommonModes: *const c_void;
 }
 
@@ -687,7 +688,7 @@ unsafe extern "C" {
 /// Whether macOS's secure input is on, as it is while a password field has the keyboard. It's
 /// one switch for the whole Mac: any app can turn it on, in front or not (Terminal's Secure
 /// Keyboard Entry does, and so does the lock screen), and this reads it whichever did. Needs no
-/// permission.
+/// permission. Less precise than [`focused_element`], which needs Accessibility.
 pub fn secure_input() -> bool {
     // SAFETY: a plain Carbon call with no arguments; it only reads.
     unsafe { IsSecureEventInputEnabled() != 0 }
@@ -715,6 +716,134 @@ impl Drop for SecureInputHeld {
     fn drop(&mut self) {
         // SAFETY: balances the `EnableSecureEventInput` in `hold`.
         unsafe { DisableSecureEventInput() };
+    }
+}
+
+// ───────────────────────── The focused element ─────────────────────────
+
+#[link(name = "ApplicationServices", kind = "framework")]
+unsafe extern "C" {
+    fn AXUIElementCreateSystemWide() -> *const c_void;
+    fn AXUIElementSetMessagingTimeout(element: *const c_void, seconds: f32) -> i32;
+    fn AXUIElementCopyAttributeValue(
+        element: *const c_void,
+        attribute: *const c_void,
+        value: *mut *const c_void,
+    ) -> i32;
+}
+
+/// `AXError`s: `kAXErrorFailure`, `kAXErrorAttributeUnsupported` and `kAXErrorNoValue`.
+const AX_ERROR_FAILURE: i32 = -25200;
+const AX_ERROR_ATTRIBUTE_UNSUPPORTED: i32 = -25205;
+const AX_ERROR_NO_VALUE: i32 = -25212;
+
+/// What Accessibility says has the keyboard focus, whichever app it's in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FocusedElement {
+    /// Another app's focused element, and whether its subrole is `AXSecureTextField`, as a
+    /// password field's is in AppKit, WebKit, Chromium and Firefox alike.
+    Element { secure_text_field: bool },
+    /// One of EasyVox's own windows, which have no password fields. They aren't asked: GPUI would
+    /// turn on a window's accessibility tree, and update it at every frame from then on.
+    EasyVox,
+    /// Accessibility isn't allowed, so EasyVox can't ask.
+    NotAllowed,
+    /// Nothing has the focus, or the app didn't answer in time: the `AXError`.
+    NoAnswer(i32),
+}
+
+/// Asks Accessibility which element has the keyboard focus, and its subrole. Each of the two
+/// messages waits at most `timeout` for the app to answer. Needs Accessibility, which ⌘V needs
+/// too.
+pub fn focused_element(timeout: Duration) -> FocusedElement {
+    #[cfg(feature = "self-test")]
+    if let Some(fake) = fake_focused_element::get() {
+        return fake;
+    }
+    if objc2_app_kit::NSRunningApplication::currentApplication().isActive() {
+        return FocusedElement::EasyVox;
+    }
+    // SAFETY: a plain call; the element is ours to release.
+    let Some(system) = CfObject::new(unsafe { AXUIElementCreateSystemWide() }) else {
+        return no_answer(AX_ERROR_FAILURE);
+    };
+    // Set on the system-wide element, the timeout holds for every element this app asks.
+    // SAFETY: `system` is a live AXUIElement.
+    unsafe { AXUIElementSetMessagingTimeout(system.0, timeout.as_secs_f32()) };
+    let focused = match copy_attribute(&system, "AXFocusedUIElement") {
+        Ok(focused) => focused,
+        Err(error) => return no_answer(error),
+    };
+    match copy_attribute(&focused, "AXSubrole") {
+        Ok(subrole) => FocusedElement::Element { secure_text_field: subrole.is_string("AXSecureTextField") },
+        Err(AX_ERROR_NO_VALUE | AX_ERROR_ATTRIBUTE_UNSUPPORTED) => FocusedElement::Element { secure_text_field: false },
+        Err(error) => no_answer(error),
+    }
+}
+
+/// An `AXError` from asking. It's the app that refuses an app without Accessibility
+/// (`kAXErrorAPIDisabled`), and a busy app doesn't answer at all, so the permission is read
+/// here instead.
+fn no_answer(error: i32) -> FocusedElement {
+    if easyvox_core::accessibility_trusted() { FocusedElement::NoAnswer(error) } else { FocusedElement::NotAllowed }
+}
+
+/// An attribute's value, or the `AXError`.
+fn copy_attribute(element: &CfObject, attribute: &str) -> Result<CfObject, i32> {
+    let attribute = NSString::from_str(attribute);
+    let mut value = std::ptr::null();
+    // SAFETY: `element` is a live AXUIElement, an NSString is toll-free bridged to the CFString
+    // the call takes, and the value it copies is ours to release.
+    let error = unsafe { AXUIElementCopyAttributeValue(element.0, Retained::as_ptr(&attribute).cast(), &mut value) };
+    let value = CfObject::new(value);
+    match error {
+        0 => value.ok_or(AX_ERROR_NO_VALUE),
+        error => Err(error),
+    }
+}
+
+/// A Core Foundation object from a Create or Copy call, released when dropped.
+struct CfObject(*const c_void);
+
+impl CfObject {
+    fn new(object: *const c_void) -> Option<Self> {
+        // Not `then_some`: it would make (and drop, releasing NULL) a `CfObject` either way.
+        if object.is_null() { None } else { Some(Self(object)) }
+    }
+
+    /// Whether it's a string equal to `text`. An app can answer with any object, or a string
+    /// that isn't valid UTF-16, so it's compared, never converted.
+    fn is_string(&self, text: &str) -> bool {
+        let text = NSString::from_str(text);
+        // SAFETY: two live CF objects (NSString is toll-free bridged); objects of different types
+        // are unequal.
+        unsafe { CFEqual(self.0, Retained::as_ptr(&text).cast()) != 0 }
+    }
+}
+
+impl Drop for CfObject {
+    fn drop(&mut self) {
+        // SAFETY: balances the Create or Copy that made it.
+        unsafe { CFRelease(self.0) };
+    }
+}
+
+/// An answer the self-test gives in Accessibility's place, so its presses never depend on what
+/// has the focus on this Mac (on a locked one, the login window's password field).
+#[cfg(feature = "self-test")]
+pub mod fake_focused_element {
+    use super::FocusedElement;
+    use std::sync::{Mutex, PoisonError};
+
+    static FAKE: Mutex<Option<FocusedElement>> = Mutex::new(None);
+
+    /// Answers with `element` from now on, or asks Accessibility again (`None`).
+    pub fn set(element: Option<FocusedElement>) {
+        *FAKE.lock().unwrap_or_else(PoisonError::into_inner) = element;
+    }
+
+    pub(super) fn get() -> Option<FocusedElement> {
+        FAKE.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
 }
 
@@ -1034,5 +1163,32 @@ pub fn post_hotkey_event(hotkey_id: u32, pressed: bool) -> i32 {
         let status = PostEventToQueue(GetMainEventQueue(), ev, 1);
         ReleaseEvent(ev);
         status
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CfObject;
+    use objc2::rc::Retained;
+    use objc2_foundation::{NSNumber, NSString};
+    use std::ptr::NonNull;
+
+    fn owned<T: objc2::Message>(object: Retained<T>) -> CfObject {
+        CfObject::new(Retained::into_raw(object).cast_const().cast()).unwrap()
+    }
+
+    #[test]
+    fn a_subrole_is_compared_whatever_an_app_answers() {
+        const SECURE: &str = "AXSecureTextField";
+        assert!(owned(NSString::from_str(SECURE)).is_string(SECURE));
+        for other in ["AXSecureTextFieldX", "axsecuretextfield", ""] {
+            assert!(!owned(NSString::from_str(other)).is_string(SECURE), "{other:?}");
+        }
+        assert!(!owned(NSNumber::new_i32(1)).is_string(SECURE), "not a string");
+        // A lone surrogate, which has no UTF-8 form.
+        let mut units = [0xD800u16, u16::from(b'A')];
+        // SAFETY: `units` outlives the call, which copies them.
+        let invalid = unsafe { NSString::stringWithCharacters_length(NonNull::from(&mut units).cast(), 2) };
+        assert!(!owned(invalid).is_string(SECURE));
     }
 }

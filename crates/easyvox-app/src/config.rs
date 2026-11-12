@@ -596,7 +596,7 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 48);
+        assert_eq!(keys.len(), 49);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
             assert!(!easyvox_core::tuning::unit_of(key).is_empty(), "{key}: end the key in a unit");

@@ -474,8 +474,8 @@ impl Notice {
         Self::new(Glyph::Warning, "Can't start dictating", first_sentence(error))
     }
 
-    /// A press while macOS's secure input is on, as it is in a password field: the microphone
-    /// stays off.
+    /// A password field has the keyboard: at a press, the microphone stays off; by the paste,
+    /// nothing is pasted.
     pub fn password_field() -> Self {
         Self::new(
             Glyph::SecureField,
