@@ -117,12 +117,11 @@ tunables! {
     /// [`Tuning::validate`] puts out-of-range values back to their defaults.
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct Tuning {
-        /// How often the preview re-decodes the newest audio while the key is held. 0 turns the
-        /// preview off (long dictations are still polished in chunks). Lower shows words sooner
-        /// but wakes the GPU more often; higher is lighter, and the preview lags further behind
-        /// and updates in bigger steps. At 1600, 95 % of words showed up within about 2 s of
-        /// being said; past it the saving flattens while the lag keeps growing.
-        preview_interval_ms: u32 = 1_600, 0..=10_000;
+        /// How often the preview re-decodes the newest audio while the key is held. Lower shows
+        /// words sooner but wakes the GPU more often; higher is lighter, and the preview lags
+        /// further behind and updates in bigger steps. At 1600, 95 % of words showed up within
+        /// about 2 s of being said; past it the saving flattens while the lag keeps growing.
+        preview_interval_ms: u32 = 1_600, 100..=10_000;
         /// When the first preview pass runs: once this much audio has followed the start of
         /// speech (see `speech_above_noise_db`). Until the preview shows words, the next passes
         /// come as often (at least 100 ms apart), then every `preview_interval_ms`. Lower shows
@@ -407,11 +406,11 @@ mod tests {
         assert_eq!(t, Tuning { chunk_ms: 15_000, ..Tuning::default() });
         assert_eq!(
             problems[0].to_string(),
-            "preview_interval_ms = 60000 is outside 0..=10000, so it stays at its default, 1600"
+            "preview_interval_ms = 60000 is outside 100..=10000, so it stays at its default, 1600"
         );
         // Range ends are allowed.
         let mut t = Tuning {
-            preview_interval_ms: 0,
+            preview_interval_ms: 100,
             chunk_ms: 0,
             pause_quiet_db: 0.0,
             gate_silence_dbfs: -120.0,

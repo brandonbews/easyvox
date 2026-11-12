@@ -4,6 +4,10 @@ Notable changes in each release, newest first, in the [Keep a Changelog](https:/
 
 ## Unreleased
 
+### Added
+
+- A Live text switch in Settings › General (`live_text` in the settings file). Off, the pill doesn't show your words as you speak, and dictating uses less power. It replaces `[advanced] preview_interval_ms = 0`, which now falls back to the default.
+
 ### Fixed
 
 - In Craft's Quick Entry window, and possibly other Mac Catalyst apps, the paste could repeat until another key was pressed. The V key-up of the simulated ⌘V no longer carries the Command flag.

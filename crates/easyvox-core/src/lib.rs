@@ -139,6 +139,16 @@ pub enum TranscriptEvent {
     NoInput(bool),
 }
 
+/// Whether a session runs the live preview while the key is held ([`Engine::start_with`]).
+/// Off, it runs no preview passes and sends no `Partial` events, which makes dictating lighter;
+/// long dictations are still polished in chunks while you talk, and `Final` comes as before.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Preview {
+    #[default]
+    On,
+    Off,
+}
+
 /// Where audio comes from.
 #[derive(Clone, Debug)]
 pub enum AudioSource {
@@ -345,28 +355,29 @@ impl Engine {
         self.inner.model.lock().unwrap().is_some()
     }
 
-    /// Start a push-to-talk session with the engine's [`EngineConfig::tuning`]. Events arrive
-    /// on the returned receiver.
+    /// Start a push-to-talk session with the engine's [`EngineConfig::tuning`] and the live
+    /// preview on. Events arrive on the returned receiver.
     ///
     /// Capture starts at once. If the model was unloaded, the session loads it while it
     /// records (about 0.15 s once the Metal shaders are cached), so no audio is lost: the
     /// preview starts once the model is ready, and `Final` covers the whole recording.
     pub fn start(&self, source: AudioSource) -> anyhow::Result<(Session, std::sync::mpsc::Receiver<TranscriptEvent>)> {
-        self.start_with(source, self.inner.config.tuning)
+        self.start_with(source, self.inner.config.tuning, Preview::On)
     }
 
-    /// [`start`](Self::start) with its own tuning, which the session keeps until it ends. So a
-    /// settings change applies from the next recording, without reloading the model. Values out
-    /// of range fall back to their defaults, with a warning in the log.
+    /// [`start`](Self::start) with its own tuning and preview, which the session keeps until it
+    /// ends. So a settings change applies from the next recording, without reloading the model.
+    /// Values out of range fall back to their defaults, with a warning in the log.
     pub fn start_with(
         &self,
         source: AudioSource,
         mut tuning: Tuning,
+        preview: Preview,
     ) -> anyhow::Result<(Session, std::sync::mpsc::Receiver<TranscriptEvent>)> {
         for problem in tuning.validate() {
             log::warn!("tuning: {problem}");
         }
-        session::start(self.inner.clone(), source, tuning)
+        session::start(self.inner.clone(), source, tuning, preview)
     }
 
     /// One-shot decode of 16 kHz mono samples (benchmarks, re-transcribing history). Word

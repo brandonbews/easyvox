@@ -10,6 +10,7 @@ Set only the keys you want to change. Keys you leave out use their defaults, so 
 |---|---|---|
 | `shortcut` | `"alt-space"` | Hold to dictate, release to paste. Modifiers (`ctrl`, `alt`, `shift`, `cmd`) and a key, joined by `-`: `"ctrl-shift-space"`, `"f5"`. |
 | `hold_right_option` | `false` | Also dictate while right ⌥ is held on its own. Needs Input Monitoring. |
+| `live_text` | `true` | Show your words in the pill as you speak. When off, the pill shows only that it's listening, and dictating uses less power. |
 | `model` | `"parakeet-tdt-0.6b-v2-q5_k_m-gguf"` | The speech model. The other one offered is `"whisper-base.en-q8_0-gguf"`. |
 | `keep_model_loaded` | `false` | Keep the model in memory. When off, the model is freed after `unload_after_secs` and reloads (about 0.15 s) when you next press the shortcut. Recording starts at once either way. |
 
@@ -20,7 +21,7 @@ Set only the keys you want to change. Keys you leave out use their defaults, so 
 | `unload_after_secs` | `600` | Idle seconds before the model is freed: with the default model, about 670 MB down to 90 MB. 1 to 86400. |
 | `overlay_hide_after_final_ms` | `600` | How long the pill stays up after pasting. 0 to 10000. |
 | `overlay_dock_gap_pt` | `24` | Gap between the Dock and the pill, in points. 0 to 400. |
-| `preview_interval_ms` | `1600` | Time between preview updates. Lower updates more often and uses more power. |
+| `preview_interval_ms` | `1600` | Time between preview updates while `live_text` is on. Lower updates more often and uses more power. 100 to 10000. |
 | `overlay_open_ms`, `overlay_close_ms`, `overlay_words_ms`, `overlay_glide_ms`, `overlay_meter_ms` | `200`, `120`, `200`, `250`, `120` | The pill's animations. `0` turns one off. With macOS's Reduce motion on, the pill only fades. |
 
 ## Example

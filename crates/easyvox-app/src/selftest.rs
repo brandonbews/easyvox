@@ -1,6 +1,7 @@
 //! `--self-test` (feature `self-test`): runs the real app through scripted dictations and
 //! checks it from the inside, for unattended runs (screen locked, no key presses):
-//! one with the model loaded, one right after the idle timeout freed it, and one of silence.
+//! one with the model loaded, one right after the idle timeout freed it, one of silence, and one
+//! with Live text off.
 //! It writes a JSON report and exits 0 through the tray's Quit item when every check passes,
 //! or 1 otherwise.
 //!
@@ -223,6 +224,7 @@ async fn run(controller: Entity<Controller>, options: Options, cx: &mut AsyncApp
             dictation(&controller, id, &options, &mut report, cx).await;
             dictation_after_unload(&controller, id, &mut report, cx).await;
             silence(&controller, id, &mut report, cx).await;
+            live_text_off(&controller, id, &mut report, cx).await;
         }
         _ => report.check("dictation", false, json!("skipped: needs the model and the shortcut")),
     }
@@ -876,6 +878,94 @@ async fn silence(controller: &Entity<Controller>, hotkey_id: u32, report: &mut R
                "history_entries_added": history_after - history_before,
                "clipboard_changed": clipboard_after != clipboard_before}),
     );
+}
+
+/// Live text turned off as the Settings switch does (saved to the file): while you speak, the
+/// pill stays as it is before the first words, and the final text still comes, with its check.
+/// Then an outside edit to the file turns it back on, and the file is put back as it was.
+async fn live_text_off(controller: &Entity<Controller>, hotkey_id: u32, report: &mut Report, cx: &mut AsyncApp) {
+    // A short command with no numbers to write as digits: with Live text on, its first words
+    // show about 0.6 s in.
+    const SHORT: &str = "cmd_karen";
+    let clip = crate::testdata_dir().join(format!("{SHORT}.wav"));
+    let clip_secs = easyvox_core::audio::load_wav_16k_mono(&clip)
+        .map_or(0., |pcm| pcm.len() as f64 / easyvox_core::SAMPLE_RATE as f64);
+    let path = cx.update(|cx| cx.global::<AppStatus>().config_path.clone());
+    let original = std::fs::read_to_string(&path).ok();
+    cx.update(|cx| {
+        controller.update(cx, |c, cx| {
+            c.source_override = Some(clip);
+            c.set_live_text(false, cx);
+        })
+    });
+    let saved = std::fs::read_to_string(&path).is_ok_and(|text| text.contains("live_text = false"));
+
+    let history_before = cx.update(|cx| controller.read(cx).history.read(cx).entries.len());
+    let pressed_status = platform::post_hotkey_event(hotkey_id, true);
+    let pressed = Instant::now();
+    let started = wait_for(cx, Duration::from_secs(1), |cx| !controller.read(cx).is_idle()).await;
+    let release_at = Duration::from_secs_f64((clip_secs - RELEASE_BEFORE_END).max(0.5));
+    let (mut polls, mut not_listening) = (0, vec![]);
+    while started.is_some() && pressed.elapsed() < release_at {
+        sleep(cx, 50).await;
+        let (mode, text) = cx.update(|cx| {
+            let view = controller.read(cx).overlay.view.read(cx);
+            (view.mode, view.text())
+        });
+        polls += 1;
+        if mode != Mode::Listening || !text.is_empty() {
+            not_listening.push(format!("{mode:?} {text:?}"));
+        }
+    }
+    let released_status = platform::post_hotkey_event(hotkey_id, false);
+    let finished = wait_for(cx, Duration::from_secs(10), |cx| controller.read(cx).is_idle()).await;
+    let (final_mode, final_text) = cx.update(|cx| {
+        let c = controller.read(cx);
+        let entries = &c.history.read(cx).entries;
+        (c.overlay.view.read(cx).mode, (entries.len() > history_before).then(|| entries[0].text.clone()))
+    });
+    let wer = final_text.as_deref().map(|t| word_error_rate(&ground_truth(SHORT).unwrap_or_default(), t));
+    report.check(
+        "with Live text off (saved from Settings), the pill shows no words while you speak, then the final text",
+        saved
+            && pressed_status == 0
+            && released_status == 0
+            && started.is_some()
+            && polls > 0
+            && not_listening.is_empty()
+            && finished.is_some()
+            && final_mode == Mode::Final
+            && wer.is_some_and(|w| w <= MAX_WER),
+        json!({"saved_live_text_false": saved, "polls_while_held": polls, "not_listening": not_listening,
+               "release_to_idle_ms": finished, "after_final": format!("{final_mode:?}"), "text": final_text,
+               "wer": wer}),
+    );
+
+    wait_for(cx, Duration::from_secs(3), |cx| !controller.read(cx).overlay.panel.state().visible).await;
+    cx.update(|cx| {
+        controller.update(cx, |c, _| c.source_override = Some(crate::testdata_dir().join(format!("{CLIP}.wav"))))
+    });
+    let mut doc: toml_edit::DocumentMut = original.as_deref().unwrap_or("").parse().unwrap_or_default();
+    doc["live_text"] = toml_edit::value(true);
+    let reloads_before = cx.update(|cx| controller.read(cx).config_reloads);
+    let written = std::fs::write(&path, doc.to_string());
+    let back_on = wait_for(cx, Duration::from_secs(5), |cx| {
+        cx.global::<AppSettings>().live_text && controller.read(cx).config_reloads > reloads_before
+    })
+    .await;
+    report.check(
+        "an outside edit to the settings file turns Live text back on",
+        written.is_ok() && back_on.is_some(),
+        json!({"write_error": written.err().map(|e| e.to_string()), "applied_ms": back_on}),
+    );
+
+    let reloads_before = cx.update(|cx| controller.read(cx).config_reloads);
+    let _ = match original {
+        Some(text) => std::fs::write(&path, text),
+        None => std::fs::remove_file(&path),
+    };
+    // The watcher applies the file as it was; let that land before the next checks.
+    wait_for(cx, Duration::from_secs(3), |cx| controller.read(cx).config_reloads > reloads_before).await;
 }
 
 /// An outside edit to the settings file applies without a restart; the app's own write (a

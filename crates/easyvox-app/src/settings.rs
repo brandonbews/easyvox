@@ -3,7 +3,8 @@
 //! Every change applies at once.
 //!
 //! - **General**: the shortcut (a keycap and Change…, see [`ShortcutRecorder`]), Hold right ⌥ to
-//!   talk, the speech model in use and Keep model loaded, and the settings file.
+//!   talk and Live text in the pill, the speech model in use and Keep model loaded, and the
+//!   settings file.
 //! - **Models**: every offered model, to download, use or delete (`model_row.rs`), and the
 //!   models folder.
 //! - **Permissions**: the privacy line, the three macOS permissions, and onboarding again.
@@ -163,7 +164,7 @@ impl SettingsView {
             Some(RightOptionProblem::Failed(e)) => brand::problem(c, e.clone(), brand::TEXT_SMALL).into_any_element(),
             None => brand::line(c, "Works alongside the shortcut. Needs Input Monitoring."),
         };
-        let shortcut = brand::group(
+        let dictating = brand::group(
             c,
             [
                 self.recorder.clone().into_any_element(),
@@ -172,6 +173,14 @@ impl SettingsView {
                     Some(right_option),
                     Some(switch("hold-right-option", settings.hold_right_option, |on, cx| {
                         controller::with(cx, |c, cx| c.set_hold_right_option(on, cx));
+                    })),
+                )
+                .into_any_element(),
+                brand::row(
+                    "Live text in the pill",
+                    Some(brand::line(c, "Shows your words in the pill as you speak.")),
+                    Some(switch("live-text", settings.live_text, |on, cx| {
+                        controller::with(cx, |c, cx| c.set_live_text(on, cx));
                     })),
                 )
                 .into_any_element(),
@@ -269,7 +278,7 @@ impl SettingsView {
         };
 
         v_flex()
-            .child(shortcut)
+            .child(dictating)
             .child(div().h(px(20.)))
             .child(model)
             .child(div().h(px(20.)))

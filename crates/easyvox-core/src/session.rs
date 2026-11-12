@@ -11,6 +11,7 @@
 //! preview, confirming words once two passes agree (`partials.rs`). That pass starts just before
 //! the confirmed words (`preview_context_ms`), so it only decodes what may still change. A tick
 //! skips the re-decode when nothing has been said since the last ones (`pause::SpeechGate`).
+//! With the preview off ([`Preview::Off`]), ticks come from the start of speech and only polish.
 //! On release it polishes the rest and sends `Final`.
 //!
 //! A third thread runs the level meter while capture lasts (`level.rs`): it sends `Level` when
@@ -23,7 +24,7 @@ use crate::level::LevelMeter;
 use crate::partials::LocalAgreement;
 use crate::pause::{SpeechDetector, SpeechGate};
 use crate::tuning::{Tuning, ms_samples};
-use crate::{AudioSource, EngineInner, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
+use crate::{AudioSource, EngineInner, Preview, SAMPLE_RATE, SpeechModel, TranscriptEvent, Word};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -32,8 +33,7 @@ use std::time::{Duration, Instant};
 
 const SR: usize = SAMPLE_RATE as usize;
 
-/// With the preview off (`preview_interval_ms` = 0, for comparisons), how often the loop still
-/// ticks to polish chunks.
+/// With the preview off, how often the loop still ticks to polish chunks.
 const POLISH_TICK_MS: u32 = 400;
 /// The preview window never gets shorter than this, whatever `preview_window_ms` says.
 const MIN_WINDOW_MS: u32 = 2_000;
@@ -139,6 +139,7 @@ pub(crate) fn start(
     engine: Arc<EngineInner>,
     source: AudioSource,
     tuning: Tuning,
+    preview: Preview,
 ) -> anyhow::Result<(Session, Receiver<TranscriptEvent>)> {
     let audio = Arc::new(SharedAudio::default());
     let stop_flag = Arc::new(AtomicBool::new(false));
@@ -166,7 +167,7 @@ pub(crate) fn start(
     let worker = {
         let (ctl, audio) = (ctl.clone(), audio.clone());
         std::thread::Builder::new().name("easyvox-decode".into()).spawn(move || {
-            let w = Worker { engine, tuning, audio, ctl, tx };
+            let w = Worker { engine, tuning, preview, audio, ctl, tx };
             w.run();
         })?
     };
@@ -228,6 +229,7 @@ fn spawn_meter(
 struct Worker {
     engine: Arc<EngineInner>,
     tuning: Tuning,
+    preview: Preview,
     audio: Arc<SharedAudio>,
     ctl: Arc<Control>,
     tx: Sender<TranscriptEvent>,
@@ -289,7 +291,7 @@ impl Worker {
         let mut polished = Polished::new(model.word_timings(), t);
         let mut la = LocalAgreement::new(t);
         let mut gate = SpeechGate::new(t);
-        let preview_on = t.preview_interval_ms > 0;
+        let preview_on = self.preview == Preview::On;
         let interval = Duration::from_millis(if preview_on { t.preview_interval_ms } else { POLISH_TICK_MS } as u64);
         // Until the preview shows words, passes come as often as the first one (some models need
         // more than `preview_first_ms` of speech before they write anything).
@@ -420,9 +422,9 @@ impl Worker {
     /// Returns where speech starts, or `None` if the input ended first.
     fn wait_for_speech(&self, speech: &SpeechDetector) -> Option<usize> {
         let t = &self.tuning;
-        let (after, min_audio) = match t.preview_interval_ms {
-            0 => (0, 0),
-            _ => (ms_samples(t.preview_first_ms), ms_samples(t.preview_min_audio_ms)),
+        let (after, min_audio) = match self.preview {
+            Preview::On => (ms_samples(t.preview_first_ms), ms_samples(t.preview_min_audio_ms)),
+            Preview::Off => (0, 0),
         };
         let mut due = usize::MAX;
         loop {
@@ -545,11 +547,12 @@ mod tests {
 
     /// Replays `pcm` in real time through a session on a [`Counting`] model. Returns the final
     /// text, the number of decodes and the session's counters.
-    fn replay(name: &str, pcm: &[f32]) -> (String, u32, SessionStats) {
+    fn replay(name: &str, pcm: &[f32], preview: Preview) -> (String, u32, SessionStats) {
         let wav = write_wav(name, pcm);
         let model = Arc::new(Counting::default());
         let engine = Engine::from_model(model.clone(), EngineConfig::new("counting", wav.parent().unwrap())).unwrap();
-        let (session, events) = engine.start(AudioSource::WavReplay(wav.clone())).unwrap();
+        let (session, events) =
+            engine.start_with(AudioSource::WavReplay(wav.clone()), Tuning::default(), preview).unwrap();
         let text = loop {
             if let TranscriptEvent::Final { text, .. } = events.recv_timeout(Duration::from_secs(10)).unwrap() {
                 break text;
@@ -564,20 +567,25 @@ mod tests {
     fn silence_and_room_noise_are_never_decoded() {
         // Digital silence, and room noise at -46 dBFS after a Bluetooth mic's first zeros.
         for (name, pcm) in [("silence", audio(&[(1.5, 0.0)])), ("room", audio(&[(0.3, 0.0), (1.5, 0.007)]))] {
-            let (text, decodes, stats) = replay(name, &pcm);
+            let (text, decodes, stats) = replay(name, &pcm, Preview::On);
             assert_eq!((text.as_str(), decodes, stats.speech_onset_secs), ("", 0, None), "{name}");
             assert!(stats.finished, "{name}");
         }
     }
 
-    /// Replays a WAV file through a session on a [`Counting`] model with `tuning`, and returns
-    /// every event with the time it arrived (seconds after the start), and the session's counters.
-    fn replay_events(wav: &std::path::Path, tuning: Tuning) -> (Vec<(f32, TranscriptEvent)>, SessionStats) {
+    /// Replays a WAV file through a session on a [`Counting`] model with `tuning` and `preview`,
+    /// and returns every event with the time it arrived (seconds after the start), and the
+    /// session's counters.
+    fn replay_events(
+        wav: &std::path::Path,
+        tuning: Tuning,
+        preview: Preview,
+    ) -> (Vec<(f32, TranscriptEvent)>, SessionStats) {
         let engine =
             Engine::from_model(Arc::new(Counting::default()), EngineConfig::new("counting", wav.parent().unwrap()))
                 .unwrap();
         let start = Instant::now();
-        let (session, events) = engine.start_with(AudioSource::WavReplay(wav.into()), tuning).unwrap();
+        let (session, events) = engine.start_with(AudioSource::WavReplay(wav.into()), tuning, preview).unwrap();
         let mut out = vec![];
         for event in events.iter() {
             out.push((start.elapsed().as_secs_f32(), event));
@@ -586,10 +594,10 @@ mod tests {
         (out, session.stats())
     }
 
-    /// [`replay_events`] of a clip in `testdata/`.
+    /// [`replay_events`] of a clip in `testdata/`, with the preview on.
     fn replay_clip(clip: &str, tuning: Tuning) -> Vec<(f32, TranscriptEvent)> {
         let wav = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata")).join(clip);
-        replay_events(&wav, tuning).0
+        replay_events(&wav, tuning, Preview::On).0
     }
 
     fn levels(events: &[(f32, TranscriptEvent)]) -> Vec<(f32, f32)> {
@@ -607,7 +615,8 @@ mod tests {
         pcm.extend(crate::level::tests::syllables(3.0));
         let wav = write_wav("syllables", &pcm);
         for interval in [Tuning::default().meter_interval_ms, 33] {
-            let (events, stats) = replay_events(&wav, Tuning { meter_interval_ms: interval, ..Tuning::default() });
+            let tuning = Tuning { meter_interval_ms: interval, ..Tuning::default() };
+            let (events, stats) = replay_events(&wav, tuning, Preview::On);
             let sent = levels(&events);
             let peak = sent.iter().map(|(_, l)| *l).fold(0.0, f32::max);
             assert!(peak > 0.5, "{interval} ms: {sent:?}");
@@ -630,7 +639,7 @@ mod tests {
         // A text-to-speech voice from its first frame: steadier than a person, so the meter
         // mostly holds near the top while it speaks.
         let Some(wav) = crate::testdata::clip("cmd_samantha.wav") else { return };
-        let (events, _) = replay_events(&wav, Tuning::default());
+        let (events, _) = replay_events(&wav, Tuning::default(), Preview::On);
         let sent = levels(&events);
         assert!(sent.iter().any(|(at, l)| *at < 0.4 && *l > 0.5), "{sent:?}");
         assert_eq!(sent.last().map(|(_, l)| *l), Some(0.0), "{sent:?}");
@@ -655,11 +664,21 @@ mod tests {
         // A 0.3 s word after 0.4 s of room noise, then 0.6 s more. The first preview pass comes
         // 0.5 s after the word starts, long before the 1.6 s interval.
         let pcm = audio(&[(0.4, 0.007), (0.3, 0.3), (0.6, 0.007)]);
-        let (text, decodes, stats) = replay("word", &pcm);
+        let (text, decodes, stats) = replay("word", &pcm, Preview::On);
         assert_eq!(text, "hello");
         let onset = stats.speech_onset_secs.unwrap();
         assert!((0.37..=0.4).contains(&onset), "{onset}");
         assert_eq!(stats.partial_passes, 1);
         assert_eq!(decodes, 2, "one preview pass and the final pass");
+    }
+
+    #[test]
+    fn with_the_preview_off_only_the_final_pass_decodes() {
+        let pcm = audio(&[(0.4, 0.007), (0.3, 0.3), (0.6, 0.007)]);
+        let (text, decodes, stats) = replay("word-no-preview", &pcm, Preview::Off);
+        assert_eq!(text, "hello");
+        assert!(stats.speech_onset_secs.is_some());
+        assert_eq!((stats.partial_passes, stats.partial_skipped, stats.partial_events), (0, 0, 0));
+        assert_eq!(decodes, 1, "the final pass alone");
     }
 }

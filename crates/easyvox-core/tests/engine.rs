@@ -6,7 +6,9 @@
 
 #![cfg(feature = "transcribe-cpp")]
 
-use easyvox_core::{AudioSource, Engine, EngineConfig, RECOMMENDED_MODEL, TranscriptEvent, Tuning, models, paths};
+use easyvox_core::{
+    AudioSource, Engine, EngineConfig, Preview, RECOMMENDED_MODEL, TranscriptEvent, Tuning, models, paths,
+};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -29,25 +31,18 @@ fn engine_with(tweak: impl FnOnce(&mut EngineConfig)) -> Engine {
     Engine::load(config).expect("load model")
 }
 
-/// Replays `name` to its end; returns the `Partial` events and the final text.
+/// Replays `name` to its end, with the preview on; returns the `Partial` events and the final text.
 fn replay(engine: &Engine, name: &str) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
-    replay_with(engine, name, engine.config().tuning)
-}
-
-fn replay_with(
-    engine: &Engine,
-    name: &str,
-    tuning: Tuning,
-) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
-    replay_wav(engine, &clip(name), tuning)
+    replay_wav(engine, &clip(name), engine.config().tuning, Preview::On)
 }
 
 fn replay_wav(
     engine: &Engine,
     wav: &Path,
     tuning: Tuning,
+    preview: Preview,
 ) -> (Vec<(String, String)>, String, easyvox_core::SessionStats) {
-    let (session, events) = engine.start_with(AudioSource::WavReplay(wav.to_path_buf()), tuning).unwrap();
+    let (session, events) = engine.start_with(AudioSource::WavReplay(wav.to_path_buf()), tuning, preview).unwrap();
     let mut partials = vec![];
     let final_text = loop {
         match events.recv_timeout(Duration::from_secs(30)).expect("session stalled") {
@@ -157,15 +152,15 @@ fn chunked_final_pass_joins_cleanly() {
     assert!(rewrites <= stats.chunks as usize, "{rewrites} rewrites of confirmed text for {} chunks", stats.chunks);
 }
 
-/// A session runs with the tuning it was started with, so a settings change applies from the
-/// next recording, on the model already loaded.
+/// A session runs with the tuning and preview it was started with, so a settings change applies
+/// from the next recording, on the model already loaded.
 #[test]
 #[ignore = "needs the recommended model (scripts/fetch-model.sh)"]
 fn each_session_takes_its_own_tuning_without_a_reload() {
     let engine = engine();
     let load_ms = engine.load_ms();
-    let no_preview = Tuning { preview_interval_ms: 0, chunk_ms: 4_000, ..Tuning::default() };
-    let (partials, _, stats) = replay_with(&engine, "punct_samantha.wav", no_preview);
+    let short_chunks = Tuning { chunk_ms: 4_000, ..Tuning::default() };
+    let (partials, _, stats) = replay_wav(&engine, &clip("punct_samantha.wav"), short_chunks, Preview::Off);
     assert_eq!((partials.len(), stats.partial_passes), (0, 0), "the preview was off");
     assert!(stats.chunks >= 1, "4 s chunks on an 11 s clip, but {} polished while playing", stats.chunks);
     let (partials, _, stats) = replay(&engine, "punct_samantha.wav");
@@ -210,7 +205,7 @@ fn silence_and_room_noise_give_empty_text_on_every_offered_model() {
         let engine = Engine::load(EngineConfig::new(info.id, &dir)).expect("load model");
         let tuning = engine.config().tuning;
         for wav in [clip("silence_2s.wav"), noise.clone()] {
-            let (partials, text, stats) = replay_wav(&engine, &wav, tuning);
+            let (partials, text, stats) = replay_wav(&engine, &wav, tuning, Preview::On);
             let decoded = (partials.len(), stats.partial_passes, stats.chunks, stats.speech_onset_secs);
             assert_eq!((text.as_str(), decoded), ("", (0, 0, 0, None)), "{} on {}", info.id, wav.display());
         }

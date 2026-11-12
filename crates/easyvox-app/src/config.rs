@@ -6,8 +6,9 @@
 //! the file only overrides them, key by key:
 //!
 //! - **Top level:** the keys the Settings window shows (`model`, `shortcut`, `hold_right_option`,
-//!   `keep_model_loaded`). The window writes one when you change it there, and nothing else, so
-//!   the file keeps your comments, your order and every other key as you wrote them.
+//!   `live_text`, `keep_model_loaded`). The window writes one when you change it there, and
+//!   nothing else, so the file keeps your comments, your order and every other key as you wrote
+//!   them.
 //! - **`[advanced]`:** everything else, from the app's timings to every field of the pipeline's
 //!   `Tuning`. The app never writes these: a key you didn't set follows the default, so a
 //!   release can improve it.
@@ -26,7 +27,7 @@ use toml_edit::{DocumentMut, Item, Value};
 pub const ADVANCED: &str = "advanced";
 
 /// The keys the Settings window owns, at the top of the file, with what they do.
-const UI_KEYS: [(&str, &str); 4] = [
+const UI_KEYS: [(&str, &str); 5] = [
     (
         "model",
         "The speech model's id: \"parakeet-tdt-0.6b-v2-q5_k_m-gguf\" (the default) or\n\
@@ -38,6 +39,12 @@ const UI_KEYS: [(&str, &str); 4] = [
          cmd) and a key, joined by \"-\", e.g. \"ctrl-shift-space\" or \"f5\".",
     ),
     ("hold_right_option", "Also dictate while the right Option (⌥) key is held on its own. Needs Input Monitoring."),
+    (
+        "live_text",
+        "Show your words in the pill as you speak. Off, the pill only shows that it's listening\n\
+         until you let go, and dictating uses less power: no preview passes run, whatever\n\
+         `preview_interval_ms` says (long dictations are still polished in chunks).",
+    ),
     (
         "keep_model_loaded",
         "Keep the speech model in memory while you're not dictating. Off, it's freed after\n\
@@ -82,10 +89,11 @@ pub fn parse(text: &str) -> Result<Loaded, String> {
                 Some(k) => warnings.push(format!("shortcut: can't read {k:?} as a shortcut; using the default")),
                 None => warnings.push(wrong_type(key, item, "a shortcut in quotes, like \"alt-space\"")),
             },
-            "hold_right_option" | "keep_model_loaded" => match item.as_bool() {
-                Some(on) if key == "hold_right_option" => s.hold_right_option = on,
-                Some(on) => s.keep_model_loaded = on,
-                None => warnings.push(wrong_type(key, item, "true or false")),
+            "hold_right_option" | "live_text" | "keep_model_loaded" => match (item.as_bool(), key) {
+                (Some(on), "hold_right_option") => s.hold_right_option = on,
+                (Some(on), "live_text") => s.live_text = on,
+                (Some(on), _) => s.keep_model_loaded = on,
+                (None, _) => warnings.push(wrong_type(key, item, "true or false")),
             },
             ADVANCED => match item.as_table_like() {
                 Some(table) => {
@@ -291,6 +299,9 @@ impl ConfigFile {
         if settings.hold_right_option != current.hold_right_option {
             set("hold_right_option", settings.hold_right_option.into());
         }
+        if settings.live_text != current.live_text {
+            set("live_text", settings.live_text.into());
+        }
         if settings.keep_model_loaded != current.keep_model_loaded {
             set("keep_model_loaded", settings.keep_model_loaded.into());
         }
@@ -382,9 +393,9 @@ pub fn default_config_text() -> String {
 # change: anything you leave out follows the default, so a release that improves one reaches
 # you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
 # that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
-# save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
-# meter from your next dictation, the same for every model, and the overlay's animations from
-# the next time it opens.
+# save it: live_text and the [advanced] numbers for the live preview, the chunks, the pauses
+# and the level meter from your next dictation, the same for every model, and the overlay's
+# animations from the next time it opens.
 ",
     );
     // Doc comments come one line per source line, each starting with a space.
@@ -403,6 +414,7 @@ pub fn default_config_text() -> String {
             "model" => quoted(&defaults.model),
             "shortcut" => quoted(&defaults.shortcut),
             "hold_right_option" => defaults.hold_right_option.to_string(),
+            "live_text" => defaults.live_text.to_string(),
             _ => defaults.keep_model_loaded.to_string(),
         };
         out.push_str(&format!("{key} = {value}\n"));
@@ -489,7 +501,9 @@ mod tests {
         assert_eq!(s.app, AppTuning::default());
         let joined = l.warnings.join("\n");
         assert_eq!(l.warnings.len(), 4, "{joined}");
-        assert!(joined.contains("preview_interval_ms = 60000 is outside 0..=10000, so it stays at its default, 1600"));
+        assert!(
+            joined.contains("preview_interval_ms = 60000 is outside 100..=10000, so it stays at its default, 1600")
+        );
         assert!(joined.contains("overlay_max_chars = 3 is outside 10..=500"));
         assert!(
             joined.contains(r#"preview_window_ms: can't read "-5" as a whole number, 0 or more; using the default"#)
@@ -497,18 +511,33 @@ mod tests {
         assert!(joined.contains("gate_quiet_db = NaN is outside"), "{joined}");
     }
 
+    /// Only `live_text` turns the live preview off, so it can't be on in Settings and off in the
+    /// file: the preview's interval can't be 0.
+    #[test]
+    fn only_live_text_turns_the_preview_off() {
+        assert!(!loaded("live_text = false\n").settings.live_text);
+        let l = loaded("[advanced]\npreview_interval_ms = 0\n");
+        assert!(l.settings.live_text);
+        assert_eq!(l.settings.tuning.preview_interval_ms, 1_600);
+        assert_eq!(
+            l.warnings,
+            ["[advanced] preview_interval_ms = 0 is outside 100..=10000, so it stays at its default, 1600"]
+        );
+    }
+
     #[test]
     fn wrong_types_and_bad_values_fall_back_with_a_warning() {
         let l = loaded(
-            "model = \"no-such-model\"\nshortcut = 5\nhold_right_option = \"yes\"\nkeep_model_loaded = true\n\
-             [advanced]\nchunk_ms = \"30 s\"\n",
+            "model = \"no-such-model\"\nshortcut = 5\nhold_right_option = \"yes\"\nlive_text = 0\n\
+             keep_model_loaded = true\n[advanced]\nchunk_ms = \"30 s\"\n",
         );
         assert_eq!(l.settings, AppSettings { keep_model_loaded: true, ..Default::default() });
         let joined = l.warnings.join("\n");
-        assert_eq!(l.warnings.len(), 4, "{joined}");
+        assert_eq!(l.warnings.len(), 5, "{joined}");
         assert!(joined.contains("model: \"no-such-model\" isn't a model this app can run"), "{joined}");
         assert!(joined.contains("shortcut should be a shortcut in quotes"), "{joined}");
         assert!(joined.contains("hold_right_option should be true or false, not string"), "{joined}");
+        assert!(joined.contains("live_text should be true or false, not integer"), "{joined}");
         assert!(joined.contains("chunk_ms should be a number, not string"), "{joined}");
     }
 
@@ -567,7 +596,7 @@ mod tests {
         expected.extend(AppTuning::KEYS);
         expected.extend(Tuning::KEYS);
         assert_eq!(keys, expected);
-        assert_eq!(keys.len(), 47);
+        assert_eq!(keys.len(), 48);
         for key in AppTuning::KEYS.iter().chain(Tuning::KEYS) {
             assert!(text.contains(&format!("\n{key} = ")), "{key}");
             assert!(!easyvox_core::tuning::unit_of(key).is_empty(), "{key}: end the key in a unit");
@@ -602,6 +631,7 @@ mod tests {
         let mut settings = AppSettings {
             shortcut: "ctrl-shift-space".into(),
             hold_right_option: true,
+            live_text: false,
             keep_model_loaded: true,
             ..Default::default()
         };
@@ -615,7 +645,7 @@ mod tests {
         // Only the keys that differ from the defaults were written: no model, nothing advanced.
         let doc: DocumentMut = text.parse().unwrap();
         let keys: Vec<&str> = doc.iter().map(|(k, _)| k).collect();
-        assert_eq!(keys, ["shortcut", "hold_right_option", "keep_model_loaded"], "{text}");
+        assert_eq!(keys, ["shortcut", "hold_right_option", "live_text", "keep_model_loaded"], "{text}");
         // Saving the same settings again writes nothing.
         assert!(!file.save(&settings).unwrap());
         std::fs::remove_dir_all(dir).unwrap();

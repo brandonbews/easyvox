@@ -493,7 +493,7 @@ sleep 60; kill %1
 # "Before" rows: the build from commit da36537, with its defaults or one of
 #   --set preview_interval_ms=1200 | --set preview_window_ms=8000 | --set chunk_ms=15000
 # New rows: this build, with its defaults (a pass every 1.6 s, 1 s of context) or one of
-#   --set preview_interval_ms=400|800|1200|2000 | --set preview_interval_ms=0 (no preview)
+#   --set preview_interval_ms=400|800|1200|2000 | --no-preview (recorded as preview_interval_ms=0)
 #   --set preview_interval_ms=1200 plus --set preview_context_ms=2000|3000,
 #   --set preview_window_ms=8000 or --set chunk_ms=20000
 
@@ -792,7 +792,7 @@ for m in $MODELS; do $B sessions --model $m --out sessions-$m.json; done
 Where the table's numbers come from:
 
 - `bench`: `wer_total`, `empty_speech_decodes` and `failed_speech_decodes`, `rtf_speech_clips`, `mem.after_load.footprint_mb` and `mem.after_decodes.peak_footprint_mb`. The silence clip's `hypothesis` is under `clips`. Progress lines on stderr flag `EMPTY`, `FAILED` and `UNSTABLE` (runs that disagree).
-- `sessions`, the `partials_on` runs: `partials.first_partial_ms`, `finalize_ms`, `cpu.cpu_pct_of_one_core` and `partials.revision_rate`. Don't use its memory numbers: it loads a second copy of the model for the `partials_off` runs.
+- `sessions`, the `partials_on` runs: `partials.first_partial_ms`, `finalize_ms`, `cpu.cpu_pct_of_one_core` and `partials.revision_rate`.
 - `session`: `finalize_ms`, `wer` (with `--ref`), `chunks` and `mem_end.peak_footprint_mb`; `partials.confirmed_rewrites` counts polished chunks swapped into the preview. CPU per minute came from `ps -o time= -p <pid>` every 2 s, GPU from `ioreg -r -d 1 -c IOAccelerator` ("Device Utilization %") every second, and the preview's lag from the partial lines on stderr, matched against the transcript's timeline.
 
 To re-run the v2 Q8_0 comparison, add its catalog entry back as `BenchOnly`: file `parakeet-tdt-0.6b-v2-Q8_0.gguf` from `handy-computer/parakeet-tdt-0.6b-v2-gguf` at commit `382796e405a9fe37145938dccbabfb25e93e4286`, sha256 `f0d0e99cebb6d3b83f1f7069b82b5d3c2e39a54545b0da039cb4bafd9c4e5caa`, 729,574,912 bytes.

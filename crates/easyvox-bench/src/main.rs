@@ -26,11 +26,13 @@ easyvox-bench <command> [options]
   info                                         catalog, model presence, permissions
   transcribe --model ID --wav F [--words]      one-shot decode of a WAV file
   bench --model ID [--cold] [--fast|--reps N]  load times, memory, speed and WER over testdata (3 reps)
-  session --model ID --wav F [--ref T] [--quiet] [--idle-before SECS] [--unload]
+  session --model ID --wav F [--ref T] [--quiet] [--idle-before SECS] [--unload] [--no-preview]
                                                WAV replay session with live partials (--ref: WER
                                                against the transcript in file T; --idle-before:
                                                sit idle with the model loaded first; --unload:
-                                               free the model first, so the session reloads it)
+                                               free the model first, so the session reloads it;
+                                               --no-preview: no partials, only the chunks and the
+                                               final text, as with Live text off in the app)
   sessions --model ID                          sessions on the 3, 11 and 30 s clips, partials on and off
   tuning                                       every tuning key: effective value, default, range, docs
   mic [--request] [--secs N] [--model ID]      open the microphone once (--request asks for permission first)
@@ -423,10 +425,11 @@ fn bench(args: &Args) -> anyhow::Result<()> {
 }
 
 /// Runs one WAV replay session to its `Final` and reports latency, partial behavior and CPU.
-fn run_session(engine: &Engine, wav: &Path, quiet: bool) -> anyhow::Result<Value> {
+fn run_session(engine: &Engine, wav: &Path, preview: Preview, quiet: bool) -> anyhow::Result<Value> {
     let cpu0 = proc_stats().cpu_secs;
     let t0 = Instant::now();
-    let (session, rx) = engine.start(AudioSource::WavReplay(wav.to_path_buf()))?;
+    let (session, rx) =
+        engine.start_with(AudioSource::WavReplay(wav.to_path_buf()), engine.config().tuning, preview)?;
     let mut events = Vec::new();
     let mut final_ev = None;
     let mut errors = Vec::new();
@@ -547,7 +550,8 @@ fn session_cmd(args: &Args) -> anyhow::Result<()> {
         std::thread::sleep(Duration::from_secs_f64(idle_secs));
     }
     let loadavg_before = loadavg();
-    let mut v = run_session(&engine, &wav, args.has("--quiet"))?;
+    let preview = if args.has("--no-preview") { Preview::Off } else { Preview::On };
+    let mut v = run_session(&engine, &wav, preview, args.has("--quiet"))?;
     if let Some(path) = args.get("--ref") {
         let reference = std::fs::read_to_string(&path).with_context(|| format!("read {path}"))?;
         let (errors, words) = wer::wer_counts(&reference, v["final_text"].as_str().unwrap_or_default());
@@ -555,6 +559,7 @@ fn session_cmd(args: &Args) -> anyhow::Result<()> {
     }
     v["model"] = json!(model);
     v["tuning"] = tuning_json(&engine.config().tuning);
+    v["preview"] = json!(preview == Preview::On);
     v["metal_residency"] = json!(metal_residency());
     v["idle_before_secs"] = json!(idle_secs);
     v["unloaded_before"] = json!(unloaded);
@@ -573,18 +578,10 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
     engine.transcribe_pcm(&audio::load_wav_16k_mono(&testdata().join("cmd_samantha.wav"))?)?; // warm-up
     let interval = base.tuning.preview_interval_ms;
     let mut out = Vec::new();
-    for (label, iv) in [("partials_on", interval), ("partials_off", 0)] {
-        // The interval is part of the engine config, so "off" needs its own engine.
-        let e = if iv == interval {
-            engine.clone()
-        } else {
-            let mut c = base.clone();
-            c.tuning.preview_interval_ms = iv;
-            Engine::load(c)?
-        };
+    for (label, preview) in [("partials_on", Preview::On), ("partials_off", Preview::Off)] {
         for w in SESSION_CLIPS {
             let loadavg_before = loadavg();
-            let r = run_session(&e, &testdata().join(format!("{w}.wav")), true)?;
+            let r = run_session(&engine, &testdata().join(format!("{w}.wav")), preview, true)?;
             eprintln!(
                 "{label:12} {w:16} audio {:5.1}s  first words {:>5.0} ms  finalize {:>5} ms  partials {:>3}  cpu {:5.1}%",
                 r["audio_secs"].as_f64().unwrap_or(0.0),
@@ -594,7 +591,7 @@ fn sessions(args: &Args) -> anyhow::Result<()> {
                 r["cpu"]["cpu_pct_of_one_core"].as_f64().unwrap_or(0.0)
             );
             out.push(json!({
-                "mode": label, "interval_ms": iv, "clip": w,
+                "mode": label, "interval_ms": (preview == Preview::On).then_some(interval), "clip": w,
                 "loadavg_before": loadavg_before, "loadavg_after": loadavg(), "result": r,
             }));
         }

@@ -10,7 +10,8 @@
 //! Settings come from the settings file (`config.rs`). Changes made in the Settings window are
 //! applied here and written to the file; outside edits to the file reach here through its
 //! watcher and are applied the same way, without writing anything back, so the two can't feed
-//! each other in a loop. Each dictation takes the pipeline's tuning in force when it starts.
+//! each other in a loop. Each dictation takes the pipeline's tuning and Live text as they are
+//! when it starts.
 //!
 //! Models are downloaded here too (`download_model`), for onboarding and Settings alike. Each
 //! download runs `easyvox_core::download` on its own thread and reports on the same channel;
@@ -45,7 +46,7 @@ use crate::state::{AppSettings, AppStatus, DownloadStatus, EngineStatus, RightOp
 use crate::{platform, tray};
 use easyvox_core::download::{CancelToken, DownloadError, Progress};
 use easyvox_core::models::ModelInfo;
-use easyvox_core::{AudioSource, Engine, MicPermission, Session, TranscriptEvent};
+use easyvox_core::{AudioSource, Engine, MicPermission, Preview, Session, TranscriptEvent};
 use gpui_kit::component::Theme;
 use gpui_kit::*;
 use std::collections::HashMap;
@@ -406,9 +407,11 @@ impl Controller {
         };
         // Recording starts now either way; an unloaded model reloads while it records.
         let reloading = !engine.is_loaded();
-        // The session keeps the tuning in force now; a change applies from the next one.
-        let tuning = cx.global::<AppSettings>().tuning;
-        let (session, events) = match engine.start_with(audio, tuning) {
+        // The session keeps the tuning and Live text in force now; a change applies from the
+        // next one.
+        let settings = cx.global::<AppSettings>();
+        let preview = if settings.live_text { Preview::On } else { Preview::Off };
+        let (session, events) = match engine.start_with(audio, settings.tuning, preview) {
             Ok(v) => v,
             Err(e) => {
                 log::error!("couldn't start a session: {e:#}");
@@ -500,7 +503,13 @@ impl Controller {
             }
             // About 8 a second while you talk, none in silence: the overlay redraws only if a
             // bar of its meter moves.
-            TranscriptEvent::Level(level) => self.overlay.view.update(cx, |v, cx| v.set_level(level, cx)),
+            TranscriptEvent::Level(level) => {
+                // With Live text off, no preview says the model is back from a reload.
+                if self.reloading && self.engine.as_ref().is_some_and(Engine::is_loaded) {
+                    self.sync_engine_status(cx);
+                }
+                self.overlay.view.update(cx, |v, cx| v.set_level(level, cx));
+            }
             TranscriptEvent::NoInput(cant_hear) => {
                 if cant_hear {
                     log::warn!("session {seq}: can't hear the input (no audio, or only digital silence)");
@@ -655,6 +664,12 @@ impl Controller {
             self.schedule_unload(cx);
         }
         cx.refresh_windows();
+    }
+
+    /// "Live text in the pill" (from Settings). It applies from the next dictation.
+    pub fn set_live_text(&mut self, on: bool, cx: &mut Context<Self>) {
+        cx.global_mut::<AppSettings>().live_text = on;
+        self.save_settings(cx);
     }
 
     /// Picks the speech model (from Settings).
@@ -1015,14 +1030,15 @@ impl Controller {
         cx.refresh_windows();
     }
 
-    /// Puts `new` in force, acting on whatever differs from the settings now. The pipeline's
-    /// tuning needs nothing more: the next dictation takes it. Neither do the overlay's
-    /// numbers, which it reads as it draws, opens and hides.
+    /// Puts `new` in force, acting on whatever differs from the settings now. Live text and the
+    /// pipeline's tuning need nothing more: the next dictation takes them. Neither do the
+    /// overlay's numbers, which it reads as it draws, opens and hides.
     fn apply_settings(&mut self, new: AppSettings, cx: &mut Context<Self>) {
         let old = cx.global::<AppSettings>().clone();
         {
             let s = cx.global_mut::<AppSettings>();
             s.keep_model_loaded = new.keep_model_loaded;
+            s.live_text = new.live_text;
             s.app = new.app;
             s.tuning = new.tuning;
             s.hold_right_option = new.hold_right_option;

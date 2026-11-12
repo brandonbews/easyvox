@@ -15,9 +15,9 @@ The file holds no permissions. Microphone, Accessibility and Input Monitoring ar
 ## How it works
 
 - **The defaults live in the app; the file only overrides them.** Any key you leave out follows its default, so when a release improves a default, you get it. Set only what you want different, and don't paste the whole reference below into your file: every key you copy stays at that value from then on.
-- **The top of the file is what the Settings window shows:** `model`, `shortcut`, `hold_right_option` and `keep_model_loaded`. When you change one in the window, EasyVox writes that key and nothing else. Your comments, your order and your other keys stay as you wrote them.
+- **The top of the file is what the Settings window shows:** `model`, `shortcut`, `hold_right_option`, `live_text` and `keep_model_loaded`. When you change one in the window, EasyVox writes that key and nothing else. Your comments, your order and your other keys stay as you wrote them.
 - **`[advanced]` holds everything else.** EasyVox never writes these: they're yours to set by hand.
-- **Edits apply within a second of saving,** with no restart. EasyVox watches the file (with FSEvents, so it costs nothing while the file doesn't change). A new shortcut or model takes effect at once. The numbers for the live preview, the chunks and the pauses apply from your next dictation, without reloading the model; a dictation already under way finishes with the values it started with. The overlay's animation timings apply from the next time it opens.
+- **Edits apply within a second of saving,** with no restart. EasyVox watches the file (with FSEvents, so it costs nothing while the file doesn't change). A new shortcut or model takes effect at once. Live text and the numbers for the live preview, the chunks and the pauses apply from your next dictation, without reloading the model; a dictation already under way finishes with the values it started with. The overlay's animation timings apply from the next time it opens.
 - **The same keys apply to every model.** There's one pipeline, so there are no per-model sections.
 
 ## When something's wrong
@@ -55,6 +55,12 @@ A livelier preview, at some cost in battery: a pass every 0.8 s instead of 1.6 s
 [advanced]
 preview_interval_ms = 800
 preview_context_ms = 2000
+```
+
+The lightest dictation: no words in the pill while you speak, so the speech model runs only to polish a long dictation as you go and for the final text. Settings › General › Live text in the pill does the same.
+
+```toml
+live_text = false
 ```
 
 Free the model after 2 minutes instead of 10, and leave the final text up longer:
@@ -119,9 +125,9 @@ Each key, at its default, with its unit, its range and what raising or lowering 
 # change: anything you leave out follows the default, so a release that improves one reaches
 # you. The file is ~/.config/easyvox/config.toml ($XDG_CONFIG_HOME/easyvox/config.toml when
 # that's set; EASYVOX_CONFIG points at another file). EasyVox applies a change as soon as you
-# save it: the [advanced] numbers for the live preview, the chunks, the pauses and the level
-# meter from your next dictation, the same for every model, and the overlay's animations from
-# the next time it opens.
+# save it: live_text and the [advanced] numbers for the live preview, the chunks, the pauses
+# and the level meter from your next dictation, the same for every model, and the overlay's
+# animations from the next time it opens.
 
 # The speech model's id: "parakeet-tdt-0.6b-v2-q5_k_m-gguf" (the default) or
 # "whisper-base.en-q8_0-gguf". Settings › Models downloads it, and the next dictation uses it.
@@ -133,6 +139,11 @@ shortcut = "alt-space"
 
 # Also dictate while the right Option (⌥) key is held on its own. Needs Input Monitoring.
 hold_right_option = false
+
+# Show your words in the pill as you speak. Off, the pill only shows that it's listening
+# until you let go, and dictating uses less power: no preview passes run, whatever
+# `preview_interval_ms` says (long dictations are still polished in chunks).
+live_text = true
 
 # Keep the speech model in memory while you're not dictating. Off, it's freed after
 # `unload_after_secs` (below) and loads again as your next dictation starts.
@@ -235,12 +246,11 @@ overlay_meter_frame_ms = 33
 # In milliseconds, from 0 to 10000.
 menubar_pasted_ms = 1000
 
-# How often the preview re-decodes the newest audio while the key is held. 0 turns the
-# preview off (long dictations are still polished in chunks). Lower shows words sooner
-# but wakes the GPU more often; higher is lighter, and the preview lags further behind
-# and updates in bigger steps. At 1600, 95 % of words showed up within about 2 s of
-# being said; past it the saving flattens while the lag keeps growing.
-# In milliseconds, from 0 to 10000.
+# How often the preview re-decodes the newest audio while the key is held. Lower shows
+# words sooner but wakes the GPU more often; higher is lighter, and the preview lags
+# further behind and updates in bigger steps. At 1600, 95 % of words showed up within
+# about 2 s of being said; past it the saving flattens while the lag keeps growing.
+# In milliseconds, from 100 to 10000.
 preview_interval_ms = 1600
 
 # When the first preview pass runs: once this much audio has followed the start of

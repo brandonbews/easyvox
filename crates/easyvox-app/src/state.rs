@@ -5,7 +5,7 @@
 use gpui_kit::Global;
 
 /// The settings in force. They come from the settings file (`config.rs`): the defaults, with
-/// whatever the file sets on top. The Settings window shows the first four and writes them back
+/// whatever the file sets on top. The Settings window shows the first five and writes them back
 /// to the file; the rest are `[advanced]`, in the file only.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppSettings {
@@ -15,6 +15,10 @@ pub struct AppSettings {
     pub shortcut: String,
     /// Also dictate while the right ⌥ key is held on its own (needs Input Monitoring).
     pub hold_right_option: bool,
+    /// Show the words in the pill while you speak. Off, a dictation runs no preview passes
+    /// (`easyvox_core::Preview::Off`): the pill shows only that it's listening until the final
+    /// text.
+    pub live_text: bool,
     /// Keep the speech model in memory while unused. Off, it's freed after
     /// `app.unload_after_secs` without a dictation and reloaded on the next key press, while
     /// recording.
@@ -32,6 +36,7 @@ impl Default for AppSettings {
             model: easyvox_core::RECOMMENDED_MODEL.into(),
             shortcut: crate::hotkey::DEFAULT_SHORTCUT.into(),
             hold_right_option: false,
+            live_text: true,
             keep_model_loaded: false,
             app: AppTuning::default(),
             tuning: easyvox_core::Tuning::default(),
